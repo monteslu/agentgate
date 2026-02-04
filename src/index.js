@@ -34,7 +34,7 @@ const app = express();
 const PORT = process.env.PORT || 3050;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
