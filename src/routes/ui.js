@@ -3,10 +3,12 @@ import {
   listAccounts, getSetting, setSetting, deleteSetting,
   setAdminPassword, verifyAdminPassword, hasAdminPassword,
   listQueueEntries, getQueueEntry, updateQueueStatus, clearQueueByStatus, deleteQueueEntry, getPendingQueueCount, getQueueCounts,
-  listApiKeys, createApiKey, deleteApiKey
+  listApiKeys, createApiKey, deleteApiKey,
+  listUnnotifiedEntries
 } from '../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
+import { notifyClawdbot, retryNotification } from '../lib/notifier.js';
 import { registerAllRoutes, renderAllCards } from './ui/index.js';
 
 const router = Router();
@@ -121,8 +123,10 @@ router.get('/', (req, res) => {
   const hsyncUrl = getHsyncUrl();
   const hsyncConnected = isHsyncConnected();
   const pendingQueueCount = getPendingQueueCount();
+  const notificationsConfig = getSetting('notifications');
+  const notificationTest = req.query.notification_test;
 
-  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount }));
+  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, notificationTest }));
 });
 
 // Register all service routes (github, bluesky, reddit, etc.)
@@ -149,6 +153,79 @@ router.post('/hsync/delete', async (req, res) => {
   res.redirect('/ui');
 });
 
+// Notification settings
+router.post('/notifications/setup', (req, res) => {
+  const { url, token, events } = req.body;
+  if (!url) {
+    return res.status(400).send('Webhook URL required');
+  }
+
+  // Parse events - could be comma-separated string or array
+  let eventList = ['completed', 'failed'];
+  if (events) {
+    eventList = Array.isArray(events) ? events : events.split(',').map(e => e.trim());
+  }
+
+  setSetting('notifications', {
+    clawdbot: {
+      enabled: true,
+      url: url.replace(/\/$/, ''),
+      token: token || '',
+      events: eventList,
+      retryAttempts: 3,
+      retryDelayMs: 5000
+    }
+  });
+  res.redirect('/ui');
+});
+
+router.post('/notifications/delete', (req, res) => {
+  deleteSetting('notifications');
+  res.redirect('/ui');
+});
+
+router.post('/notifications/test', async (req, res) => {
+  const wantsJson = req.headers.accept?.includes('application/json');
+  const config = getSetting('notifications');
+
+  if (!config?.clawdbot?.enabled || !config.clawdbot.url || !config.clawdbot.token) {
+    const error = 'Notifications not configured';
+    return wantsJson
+      ? res.status(400).json({ success: false, error })
+      : res.status(400).send(error);
+  }
+
+  try {
+    const response = await fetch(config.clawdbot.url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.clawdbot.token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        text: '🧪 [agentgate] Test notification - webhook is working!',
+        mode: 'now'
+      })
+    });
+
+    if (response.ok) {
+      return wantsJson
+        ? res.json({ success: true })
+        : res.redirect('/ui?notification_test=success');
+    } else {
+      const text = await response.text().catch(() => '');
+      const error = `HTTP ${response.status}: ${text.substring(0, 100)}`;
+      return wantsJson
+        ? res.status(400).json({ success: false, error })
+        : res.redirect('/ui?notification_test=failed');
+    }
+  } catch (err) {
+    return wantsJson
+      ? res.status(500).json({ success: false, error: err.message })
+      : res.redirect('/ui?notification_test=failed');
+  }
+});
+
 // Write Queue Management
 router.get('/queue', (req, res) => {
   const filter = req.query.filter || 'all';
@@ -159,7 +236,8 @@ router.get('/queue', (req, res) => {
     entries = listQueueEntries(filter);
   }
   const counts = getQueueCounts();
-  res.send(renderQueuePage(entries, filter, counts));
+  const unnotified = listUnnotifiedEntries();
+  res.send(renderQueuePage(entries, filter, counts, unnotified.length));
 });
 
 router.post('/queue/:id/approve', async (req, res) => {
@@ -196,7 +274,7 @@ router.post('/queue/:id/approve', async (req, res) => {
   res.redirect('/ui/queue');
 });
 
-router.post('/queue/:id/reject', (req, res) => {
+router.post('/queue/:id/reject', async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
   const wantsJson = req.headers.accept?.includes('application/json');
@@ -216,7 +294,12 @@ router.post('/queue/:id/reject', (req, res) => {
 
   updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided' });
 
+  // Send notification to Clawdbot
   const updated = getQueueEntry(id);
+  notifyClawdbot(updated).catch(err => {
+    console.error('[notifier] Failed to notify Clawdbot:', err.message);
+  });
+
   const counts = getQueueCounts();
 
   if (wantsJson) {
@@ -262,6 +345,37 @@ router.delete('/queue/:id', (req, res) => {
 
   if (wantsJson) {
     return res.json({ success: true, counts });
+  }
+  res.redirect('/ui/queue');
+});
+
+// Retry notification for a specific queue entry
+router.post('/queue/:id/notify', async (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const result = await retryNotification(id, getQueueEntry);
+  const updated = getQueueEntry(id);
+
+  if (wantsJson) {
+    return res.json({ success: result.success, error: result.error, entry: updated });
+  }
+  res.redirect('/ui/queue');
+});
+
+// Retry all failed notifications
+router.post('/queue/notify-all', async (req, res) => {
+  const wantsJson = req.headers.accept?.includes('application/json');
+  const unnotified = listUnnotifiedEntries();
+
+  const results = [];
+  for (const entry of unnotified) {
+    const result = await notifyClawdbot(entry);
+    results.push({ id: entry.id, ...result });
+  }
+
+  if (wantsJson) {
+    return res.json({ success: true, results, count: results.length });
   }
   res.redirect('/ui/queue');
 });
@@ -320,7 +434,8 @@ router.delete('/keys/:id', (req, res) => {
 
 // HTML Templates
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount }) {
+function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, notificationTest }) {
+  const clawdbotConfig = notificationsConfig?.clawdbot;
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -402,6 +517,39 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
       </div>
     </details>
   </div>
+
+  <div class="card">
+    <details ${clawdbotConfig?.enabled ? 'open' : ''}>
+      <summary>Clawdbot Notifications ${clawdbotConfig?.enabled ? '<span class="status configured">Configured</span>' : ''}</summary>
+      <div style="margin-top: 16px;">
+        ${notificationTest === 'success' ? '<div class="success-message" style="margin-bottom: 16px;">✓ Test notification sent successfully!</div>' : ''}
+        ${notificationTest === 'failed' ? '<div class="error-message" style="margin-bottom: 16px;">✗ Test notification failed. Check your URL and token.</div>' : ''}
+        ${clawdbotConfig?.enabled ? `
+          <p>Webhook URL: <strong>${clawdbotConfig.url}</strong></p>
+          <p>Events: <code>${(clawdbotConfig.events || ['completed', 'failed']).join(', ')}</code></p>
+          <div style="display: flex; gap: 8px; margin-top: 12px;">
+            <form method="POST" action="/ui/notifications/test" style="margin: 0;">
+              <button type="submit" class="btn-primary btn-sm">Send Test</button>
+            </form>
+            <form method="POST" action="/ui/notifications/delete" style="margin: 0;">
+              <button type="submit" class="btn-danger btn-sm">Disable</button>
+            </form>
+          </div>
+        ` : `
+          <p class="help">Send notifications to <a href="https://docs.clawd.bot" target="_blank">Clawdbot</a> when queue items are completed, failed, or rejected.</p>
+          <form method="POST" action="/ui/notifications/setup">
+            <label>Webhook URL</label>
+            <input type="text" name="url" placeholder="https://your-gateway.example.com/hooks/wake" required>
+            <label>Token</label>
+            <input type="password" name="token" placeholder="Clawdbot hooks token" required>
+            <label>Events (comma-separated)</label>
+            <input type="text" name="events" placeholder="completed, failed, rejected" value="completed, failed, rejected">
+            <button type="submit" class="btn-primary">Enable Notifications</button>
+          </form>
+        `}
+      </div>
+    </details>
+  </div>
 </body>
 </html>`;
 }
@@ -455,7 +603,7 @@ function renderSetupPasswordPage(error = '') {
 </html>`;
 }
 
-function renderQueuePage(entries, filter, counts) {
+function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -525,8 +673,28 @@ function renderQueuePage(entries, filter, counts) {
       `;
     }
 
+    // Notification status (only show for completed/failed/rejected)
+    let notificationSection = '';
+    if (['completed', 'failed', 'rejected'].includes(entry.status)) {
+      const notifyStatus = entry.notified
+        ? `<span class="notify-status notify-sent" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
+        : entry.notify_error
+          ? `<span class="notify-status notify-failed" title="${escapeHtml(entry.notify_error)}">⚠ Notify failed</span>`
+          : '<span class="notify-status notify-pending">— Not notified</span>';
+
+      const retryBtn = !entry.notified
+        ? `<button type="button" class="btn-sm btn-link" onclick="retryNotify('${entry.id}')" id="retry-${entry.id}">Retry</button>`
+        : '';
+
+      notificationSection = `
+        <div class="notification-status" id="notify-status-${entry.id}">
+          ${notifyStatus} ${retryBtn}
+        </div>
+      `;
+    }
+
     return `
-      <div class="card queue-entry" id="entry-${entry.id}" data-status="${entry.status}">
+      <div class="card queue-entry" id="entry-${entry.id}" data-status="${entry.status}" data-notified="${entry.notified ? '1' : '0'}">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
@@ -552,6 +720,7 @@ function renderQueuePage(entries, filter, counts) {
         </details>
 
         ${resultSection}
+        ${notificationSection}
         ${actions}
       </div>
     `;
@@ -704,6 +873,46 @@ function renderQueuePage(entries, filter, counts) {
       padding: 60px 40px;
     }
     .empty-state p { color: #6b7280; margin: 0; font-size: 16px; }
+    .notification-status {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .notify-status {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .notify-sent {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .notify-failed {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .notify-pending {
+      background: rgba(156, 163, 175, 0.15);
+      color: #9ca3af;
+      border: 1px solid rgba(156, 163, 175, 0.3);
+    }
+    .btn-link {
+      background: none;
+      border: none;
+      color: #818cf8;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 4px 8px;
+      font-size: 13px;
+    }
+    .btn-link:hover { color: #a5b4fc; }
+    .btn-link:disabled { color: #6b7280; cursor: not-allowed; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -716,6 +925,7 @@ function renderQueuePage(entries, filter, counts) {
   <div class="filter-bar" id="filter-bar">
     ${filterLinks}
     <div class="clear-section">
+      ${unnotifiedCount > 0 ? `<button type="button" class="btn-sm btn-primary" onclick="retryAllNotifications()" id="retry-all-btn">Retry ${unnotifiedCount} Notification${unnotifiedCount > 1 ? 's' : ''}</button>` : ''}
       ${filter === 'completed' && counts.completed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'completed\')">Clear Completed</button>' : ''}
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
@@ -928,6 +1138,77 @@ function renderQueuePage(entries, filter, counts) {
         }
       } catch (err) {
         alert('Error: ' + err.message);
+      }
+    }
+
+    async function retryAllNotifications() {
+      const btn = document.getElementById('retry-all-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      try {
+        const res = await fetch('/ui/queue/notify-all', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // Refresh the page to show updated status
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to send notifications');
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Retry Notifications';
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Retry Notifications';
+        }
+      }
+    }
+
+    async function retryNotify(id) {
+      const btn = document.getElementById('retry-' + id);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      try {
+        const res = await fetch('/ui/queue/' + id + '/notify', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        const statusEl = document.getElementById('notify-status-' + id);
+        if (data.success && data.entry?.notified) {
+          // Update to show success
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="notify-status notify-sent">✓ Notified</span>';
+          }
+          const entryEl = document.getElementById('entry-' + id);
+          if (entryEl) entryEl.dataset.notified = '1';
+        } else {
+          // Show error
+          const error = data.error || 'Failed to send';
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="notify-status notify-failed" title="' + escapeHtml(error) + '">⚠ Notify failed</span> <button type="button" class="btn-sm btn-link" onclick="retryNotify(\\''+id+'\\')">Retry</button>';
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Retry';
+        }
       }
     }
   </script>
