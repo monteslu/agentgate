@@ -1,4 +1,5 @@
-import { getAccountCredentials, setAccountCredentials, updateQueueStatus } from './db.js';
+import { getAccountCredentials, setAccountCredentials, updateQueueStatus, getQueueEntry } from './db.js';
+import { notifyClawdbot } from './notifier.js';
 
 // Service base URLs
 const SERVICE_URLS = {
@@ -270,6 +271,17 @@ function buildHeaders(service, token, customHeaders = {}) {
   return headers;
 }
 
+// Helper to update status and send notification
+function finalizeEntry(entryId, status, results) {
+  updateQueueStatus(entryId, status, { results });
+
+  // Send notification to Clawdbot (async, don't block)
+  const updatedEntry = getQueueEntry(entryId);
+  notifyClawdbot(updatedEntry).catch(err => {
+    console.error('[notifier] Failed to notify Clawdbot:', err.message);
+  });
+}
+
 // Execute a single queued entry (batch of requests)
 export async function executeQueueEntry(entry) {
   const results = [];
@@ -290,7 +302,7 @@ export async function executeQueueEntry(entry) {
           ok: false,
           error: `Failed to get access token for ${service}/${account_name}`
         });
-        updateQueueStatus(entry.id, 'failed', { results });
+        finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -302,7 +314,7 @@ export async function executeQueueEntry(entry) {
           ok: false,
           error: `Unknown service or invalid configuration: ${service}`
         });
-        updateQueueStatus(entry.id, 'failed', { results });
+        finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -346,7 +358,7 @@ export async function executeQueueEntry(entry) {
 
       // Stop on first failure
       if (!response.ok) {
-        updateQueueStatus(entry.id, 'failed', { results });
+        finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -356,12 +368,12 @@ export async function executeQueueEntry(entry) {
         ok: false,
         error: err.message
       });
-      updateQueueStatus(entry.id, 'failed', { results });
+      finalizeEntry(entry.id, 'failed', results);
       return { success: false, results };
     }
   }
 
   // All requests succeeded
-  updateQueueStatus(entry.id, 'completed', { results });
+  finalizeEntry(entry.id, 'completed', results);
   return { success: true, results };
 }
