@@ -1,12 +1,11 @@
 {
   "name": "agentgate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "API gateway for AI agents with human-in-the-loop write approval",
   "main": "src/index.js",
   "bin": {
-    "agentgate": "src/index.js",
-    "agentgate-keys": "src/cli.js"
+    "agentgate": "src/cli.js"
   },
   "engines": {
     "node": ">=18"
