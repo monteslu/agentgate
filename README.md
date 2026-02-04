@@ -109,7 +109,31 @@ curl -H "Authorization: Bearer rms_your_key" \
   https://your-server.com/api/skill > SKILL.md
 ```
 
+### Webhook Notifications
 
+agentgate can notify your agent when queue items are completed, failed, or rejected — closing the feedback loop so your agent knows immediately when requests are processed.
+
+**Setup in Admin UI:**
+1. Go to **Advanced → Clawdbot Notifications**
+2. Enter your OpenClaw/Clawdbot webhook URL (e.g., `https://your-gateway.example.com/hooks/wake`)
+3. Enter the hooks token from your OpenClaw config
+4. Choose events: `completed`, `failed`, `rejected`
+
+**Features:**
+- **Real-time notifications** — Instant webhook on each approval/rejection
+- **Notification status** — See ✓ notified / ⚠ failed on each queue entry
+- **Retry individual** — Resend failed notifications one at a time
+- **Batch catch-up** — "Retry All" sends missed notifications in one batched message
+
+**Webhook payload:**
+```json
+{
+  "text": "✅ [agentgate] Queue #abc123 completed\n→ github/monteslu\n→ https://github.com/...\nOriginal: \"Create PR for fix\"",
+  "mode": "now"
+}
+```
+
+Compatible with OpenClaw's `/hooks/wake` endpoint. See [OpenClaw webhook docs](https://docs.openclaw.ai/automation/webhook).
 
 ## API Key Management
 
