@@ -42,9 +42,33 @@ db.exec(`
     submitted_by TEXT,
     submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TEXT,
-    completed_at TEXT
+    completed_at TEXT,
+    notified INTEGER DEFAULT 0,
+    notified_at TEXT,
+    notify_error TEXT
   );
 `);
+
+// Migrate write_queue table to add notification columns
+try {
+  const queueInfo = db.prepare('PRAGMA table_info(write_queue)').all();
+  const hasNotified = queueInfo.some(col => col.name === 'notified');
+
+  if (queueInfo.length > 0 && !hasNotified) {
+    console.log('Migrating write_queue table to add notification columns...');
+    db.exec(`
+      ALTER TABLE write_queue ADD COLUMN notified INTEGER DEFAULT 0;
+      ALTER TABLE write_queue ADD COLUMN notified_at TEXT;
+      ALTER TABLE write_queue ADD COLUMN notify_error TEXT;
+    `);
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  // Columns might already exist or table doesn't exist yet
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating write_queue:', err.message);
+  }
+}
 
 // Initialize api_keys table with migration support for old schema
 // Old schema had: id, name, key, created_at
@@ -228,7 +252,8 @@ export function getQueueEntry(id) {
   return {
     ...row,
     requests: JSON.parse(row.requests),
-    results: row.results ? JSON.parse(row.results) : null
+    results: row.results ? JSON.parse(row.results) : null,
+    notified: Boolean(row.notified)
   };
 }
 
@@ -242,7 +267,39 @@ export function listQueueEntries(status) {
   return rows.map(row => ({
     ...row,
     requests: JSON.parse(row.requests),
-    results: row.results ? JSON.parse(row.results) : null
+    results: row.results ? JSON.parse(row.results) : null,
+    notified: Boolean(row.notified)
+  }));
+}
+
+export function updateQueueNotification(id, success, error = null) {
+  if (success) {
+    db.prepare(`
+      UPDATE write_queue
+      SET notified = 1, notified_at = CURRENT_TIMESTAMP, notify_error = NULL
+      WHERE id = ?
+    `).run(id);
+  } else {
+    db.prepare(`
+      UPDATE write_queue
+      SET notified = 0, notify_error = ?
+      WHERE id = ?
+    `).run(error, id);
+  }
+}
+
+export function listUnnotifiedEntries() {
+  const rows = db.prepare(`
+    SELECT * FROM write_queue
+    WHERE status IN ('completed', 'failed', 'rejected')
+      AND notified = 0
+    ORDER BY completed_at DESC
+  `).all();
+  return rows.map(row => ({
+    ...row,
+    requests: JSON.parse(row.requests),
+    results: row.results ? JSON.parse(row.results) : null,
+    notified: false
   }));
 }
 
