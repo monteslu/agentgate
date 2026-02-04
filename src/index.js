@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { validateApiKey, getAccountsByService, getCookieSecret } from './lib/db.js';
+import { validateApiKey, getAccountsByService, getCookieSecret, getSetting } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
 import blueskyRoutes, { serviceInfo as blueskyInfo } from './routes/bluesky.js';
@@ -126,7 +126,7 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
       description: 'For write operations (POST/PUT/DELETE), you must submit requests to the write queue. A human will review and approve or reject your request. You cannot execute write operations directly.',
       workflow: [
         '1. Submit your write request(s) with a comment explaining your intent',
-        '2. Poll the status endpoint to check if approved/rejected',
+        '2. Wait for webhook notification OR poll the status endpoint',
         '3. If rejected, check rejection_reason and adjust your approach',
         '4. If approved and completed, results contain the API responses',
         '5. If failed, results show which request failed and why'
@@ -205,6 +205,27 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         }
       }
     },
+    notifications: (() => {
+      const config = getSetting('notifications');
+      const enabled = config?.clawdbot?.enabled || false;
+      return {
+        enabled,
+        description: enabled
+          ? 'Webhook notifications are ENABLED. You will receive automatic notifications when queue items complete, fail, or are rejected. No need to poll.'
+          : 'Webhook notifications are NOT configured. You must poll the status endpoint to check request status.',
+        setup: 'Configure in Admin UI under Advanced → Clawdbot Notifications',
+        webhookFormat: {
+          description: 'POST to your webhook URL with JSON body',
+          payload: {
+            text: 'Notification message with status, service, result URL, and original comment',
+            mode: 'now'
+          },
+          example: '✅ [agentgate] Queue #abc123 completed\\n→ github/monteslu\\n→ https://github.com/...\\nOriginal: "Create PR"'
+        },
+        events: enabled ? (config.clawdbot.events || ['completed', 'failed']) : ['completed', 'failed', 'rejected'],
+        compatible: 'OpenClaw/Clawdbot /hooks/wake endpoint'
+      };
+    })(),
     skill: {
       description: 'Generate a SKILL.md file for OpenClaw/AgentSkills compatible systems',
       endpoint: 'GET /api/skill',
