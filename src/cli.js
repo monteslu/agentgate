@@ -37,12 +37,15 @@ Examples:
 }
 
 async function main() {
-  if (!command || command === '-h' || command === '--help') {
+  if (command === '-h' || command === '--help') {
     printUsage();
     process.exit(0);
   }
 
-  if (command === 'start') {
+  // Default to start if no command given
+  const cmd = command || 'start';
+
+  if (cmd === 'start') {
     // Parse port from args
     const portIdx = args.findIndex(a => a === '-p' || a === '--port');
     if (portIdx !== -1 && args[portIdx + 1]) {
@@ -51,7 +54,7 @@ async function main() {
     
     // Import and run the server
     await import('./index.js');
-  } else if (command === 'keys') {
+  } else if (cmd === 'keys') {
     const subcommand = args[0];
     const { createApiKey, listApiKeys, deleteApiKey } = await import('./lib/db.js');
     
@@ -103,7 +106,7 @@ async function main() {
       process.exit(1);
     }
   } else {
-    console.error(`Unknown command: ${command}`);
+    console.error(`Unknown command: ${cmd}`);
     printUsage();
     process.exit(1);
   }
