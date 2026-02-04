@@ -5,6 +5,22 @@ const router = Router();
 const GOOGLE_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_AUTH = 'https://oauth2.googleapis.com';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'calendar',
+  name: 'Google Calendar',
+  shortDesc: 'Events, calendars',
+  description: 'Google Calendar API proxy',
+  authType: 'oauth',
+  dbKey: 'google_calendar',
+  docs: 'https://developers.google.com/calendar/api/v3/reference',
+  examples: [
+    'GET /api/calendar/{accountName}/users/me/calendarList',
+    'GET /api/calendar/{accountName}/calendars/primary/events',
+    'GET /api/calendar/{accountName}/calendars/{calendarId}/events?timeMin={ISO8601}&timeMax={ISO8601}'
+  ]
+};
+
 // Get a valid access token, refreshing if needed
 async function getAccessToken(accountName) {
   const creds = getAccountCredentials('google_calendar', accountName);

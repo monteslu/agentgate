@@ -4,10 +4,25 @@ import { getAccountCredentials, setAccountCredentials } from '../lib/db.js';
 const router = Router();
 const BSKY_API = 'https://bsky.social/xrpc';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'bluesky',
+  name: 'Bluesky',
+  shortDesc: 'Timeline, posts, profile (DMs blocked)',
+  description: 'Bluesky/AT Protocol proxy (DMs blocked)',
+  authType: 'app password',
+  docs: 'https://docs.bsky.app/docs/api/',
+  examples: [
+    'GET /api/bluesky/{accountName}/app.bsky.feed.getTimeline',
+    'GET /api/bluesky/{accountName}/app.bsky.feed.getAuthorFeed?actor={handle}',
+    'GET /api/bluesky/{accountName}/app.bsky.actor.getProfile?actor={handle}'
+  ]
+};
+
 // Blocked routes - no DMs/chat
 const BLOCKED_PATTERNS = [
   /^chat\./,                    // all chat.bsky.* endpoints
-  /^com\.atproto\.admin/,       // admin endpoints
+  /^com\.atproto\.admin/       // admin endpoints
 ];
 
 // Get a valid access token, refreshing if needed

@@ -3,10 +3,25 @@ import { getAccountCredentials } from '../lib/db.js';
 
 const router = Router();
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'mastodon',
+  name: 'Mastodon',
+  shortDesc: 'Timeline, notifications, profile (DMs blocked)',
+  description: 'Mastodon API proxy (DMs blocked)',
+  authType: 'oauth',
+  docs: 'https://docs.joinmastodon.org/api/',
+  examples: [
+    'GET /api/mastodon/{accountName}/api/v1/timelines/home',
+    'GET /api/mastodon/{accountName}/api/v1/accounts/verify_credentials',
+    'GET /api/mastodon/{accountName}/api/v1/notifications'
+  ]
+};
+
 // Blocked routes - no DMs or conversations
 const BLOCKED_PATTERNS = [
   /^api\/v1\/conversations/,
-  /^api\/v1\/markers/,  // read position markers (privacy)
+  /^api\/v1\/markers/  // read position markers (privacy)
 ];
 
 // Get the configured instance and access token for an account

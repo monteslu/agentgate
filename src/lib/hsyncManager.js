@@ -40,7 +40,7 @@ export async function disconnectHsync() {
       } else if (typeof currentConnection.disconnect === 'function') {
         await currentConnection.disconnect();
       }
-    } catch (err) {
+    } catch {
       // Disconnect errors are non-fatal
     }
     currentConnection = null;

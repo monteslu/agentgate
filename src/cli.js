@@ -15,7 +15,8 @@ Commands:
 `);
 }
 
-switch (command) {
+async function main() {
+  switch (command) {
   case 'list': {
     const keys = listApiKeys();
     if (keys.length === 0) {
@@ -25,7 +26,7 @@ switch (command) {
       for (const k of keys) {
         console.log(`  ID:      ${k.id}`);
         console.log(`  Name:    ${k.name}`);
-        console.log(`  Key:     ${k.key}`);
+        console.log(`  Key:     ${k.key_prefix} (hashed - full key shown only at creation)`);
         console.log(`  Created: ${k.created_at}`);
         console.log('');
       }
@@ -40,11 +41,11 @@ switch (command) {
       console.log('Usage: node src/cli.js create <name>');
       process.exit(1);
     }
-    const key = createApiKey(name);
+    const key = await createApiKey(name);
     console.log('\nAPI key created:\n');
     console.log(`  Name: ${key.name}`);
     console.log(`  Key:  ${key.key}`);
-    console.log('');
+    console.log('\n  ⚠️  Save this key now - you won\'t be able to see it again!\n');
     break;
   }
 
@@ -67,4 +68,10 @@ switch (command) {
   default:
     printUsage();
     break;
+  }
 }
+
+main().catch(err => {
+  console.error('Error:', err.message);
+  process.exit(1);
+});

@@ -5,6 +5,21 @@ const router = Router();
 const YOUTUBE_API = 'https://www.googleapis.com/youtube/v3';
 const GOOGLE_AUTH = 'https://oauth2.googleapis.com';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'youtube',
+  name: 'YouTube',
+  shortDesc: 'Channels, videos, subscriptions',
+  description: 'YouTube Data API proxy',
+  authType: 'oauth',
+  docs: 'https://developers.google.com/youtube/v3/docs',
+  examples: [
+    'GET /api/youtube/{accountName}/channels?part=snippet,statistics&mine=true',
+    'GET /api/youtube/{accountName}/videos?part=snippet,statistics&myRating=like',
+    'GET /api/youtube/{accountName}/subscriptions?part=snippet&mine=true'
+  ]
+};
+
 // Get a valid access token, refreshing if needed
 async function getAccessToken(accountName) {
   const creds = getAccountCredentials('youtube', accountName);

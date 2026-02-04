@@ -1,6 +1,6 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   router.post('/jira/setup', (req, res) => {
     const { accountName, domain, email, apiToken } = req.body;
     if (!accountName || !domain || !email || !apiToken) {
@@ -21,7 +21,7 @@ export function registerRoutes(router, baseUrl) {
   });
 }
 
-export function renderCard(accounts, baseUrl) {
+export function renderCard(accounts, _baseUrl) {
   const serviceAccounts = accounts.filter(a => a.service === 'jira');
 
   const renderAccounts = () => {

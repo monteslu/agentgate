@@ -12,7 +12,7 @@ export function registerRoutes(router, baseUrl) {
     const scope = 'https://www.googleapis.com/auth/calendar.readonly';
     const state = `agentgate_google_${accountName}`;
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
       `client_id=${clientId}&response_type=code&` +
       `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;

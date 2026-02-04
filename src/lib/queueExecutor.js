@@ -20,37 +20,37 @@ async function getAccessToken(service, accountName) {
   if (!creds) return null;
 
   switch (service) {
-    case 'github':
-      return creds.token || null;
+  case 'github':
+    return creds.token || null;
 
-    case 'bluesky':
-      return await getBlueskyToken(accountName, creds);
+  case 'bluesky':
+    return await getBlueskyToken(accountName, creds);
 
-    case 'reddit':
-      return await getOAuthToken(accountName, creds, 'reddit', refreshRedditToken);
+  case 'reddit':
+    return await getOAuthToken(accountName, creds, 'reddit', refreshRedditToken);
 
-    case 'calendar':
-    case 'google_calendar':
-      return await getOAuthToken(accountName, creds, 'google_calendar', refreshGoogleToken);
+  case 'calendar':
+  case 'google_calendar':
+    return await getOAuthToken(accountName, creds, 'google_calendar', refreshGoogleToken);
 
-    case 'youtube':
-      return await getOAuthToken(accountName, creds, 'youtube', refreshGoogleToken);
+  case 'youtube':
+    return await getOAuthToken(accountName, creds, 'youtube', refreshGoogleToken);
 
-    case 'linkedin':
-      return await getOAuthToken(accountName, creds, 'linkedin', refreshLinkedInToken);
+  case 'linkedin':
+    return await getOAuthToken(accountName, creds, 'linkedin', refreshLinkedInToken);
 
-    case 'mastodon':
-      return creds.accessToken || null;
+  case 'mastodon':
+    return creds.accessToken || null;
 
-    case 'jira':
-      // Jira uses basic auth, return the creds object
-      return creds;
+  case 'jira':
+    // Jira uses basic auth, return the creds object
+    return creds;
 
-    case 'fitbit':
-      return await getOAuthToken(accountName, creds, 'fitbit', refreshFitbitToken);
+  case 'fitbit':
+    return await getOAuthToken(accountName, creds, 'fitbit', refreshFitbitToken);
 
-    default:
-      return null;
+  default:
+    return null;
   }
 }
 

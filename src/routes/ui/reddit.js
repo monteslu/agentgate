@@ -12,7 +12,7 @@ export function registerRoutes(router, baseUrl) {
     const scope = 'read identity';
     const state = `agentgate_reddit_${accountName}`;
 
-    const authUrl = `https://www.reddit.com/api/v1/authorize?` +
+    const authUrl = 'https://www.reddit.com/api/v1/authorize?' +
       `client_id=${clientId}&response_type=code&` +
       `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `duration=permanent&scope=${encodeURIComponent(scope)}`;

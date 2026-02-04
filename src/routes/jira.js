@@ -3,6 +3,22 @@ import { getAccountCredentials } from '../lib/db.js';
 
 const router = Router();
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'jira',
+  name: 'Jira',
+  shortDesc: 'Issues, projects, search',
+  description: 'Jira API proxy',
+  authType: 'api token',
+  docs: 'https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/',
+  examples: [
+    'GET /api/jira/{accountName}/myself',
+    'GET /api/jira/{accountName}/project',
+    'GET /api/jira/{accountName}/search?jql=assignee=currentUser()',
+    'GET /api/jira/{accountName}/issue/{issueKey}'
+  ]
+};
+
 // Get Jira config for an account
 function getJiraConfig(accountName) {
   const creds = getAccountCredentials('jira', accountName);

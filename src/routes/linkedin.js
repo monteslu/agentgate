@@ -4,10 +4,24 @@ import { getAccountCredentials, setAccountCredentials } from '../lib/db.js';
 const router = Router();
 const LINKEDIN_API = 'https://api.linkedin.com/v2';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'linkedin',
+  name: 'LinkedIn',
+  shortDesc: 'Profile (messaging blocked)',
+  description: 'LinkedIn API proxy (messaging blocked)',
+  authType: 'oauth',
+  docs: 'https://learn.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api',
+  examples: [
+    'GET /api/linkedin/{accountName}/me',
+    'GET /api/linkedin/{accountName}/userinfo'
+  ]
+};
+
 // Blocked routes - no messaging
 const BLOCKED_PATTERNS = [
   /^messaging/,                 // all messaging endpoints
-  /^conversations/,             // conversations
+  /^conversations/             // conversations
 ];
 
 // Get a valid access token, refreshing if needed

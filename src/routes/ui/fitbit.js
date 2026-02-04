@@ -12,7 +12,7 @@ export function registerRoutes(router, baseUrl) {
     const scope = 'activity heartrate location nutrition oxygen_saturation profile respiratory_rate settings sleep social temperature weight';
     const state = `agentgate_fitbit_${accountName}`;
 
-    const authUrl = `https://www.fitbit.com/oauth2/authorize?` +
+    const authUrl = 'https://www.fitbit.com/oauth2/authorize?' +
       `client_id=${clientId}&response_type=code&` +
       `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `scope=${encodeURIComponent(scope)}`;

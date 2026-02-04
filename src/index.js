@@ -4,21 +4,35 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { validateApiKey, getAccountsByService, getCookieSecret } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
-import githubRoutes from './routes/github.js';
-import blueskyRoutes from './routes/bluesky.js';
-import redditRoutes from './routes/reddit.js';
-import calendarRoutes from './routes/calendar.js';
-import mastodonRoutes from './routes/mastodon.js';
-import linkedinRoutes from './routes/linkedin.js';
-import youtubeRoutes from './routes/youtube.js';
-import jiraRoutes from './routes/jira.js';
-import fitbitRoutes from './routes/fitbit.js';
+import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
+import blueskyRoutes, { serviceInfo as blueskyInfo } from './routes/bluesky.js';
+import redditRoutes, { serviceInfo as redditInfo } from './routes/reddit.js';
+import calendarRoutes, { serviceInfo as calendarInfo } from './routes/calendar.js';
+import mastodonRoutes, { serviceInfo as mastodonInfo } from './routes/mastodon.js';
+import linkedinRoutes, { serviceInfo as linkedinInfo } from './routes/linkedin.js';
+import youtubeRoutes, { serviceInfo as youtubeInfo } from './routes/youtube.js';
+import jiraRoutes, { serviceInfo as jiraInfo } from './routes/jira.js';
+import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
 import uiRoutes from './routes/ui.js';
+
+// Aggregate service metadata from all routes
+const SERVICE_REGISTRY = {
+  [githubInfo.key]: githubInfo,
+  [blueskyInfo.key]: blueskyInfo,
+  [mastodonInfo.key]: mastodonInfo,
+  [redditInfo.key]: redditInfo,
+  [calendarInfo.key]: calendarInfo,
+  [youtubeInfo.key]: youtubeInfo,
+  [linkedinInfo.key]: linkedinInfo,
+  [jiraInfo.key]: jiraInfo,
+  [fitbitInfo.key]: fitbitInfo
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3050;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -26,14 +40,14 @@ app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
 
 // API key auth middleware for /api routes
-function apiKeyAuth(req, res, next) {
+async function apiKeyAuth(req, res, next) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });
   }
 
   const key = authHeader.slice(7);
-  const valid = validateApiKey(key);
+  const valid = await validateApiKey(key);
   if (!valid) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
@@ -73,159 +87,37 @@ app.use('/ui', uiRoutes);
 app.get('/api/readme', apiKeyAuth, (req, res) => {
   const accountsByService = getAccountsByService();
 
-  const services = {
-    github: {
-      accounts: accountsByService.github || [],
-      authType: 'personal access token',
-      description: 'GitHub API proxy'
-    },
-    bluesky: {
-      accounts: accountsByService.bluesky || [],
-      authType: 'app password',
-      description: 'Bluesky/AT Protocol proxy (DMs blocked)'
-    },
-    mastodon: {
-      accounts: accountsByService.mastodon || [],
-      authType: 'oauth',
-      description: 'Mastodon API proxy (DMs blocked)'
-    },
-    reddit: {
-      accounts: accountsByService.reddit || [],
-      authType: 'oauth',
-      description: 'Reddit API proxy (DMs blocked)'
-    },
-    calendar: {
-      accounts: accountsByService.google_calendar || [],
-      authType: 'oauth',
-      description: 'Google Calendar API proxy (read-only)'
-    },
-    youtube: {
-      accounts: accountsByService.youtube || [],
-      authType: 'oauth',
-      description: 'YouTube Data API proxy (read-only)'
-    },
-    linkedin: {
-      accounts: accountsByService.linkedin || [],
-      authType: 'oauth',
-      description: 'LinkedIn API proxy (messaging blocked)'
-    },
-    jira: {
-      accounts: accountsByService.jira || [],
-      authType: 'api token',
-      description: 'Jira API proxy (read-only)'
-    },
-    fitbit: {
-      accounts: accountsByService.fitbit || [],
-      authType: 'oauth',
-      description: 'Fitbit API proxy (read-only)'
+  // Build services object from registry
+  const services = {};
+  for (const [key, info] of Object.entries(SERVICE_REGISTRY)) {
+    const dbKey = info.dbKey || key;
+    services[key] = {
+      accounts: accountsByService[dbKey] || [],
+      authType: info.authType,
+      description: info.description
+    };
+  }
+
+  // Build endpoints object from registry
+  const endpoints = {};
+  for (const [key, info] of Object.entries(SERVICE_REGISTRY)) {
+    endpoints[key] = {
+      base: `/api/${key}/{accountName}`,
+      description: info.description,
+      docs: info.docs,
+      examples: info.examples
+    };
+    if (info.writeGuidelines) {
+      endpoints[key].writeGuidelines = info.writeGuidelines;
     }
-  };
+  }
 
   res.json({
     name: 'agentgate',
     description: 'API gateway for personal data with human-in-the-loop write approval. Read requests (GET) execute immediately. Write requests (POST/PUT/DELETE) are queued for human approval before execution.',
     urlPattern: '/api/{service}/{accountName}/...',
     services,
-    endpoints: {
-      github: {
-        base: '/api/github/{accountName}',
-        description: 'GitHub API proxy',
-        docs: 'https://docs.github.com/en/rest',
-        examples: [
-          'GET /api/github/{accountName}/users/{username}',
-          'GET /api/github/{accountName}/repos/{owner}/{repo}',
-          'GET /api/github/{accountName}/repos/{owner}/{repo}/commits'
-        ],
-        writeGuidelines: [
-          'NEVER push directly to main/master branches (except for initial commits on new projects)',
-          'Always create a new branch for changes to existing projects',
-          'Run tests locally before submitting PRs (if tests exist)',
-          'Create a pull request for review',
-          'Workflow: create branch → commit changes → run tests → create PR'
-        ]
-      },
-      bluesky: {
-        base: '/api/bluesky/{accountName}',
-        description: 'Bluesky/AT Protocol proxy (DMs blocked)',
-        docs: 'https://docs.bsky.app/docs/api/',
-        examples: [
-          'GET /api/bluesky/{accountName}/app.bsky.feed.getTimeline',
-          'GET /api/bluesky/{accountName}/app.bsky.feed.getAuthorFeed?actor={handle}',
-          'GET /api/bluesky/{accountName}/app.bsky.actor.getProfile?actor={handle}'
-        ]
-      },
-      mastodon: {
-        base: '/api/mastodon/{accountName}',
-        description: 'Mastodon API proxy (DMs blocked)',
-        docs: 'https://docs.joinmastodon.org/api/',
-        examples: [
-          'GET /api/mastodon/{accountName}/api/v1/timelines/home',
-          'GET /api/mastodon/{accountName}/api/v1/accounts/verify_credentials',
-          'GET /api/mastodon/{accountName}/api/v1/notifications'
-        ]
-      },
-      reddit: {
-        base: '/api/reddit/{accountName}',
-        description: 'Reddit API proxy (DMs blocked)',
-        docs: 'https://www.reddit.com/dev/api/',
-        examples: [
-          'GET /api/reddit/{accountName}/api/v1/me',
-          'GET /api/reddit/{accountName}/r/{subreddit}/hot',
-          'GET /api/reddit/{accountName}/user/{username}/submitted'
-        ]
-      },
-      calendar: {
-        base: '/api/calendar/{accountName}',
-        description: 'Google Calendar API proxy (read-only)',
-        docs: 'https://developers.google.com/calendar/api/v3/reference',
-        examples: [
-          'GET /api/calendar/{accountName}/users/me/calendarList',
-          'GET /api/calendar/{accountName}/calendars/primary/events',
-          'GET /api/calendar/{accountName}/calendars/{calendarId}/events?timeMin={ISO8601}&timeMax={ISO8601}'
-        ]
-      },
-      youtube: {
-        base: '/api/youtube/{accountName}',
-        description: 'YouTube Data API proxy (read-only)',
-        docs: 'https://developers.google.com/youtube/v3/docs',
-        examples: [
-          'GET /api/youtube/{accountName}/channels?part=snippet,statistics&mine=true',
-          'GET /api/youtube/{accountName}/videos?part=snippet,statistics&myRating=like',
-          'GET /api/youtube/{accountName}/subscriptions?part=snippet&mine=true'
-        ]
-      },
-      linkedin: {
-        base: '/api/linkedin/{accountName}',
-        description: 'LinkedIn API proxy (messaging blocked)',
-        docs: 'https://learn.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api',
-        examples: [
-          'GET /api/linkedin/{accountName}/me',
-          'GET /api/linkedin/{accountName}/userinfo'
-        ]
-      },
-      jira: {
-        base: '/api/jira/{accountName}',
-        description: 'Jira API proxy (read-only)',
-        docs: 'https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/',
-        examples: [
-          'GET /api/jira/{accountName}/myself',
-          'GET /api/jira/{accountName}/project',
-          'GET /api/jira/{accountName}/search?jql=assignee=currentUser()',
-          'GET /api/jira/{accountName}/issue/{issueKey}'
-        ]
-      },
-      fitbit: {
-        base: '/api/fitbit/{accountName}',
-        description: 'Fitbit API proxy (read-only)',
-        docs: 'https://dev.fitbit.com/build/reference/web-api/',
-        examples: [
-          'GET /api/fitbit/{accountName}/1/user/-/profile.json',
-          'GET /api/fitbit/{accountName}/1/user/-/activities/date/today.json',
-          'GET /api/fitbit/{accountName}/1/user/-/sleep/date/today.json',
-          'GET /api/fitbit/{accountName}/1/user/-/body/log/weight/date/today.json'
-        ]
-      }
-    },
+    endpoints,
     auth: {
       type: 'bearer',
       header: 'Authorization: Bearer {your_api_key}'
@@ -301,8 +193,128 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
           url: '/api/queue/github/personal/status/{id_from_submit_response}'
         }
       }
+    },
+    skill: {
+      description: 'Generate a SKILL.md file for OpenClaw/AgentSkills compatible systems',
+      endpoint: 'GET /api/skill',
+      docs: 'https://docs.openclaw.ai/tools/skills',
+      queryParams: {
+        base_url: 'Override the base URL in the generated skill (optional)'
+      }
     }
   });
+});
+
+// Generate SKILL.md for OpenClaw/AgentSkills compatible systems
+// See: https://docs.openclaw.ai/tools/skills
+app.get('/api/skill', apiKeyAuth, (req, res) => {
+  const baseUrl = req.query.base_url || BASE_URL;
+  const accountsByService = getAccountsByService();
+
+  // Build list of configured services dynamically
+  const configuredServices = [];
+  for (const [serviceKey, info] of Object.entries(SERVICE_REGISTRY)) {
+    const dbKey = info.dbKey || serviceKey;
+    const accounts = accountsByService[dbKey] || [];
+    if (accounts.length > 0) {
+      configuredServices.push(`- **${info.name}**: ${accounts.join(', ')}`);
+    }
+  }
+
+  // Build supported services list for description
+  const supportedServices = Object.values(SERVICE_REGISTRY).map(s => s.name).join(', ');
+
+  // Generate example read endpoints from configured services
+  const readExamples = [];
+  for (const [serviceKey, info] of Object.entries(SERVICE_REGISTRY)) {
+    const dbKey = info.dbKey || serviceKey;
+    const accounts = accountsByService[dbKey] || [];
+    if (accounts.length > 0 && info.examples && info.examples.length > 0) {
+      // Take first example, replace {accountName} with actual account
+      const example = info.examples[0].replace('{accountName}', accounts[0]);
+      readExamples.push(`- \`${example.replace('GET ', baseUrl)}\``);
+      if (readExamples.length >= 3) break;
+    }
+  }
+
+  // Collect any write guidelines
+  const writeGuidelines = [];
+  for (const [_serviceKey, info] of Object.entries(SERVICE_REGISTRY)) {
+    if (info.writeGuidelines) {
+      writeGuidelines.push(`### ${info.name}\n${info.writeGuidelines.map(g => `- ${g}`).join('\n')}`);
+    }
+  }
+
+  const skillMd = `---
+name: agentgate
+description: Access personal data through agentgate API gateway. Supports ${supportedServices}. Read requests execute immediately. Write requests are queued for human approval.
+metadata: { "openclaw": { "emoji": "🚪", "requires": { "env": ["AGENTGATE_API_KEY"] } } }
+---
+
+# agentgate
+
+API gateway for accessing personal data with human-in-the-loop write approval.
+
+## Configuration
+
+- **Base URL**: \`${baseUrl}\`
+- **API Key**: Use the \`AGENTGATE_API_KEY\` environment variable
+
+## Configured Services
+
+${configuredServices.length > 0 ? configuredServices.join('\n') : '_No services configured yet_'}
+
+## Authentication
+
+All requests require the API key in the Authorization header:
+
+\`\`\`
+Authorization: Bearer $AGENTGATE_API_KEY
+\`\`\`
+
+## Read Requests (Immediate)
+
+Make GET requests to \`${baseUrl}/api/{service}/{accountName}/...\`
+
+${readExamples.length > 0 ? 'Examples:\n' + readExamples.join('\n') : ''}
+
+## Write Requests (Queued for Approval)
+
+Write operations (POST/PUT/DELETE) must go through the queue:
+
+1. **Submit request**:
+   \`\`\`
+   POST ${baseUrl}/api/queue/{service}/{accountName}/submit
+   {
+     "requests": [{ "method": "POST", "path": "/path", "body": {...} }],
+     "comment": "Explain what you're doing and why. Include [links](url) to relevant issues/PRs."
+   }
+   \`\`\`
+
+2. **Poll for status**:
+   \`\`\`
+   GET ${baseUrl}/api/queue/{service}/{accountName}/status/{id}
+   \`\`\`
+
+3. **Check response**: \`pending\`, \`completed\`, \`failed\`, or \`rejected\` (with reason)
+
+## Important Notes
+
+- Always include a clear comment explaining your intent
+- Include markdown links to relevant resources (issues, PRs, docs)
+- Be patient - approval requires human action
+
+${writeGuidelines.length > 0 ? '## Service-Specific Guidelines\n\n' + writeGuidelines.join('\n\n') : ''}
+
+## Full API Documentation
+
+For complete endpoint documentation, fetch:
+\`\`\`
+GET ${baseUrl}/api/readme
+\`\`\`
+`;
+
+  res.type('text/markdown').send(skillMd);
 });
 
 // Root redirect to UI

@@ -1,4 +1,4 @@
-import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { setAccountCredentials, deleteAccount } from '../../lib/db.js';
 
 export function registerRoutes(router) {
   router.post('/github/setup', (req, res) => {
@@ -17,7 +17,7 @@ export function registerRoutes(router) {
   });
 }
 
-export function renderCard(accounts, baseUrl) {
+export function renderCard(accounts, _baseUrl) {
   const serviceAccounts = accounts.filter(a => a.service === 'github');
 
   const renderAccounts = () => {

@@ -9,15 +9,8 @@ const dbPath = join(__dirname, '../../data.db');
 
 const db = new Database(dbPath);
 
-// Initialize schema
+// Initialize other tables first
 db.exec(`
-  CREATE TABLE IF NOT EXISTS api_keys (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    key TEXT UNIQUE NOT NULL,
-    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-  );
-
   CREATE TABLE IF NOT EXISTS service_accounts (
     id TEXT PRIMARY KEY,
     service TEXT NOT NULL,
@@ -50,24 +43,77 @@ db.exec(`
   );
 `);
 
+// Initialize api_keys table with migration support for old schema
+// Old schema had: id, name, key, created_at
+// New schema has: id, name, key_prefix, key_hash, created_at
+try {
+  const tableInfo = db.prepare('PRAGMA table_info(api_keys)').all();
+
+  if (tableInfo.length === 0) {
+    // Table doesn't exist, create with new schema
+    db.exec(`
+      CREATE TABLE api_keys (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        key_hash TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } else {
+    const hasOldSchema = tableInfo.some(col => col.name === 'key') && !tableInfo.some(col => col.name === 'key_hash');
+
+    if (hasOldSchema) {
+      console.log('Migrating api_keys table to new schema...');
+      console.log('NOTE: Old API keys cannot be migrated (bcrypt is one-way) and will be removed.');
+      console.log('Please create new API keys after migration.');
+
+      db.exec(`
+        DROP TABLE api_keys;
+        CREATE TABLE api_keys (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          key_prefix TEXT NOT NULL,
+          key_hash TEXT NOT NULL,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('Migration complete.');
+    }
+    // else: table exists with new schema, nothing to do
+  }
+} catch (err) {
+  console.error('Error initializing api_keys table:', err.message);
+}
+
 // API Keys
-export function createApiKey(name) {
+export async function createApiKey(name) {
   const id = nanoid();
   const key = `rms_${nanoid(32)}`;
-  db.prepare('INSERT INTO api_keys (id, name, key) VALUES (?, ?, ?)').run(id, name, key);
-  return { id, name, key };
+  const keyPrefix = key.substring(0, 8) + '...' + key.substring(key.length - 4);
+  const keyHash = await bcrypt.hash(key, 10);
+  db.prepare('INSERT INTO api_keys (id, name, key_prefix, key_hash) VALUES (?, ?, ?, ?)').run(id, name, keyPrefix, keyHash);
+  return { id, name, key, keyPrefix }; // Return full key only at creation
 }
 
 export function listApiKeys() {
-  return db.prepare('SELECT id, name, key, created_at FROM api_keys').all();
+  return db.prepare('SELECT id, name, key_prefix, created_at FROM api_keys').all();
 }
 
 export function deleteApiKey(id) {
   return db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
 }
 
-export function validateApiKey(key) {
-  return db.prepare('SELECT * FROM api_keys WHERE key = ?').get(key);
+export async function validateApiKey(key) {
+  // Must check all keys since we can't look up by hash directly
+  const allKeys = db.prepare('SELECT * FROM api_keys').all();
+  for (const row of allKeys) {
+    const match = await bcrypt.compare(key, row.key_hash);
+    if (match) {
+      return { id: row.id, name: row.name };
+    }
+  }
+  return null;
 }
 
 // Service Accounts
@@ -224,11 +270,11 @@ export function clearQueueByStatus(status) {
   if (status === 'all') {
     return db.prepare("DELETE FROM write_queue WHERE status IN ('completed', 'failed', 'rejected')").run();
   }
-  return db.prepare("DELETE FROM write_queue WHERE status = ?").run(status);
+  return db.prepare('DELETE FROM write_queue WHERE status = ?').run(status);
 }
 
 export function deleteQueueEntry(id) {
-  return db.prepare("DELETE FROM write_queue WHERE id = ?").run(id);
+  return db.prepare('DELETE FROM write_queue WHERE id = ?').run(id);
 }
 
 // Legacy alias
@@ -242,7 +288,7 @@ export function getPendingQueueCount() {
 }
 
 export function getQueueCounts() {
-  const rows = db.prepare("SELECT status, COUNT(*) as count FROM write_queue GROUP BY status").all();
+  const rows = db.prepare('SELECT status, COUNT(*) as count FROM write_queue GROUP BY status').all();
   const counts = { all: 0, pending: 0, completed: 0, failed: 0, rejected: 0 };
   for (const row of rows) {
     counts[row.status] = row.count;

@@ -8,6 +8,14 @@
 
 **Read requests** (GET) execute immediately. **Write requests** (POST/PUT/DELETE) are queued for human approval before execution.
 
+## How It Works
+
+```mermaid
+flowchart LR
+    A["🦀 Agent"] -->|read| G["🤖 agentgate"] -->|fetch| S[Services]
+    A -->|write| G -->|queue| H["🧑 Human"] -->|approve| S
+```
+
 ## Supported Services
 
 - **GitHub** - Repos, issues, PRs, commits
@@ -19,6 +27,16 @@
 - **LinkedIn** - Profile (messaging blocked)
 - **Jira** - Issues, projects, search
 - **Fitbit** - Activity, sleep, heart rate, profile
+
+## Security Notes
+
+> **IMPORTANT: Do NOT run this service on the same machine as your AI agents (clawdbot, moltbot, openclaw, etc.).** If an agent has local access to the agentgate box, it could potentially read the database file directly, bypassing all security controls. Run this gateway on a separate, isolated machine that agents can only reach over the network.
+
+- All write operations require human approval via the admin UI
+- Agents cannot approve their own requests
+- DMs/messaging endpoints are blocked for social services
+- Admin UI is password-protected
+- API keys are bcrypt-hashed and only shown once at creation
 
 ## Quick Start
 
@@ -43,6 +61,8 @@ The server runs on port 3050 by default. Set `PORT` environment variable to chan
 4. Create API keys for your agents via CLI
 
 ## API Key Management
+
+Manage API keys in the admin UI at `/ui/keys`, or via CLI:
 
 ```bash
 # List all API keys
@@ -143,6 +163,21 @@ pm2 startup
 
 The admin UI supports [hsync](https://hsync.tech) for secure remote access without exposing ports. Configure it in the UI under Configuration > hsync.
 
+### Remote Access with Cloudflare Tunnel
+
+Use [trycloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/do-more-with-tunnels/trycloudflare/) for quick, free tunnels without a Cloudflare account:
+
+```bash
+# Install cloudflared
+brew install cloudflared  # macOS
+# or download from https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/
+
+# Start a tunnel (generates a random *.trycloudflare.com URL)
+cloudflared tunnel --url http://localhost:3050
+```
+
+For persistent tunnels with a custom domain, create a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/).
+
 ### Reverse Proxy (nginx)
 
 ```nginx
@@ -168,16 +203,6 @@ Set `BASE_URL` environment variable to your public URL for OAuth callbacks:
 ```bash
 BASE_URL=https://agentgate.yourdomain.com npm start
 ```
-
-## Security Notes
-
-> **IMPORTANT: Do NOT run this service on the same machine as your AI agents (clawdbot, moltbot, openclaw, etc.).** If an agent has local access to the agentgate box, it could potentially read the database file directly, bypassing all security controls. Run this gateway on a separate, isolated machine that agents can only reach over the network.
-
-- All write operations require human approval via the admin UI
-- Agents cannot approve their own requests
-- DMs/messaging endpoints are blocked for social services
-- Admin UI is password-protected
-- API keys are stored hashed in SQLite
 
 ## TODO
 

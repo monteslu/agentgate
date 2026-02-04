@@ -5,11 +5,26 @@ const router = Router();
 const REDDIT_API = 'https://oauth.reddit.com';
 const REDDIT_AUTH = 'https://www.reddit.com/api/v1';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'reddit',
+  name: 'Reddit',
+  shortDesc: 'Subreddits, posts, comments (DMs blocked)',
+  description: 'Reddit API proxy (DMs blocked)',
+  authType: 'oauth',
+  docs: 'https://www.reddit.com/dev/api/',
+  examples: [
+    'GET /api/reddit/{accountName}/api/v1/me',
+    'GET /api/reddit/{accountName}/r/{subreddit}/hot',
+    'GET /api/reddit/{accountName}/user/{username}/submitted'
+  ]
+};
+
 // Blocked routes - no DMs/private messages
 const BLOCKED_PATTERNS = [
   /^message\//,                 // /message/inbox, /message/sent, etc.
   /^api\/v1\/me\/blocked/,      // blocked users list
-  /^api\/v1\/me\/friends/,      // friends list (privacy)
+  /^api\/v1\/me\/friends/      // friends list (privacy)
 ];
 
 // Get a valid access token, refreshing if needed

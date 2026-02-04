@@ -12,7 +12,7 @@ export function registerRoutes(router, baseUrl) {
     const scope = 'openid profile email r_liteprofile';
     const state = `agentgate_linkedin_${accountName}`;
 
-    const authUrl = `https://www.linkedin.com/oauth/v2/authorization?` +
+    const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
       `response_type=code&client_id=${clientId}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
       `scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;

@@ -93,7 +93,7 @@ export function registerRoutes(router, baseUrl) {
   });
 }
 
-export function renderCard(accounts, baseUrl) {
+export function renderCard(accounts, _baseUrl) {
   const serviceAccounts = accounts.filter(a => a.service === 'mastodon');
 
   const renderAccounts = () => {

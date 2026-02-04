@@ -5,6 +5,22 @@ const router = Router();
 const FITBIT_API = 'https://api.fitbit.com';
 const FITBIT_AUTH = 'https://api.fitbit.com/oauth2/token';
 
+// Service metadata - exported for /api/readme and /api/skill
+export const serviceInfo = {
+  key: 'fitbit',
+  name: 'Fitbit',
+  shortDesc: 'Activity, sleep, heart rate, profile',
+  description: 'Fitbit API proxy',
+  authType: 'oauth',
+  docs: 'https://dev.fitbit.com/build/reference/web-api/',
+  examples: [
+    'GET /api/fitbit/{accountName}/1/user/-/profile.json',
+    'GET /api/fitbit/{accountName}/1/user/-/activities/date/today.json',
+    'GET /api/fitbit/{accountName}/1/user/-/sleep/date/today.json',
+    'GET /api/fitbit/{accountName}/1/user/-/body/log/weight/date/today.json'
+  ]
+};
+
 // Get a valid access token, refreshing if needed
 async function getAccessToken(accountName) {
   const creds = getAccountCredentials('fitbit', accountName);
