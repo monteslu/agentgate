@@ -12,9 +12,10 @@ function printUsage() {
   console.log(`
 agentgate - API gateway for AI agents with human-in-the-loop write approval
 
-Usage: agentgate <command> [options]
+Usage: agentgate [command] [options]
 
 Commands:
+  (default)             Start the agentgate server
   start                 Start the agentgate server
   keys list             List all API keys
   keys create <name>    Create a new API key
@@ -25,28 +26,36 @@ Options:
   -h, --help            Show this help message
 
 Examples:
-  agentgate start
+  agentgate
   agentgate start --port 8080
   agentgate keys create my-agent
   agentgate keys list
 `);
 }
 
+async function startServer(args) {
+  // Parse port from args
+  const portIdx = args.findIndex(a => a === '-p' || a === '--port');
+  if (portIdx !== -1 && args[portIdx + 1]) {
+    process.env.PORT = args[portIdx + 1];
+  }
+  
+  // Import and run the server
+  await import('./index.js');
+}
+
 async function main() {
-  if (!command || command === '-h' || command === '--help') {
+  if (command === '-h' || command === '--help') {
     printUsage();
     process.exit(0);
   }
 
-  if (command === 'start') {
-    // Parse port from args
-    const portIdx = args.findIndex(a => a === '-p' || a === '--port');
-    if (portIdx !== -1 && args[portIdx + 1]) {
-      process.env.PORT = args[portIdx + 1];
-    }
-    
-    // Import and run the server
-    await import('./index.js');
+  // Default behavior: start the server
+  if (!command || command === 'start') {
+    await startServer(args);
+  } else if (command === '-p' || command === '--port') {
+    // Handle case where user runs: agentgate -p 8080
+    await startServer([command, ...args]);
   } else if (command === 'keys') {
     const subcommand = args[0];
     const { createApiKey, listApiKeys, deleteApiKey } = await import('./lib/db.js');
