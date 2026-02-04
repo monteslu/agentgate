@@ -34,13 +34,14 @@ function formatNotification(entry) {
 
   // Include error info for failures
   if (entry.status === 'failed' && entry.results?.length) {
-    const firstResult = entry.results[0];
-    if (firstResult.error) {
-      text += `\n→ Error: ${firstResult.error}`;
-    } else if (firstResult.body?.message) {
-      text += `\n→ Error: ${firstResult.body.message}`;
-    } else if (firstResult.status) {
-      text += `\n→ Error: HTTP ${firstResult.status}`;
+    // Find the failing result (first non-ok one, or last one if all look ok)
+    const failingResult = entry.results.find(r => !r.ok) || entry.results[entry.results.length - 1];
+    if (failingResult.error) {
+      text += `\n→ Error: ${failingResult.error}`;
+    } else if (failingResult.body?.message) {
+      text += `\n→ Error: ${failingResult.body.message}`;
+    } else if (!failingResult.ok && failingResult.status) {
+      text += `\n→ Error: HTTP ${failingResult.status}`;
     }
   }
 
@@ -169,7 +170,9 @@ function formatBatchLine(entry) {
   if (entry.status === 'completed' && entry.results?.[0]?.body?.html_url) {
     line += ` - ${entry.results[0].body.html_url}`;
   } else if (entry.status === 'failed') {
-    const err = entry.results?.[0]?.error || entry.results?.[0]?.body?.message || `HTTP ${entry.results?.[0]?.status || '?'}`;
+    // Find the failing result
+    const failingResult = entry.results?.find(r => !r.ok) || entry.results?.[entry.results.length - 1];
+    const err = failingResult?.error || failingResult?.body?.message || (failingResult && !failingResult.ok ? `HTTP ${failingResult.status || '?'}` : 'Unknown error');
     line += ` - ${err.substring(0, 50)}`;
   } else if (entry.status === 'rejected') {
     line += ` - ${(entry.rejection_reason || 'rejected').substring(0, 50)}`;
