@@ -1,8 +1,41 @@
 {
   "name": "agentgate",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "type": "module",
+  "description": "API gateway for AI agents with human-in-the-loop write approval",
   "main": "src/index.js",
+  "bin": {
+    "agentgate": "src/index.js",
+    "agentgate-keys": "src/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "src/",
+    "public/"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monteslu/agentgate.git"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "api",
+    "gateway",
+    "proxy",
+    "human-in-the-loop",
+    "llm",
+    "claude",
+    "gpt"
+  ],
+  "author": "Luis Montes",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/monteslu/agentgate/issues"
+  },
+  "homepage": "https://github.com/monteslu/agentgate#readme",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
@@ -13,10 +46,6 @@
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
   },
-  "keywords": ["ai", "agent", "api", "gateway", "proxy"],
-  "author": "",
-  "license": "ISC",
-  "description": "API gateway for AI agents with human-in-the-loop write approval",
   "dependencies": {
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.0.0",
