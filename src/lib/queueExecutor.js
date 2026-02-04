@@ -316,7 +316,12 @@ export async function executeQueueEntry(entry) {
       };
 
       if (req.body && ['POST', 'PUT', 'PATCH'].includes(req.method.toUpperCase())) {
-        fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        if (req.binaryBase64) {
+          // Binary data encoded as base64 (for blob uploads)
+          fetchOptions.body = Buffer.from(req.body, 'base64');
+        } else {
+          fetchOptions.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        }
       }
 
       const response = await fetch(url, fetchOptions);

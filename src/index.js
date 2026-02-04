@@ -146,10 +146,21 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         method: 'POST',
         path: '/api/queue/{service}/{accountName}/submit',
         body: {
-          requests: '[{ method: "POST"|"PUT"|"PATCH"|"DELETE", path: "/api/path", body?: {}, headers?: {} }, ...]',
+          requests: '[{ method: "POST"|"PUT"|"PATCH"|"DELETE", path: "/api/path", body?: {}, headers?: {}, binaryBase64?: boolean }, ...]',
           comment: 'Required: Explain what you are trying to do and why'
         },
         response: '{ id: "queue_entry_id", status: "pending" }'
+      },
+      binaryUploads: {
+        description: 'For binary data uploads (images, files), set binaryBase64: true and provide base64-encoded data in body',
+        example: {
+          method: 'POST',
+          path: 'com.atproto.repo.uploadBlob',
+          binaryBase64: true,
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: '<base64 encoded image data>'
+        },
+        note: 'The executor will decode base64 to binary before sending'
       },
       checkStatus: {
         method: 'GET',
@@ -298,11 +309,26 @@ Write operations (POST/PUT/DELETE) must go through the queue:
 
 3. **Check response**: \`pending\`, \`completed\`, \`failed\`, or \`rejected\` (with reason)
 
+## Binary Uploads
+
+For binary data (images, files), set \`binaryBase64: true\` in the request:
+
+\`\`\`json
+{
+  "method": "POST",
+  "path": "com.atproto.repo.uploadBlob",
+  "binaryBase64": true,
+  "headers": { "Content-Type": "image/jpeg" },
+  "body": "<base64 encoded data>"
+}
+\`\`\`
+
 ## Important Notes
 
 - Always include a clear comment explaining your intent
 - Include markdown links to relevant resources (issues, PRs, docs)
 - Be patient - approval requires human action
+- For binary uploads, encode data as base64 and set binaryBase64: true
 
 ${writeGuidelines.length > 0 ? '## Service-Specific Guidelines\n\n' + writeGuidelines.join('\n\n') : ''}
 
