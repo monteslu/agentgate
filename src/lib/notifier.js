@@ -8,6 +8,30 @@ const DEFAULT_RETRY_ATTEMPTS = 3;
 const DEFAULT_RETRY_DELAY_MS = 5000;
 
 /**
+ * Find the most relevant result to display (usually last one with a URL, or first failure)
+ */
+function findRelevantResult(results, forError = false) {
+  if (!results?.length) return null;
+  
+  if (forError) {
+    // For errors, find the first non-ok result
+    return results.find(r => !r.ok) || results[results.length - 1];
+  }
+  
+  // For success, find the last result with a useful URL (PR, issue, etc.)
+  // Search backwards to get the most relevant one (e.g., PR URL, not branch ref)
+  for (let i = results.length - 1; i >= 0; i--) {
+    const r = results[i];
+    if (r.body?.html_url || r.body?.url) {
+      return r;
+    }
+  }
+  
+  // Fallback to last result
+  return results[results.length - 1];
+}
+
+/**
  * Format the notification text for a queue entry
  */
 function formatNotification(entry) {
@@ -18,29 +42,29 @@ function formatNotification(entry) {
   text += `\n→ ${entry.service}/${entry.account_name}`;
 
   // Include key result info (e.g., PR URL, issue URL)
-  if (entry.results?.length) {
-    const firstResult = entry.results[0];
-    if (firstResult.body) {
+  if (entry.status === 'completed' && entry.results?.length) {
+    const relevantResult = findRelevantResult(entry.results, false);
+    if (relevantResult?.body) {
       // GitHub PR/Issue
-      if (firstResult.body.html_url) {
-        text += `\n→ ${firstResult.body.html_url}`;
+      if (relevantResult.body.html_url) {
+        text += `\n→ ${relevantResult.body.html_url}`;
       }
       // Other useful fields
-      else if (firstResult.body.url) {
-        text += `\n→ ${firstResult.body.url}`;
+      else if (relevantResult.body.url) {
+        text += `\n→ ${relevantResult.body.url}`;
       }
     }
   }
 
   // Include error info for failures
   if (entry.status === 'failed' && entry.results?.length) {
-    const firstResult = entry.results[0];
-    if (firstResult.error) {
-      text += `\n→ Error: ${firstResult.error}`;
-    } else if (firstResult.body?.message) {
-      text += `\n→ Error: ${firstResult.body.message}`;
-    } else if (firstResult.status) {
-      text += `\n→ Error: HTTP ${firstResult.status}`;
+    const failingResult = findRelevantResult(entry.results, true);
+    if (failingResult.error) {
+      text += `\n→ Error: ${failingResult.error}`;
+    } else if (failingResult.body?.message) {
+      text += `\n→ Error: ${failingResult.body.message}`;
+    } else if (!failingResult.ok && failingResult.status) {
+      text += `\n→ Error: HTTP ${failingResult.status}`;
     }
   }
 
@@ -166,10 +190,14 @@ function formatBatchLine(entry) {
   let line = `${emoji} #${entry.id.substring(0, 8)} - ${entry.service}/${entry.account_name}`;
 
   // Add brief result info
-  if (entry.status === 'completed' && entry.results?.[0]?.body?.html_url) {
-    line += ` - ${entry.results[0].body.html_url}`;
+  if (entry.status === 'completed') {
+    const relevantResult = findRelevantResult(entry.results, false);
+    if (relevantResult?.body?.html_url) {
+      line += ` - ${relevantResult.body.html_url}`;
+    }
   } else if (entry.status === 'failed') {
-    const err = entry.results?.[0]?.error || entry.results?.[0]?.body?.message || `HTTP ${entry.results?.[0]?.status || '?'}`;
+    const failingResult = findRelevantResult(entry.results, true);
+    const err = failingResult?.error || failingResult?.body?.message || (failingResult && !failingResult.ok ? `HTTP ${failingResult.status || '?'}` : 'Unknown error');
     line += ` - ${err.substring(0, 50)}`;
   } else if (entry.status === 'rejected') {
     line += ` - ${(entry.rejection_reason || 'rejected').substring(0, 50)}`;
