@@ -8,6 +8,8 @@
 
 **Read requests** (GET) execute immediately. **Write requests** (POST/PUT/DELETE) are queued for human approval before execution.
 
+📖 **[Read the blog post: How to Let AI Run Your Life Without Giving It Your Keys](https://monteslu.com/blog/ai-running-your-life)**
+
 ## How It Works
 
 ```mermaid
