@@ -1,11 +1,14 @@
 import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { join } from 'path';
+import { homedir } from 'os';
+import { mkdirSync } from 'fs';
 import bcrypt from 'bcrypt';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dirname, '../../data.db');
+// Data directory: AGENTGATE_DATA_DIR env var, or ~/.agentgate/
+const dataDir = process.env.AGENTGATE_DATA_DIR || join(homedir(), '.agentgate');
+mkdirSync(dataDir, { recursive: true });
+const dbPath = join(dataDir, 'data.db');
 
 const db = new Database(dbPath);
 
