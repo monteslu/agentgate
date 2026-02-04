@@ -367,14 +367,18 @@ router.post('/queue/notify-all', async (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
   const unnotified = listUnnotifiedEntries();
 
-  const results = [];
-  for (const entry of unnotified) {
-    const result = await notifyClawdbot(entry);
-    results.push({ id: entry.id, ...result });
+  if (unnotified.length === 0) {
+    return wantsJson
+      ? res.json({ success: true, count: 0 })
+      : res.redirect('/ui/queue');
   }
 
+  // Batch into single notification
+  const { notifyClawdbotBatch } = await import('../lib/notifier.js');
+  const result = await notifyClawdbotBatch(unnotified);
+
   if (wantsJson) {
-    return res.json({ success: true, results, count: results.length });
+    return res.json({ success: result.success, error: result.error, count: unnotified.length });
   }
   res.redirect('/ui/queue');
 });
@@ -1128,6 +1132,9 @@ function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
 
           // Hide the clear button if nothing left to clear
           btn.style.display = 'none';
+
+          // Update retry notifications button
+          updateRetryAllButton();
         }
 
         btn.disabled = false;
@@ -1162,6 +1169,18 @@ function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
         }
       } catch (err) {
         alert('Error: ' + err.message);
+      }
+    }
+
+    function updateRetryAllButton() {
+      // Count remaining unnotified entries in DOM
+      const unnotified = document.querySelectorAll('.queue-entry[data-notified="0"]').length;
+      const btn = document.getElementById('retry-all-btn');
+      
+      if (unnotified === 0) {
+        if (btn) btn.remove();
+      } else if (btn) {
+        btn.textContent = 'Retry ' + unnotified + ' Notification' + (unnotified > 1 ? 's' : '');
       }
     }
 
