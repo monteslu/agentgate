@@ -124,9 +124,8 @@ router.get('/', (req, res) => {
   const hsyncConnected = isHsyncConnected();
   const pendingQueueCount = getPendingQueueCount();
   const notificationsConfig = getSetting('notifications');
-  const notificationTest = req.query.notification_test;
 
-  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, notificationTest }));
+  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig }));
 });
 
 // Register all service routes (github, bluesky, reddit, etc.)
@@ -434,7 +433,7 @@ router.delete('/keys/:id', (req, res) => {
 
 // HTML Templates
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, notificationTest }) {
+function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig }) {
   const clawdbotConfig = notificationsConfig?.clawdbot;
   return `<!DOCTYPE html>
 <html>
@@ -522,19 +521,44 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
     <details ${clawdbotConfig?.enabled ? 'open' : ''}>
       <summary>Clawdbot Notifications ${clawdbotConfig?.enabled ? '<span class="status configured">Configured</span>' : ''}</summary>
       <div style="margin-top: 16px;">
-        ${notificationTest === 'success' ? '<div class="success-message" style="margin-bottom: 16px;">✓ Test notification sent successfully!</div>' : ''}
-        ${notificationTest === 'failed' ? '<div class="error-message" style="margin-bottom: 16px;">✗ Test notification failed. Check your URL and token.</div>' : ''}
+        <div id="notification-feedback"></div>
         ${clawdbotConfig?.enabled ? `
           <p>Webhook URL: <strong>${clawdbotConfig.url}</strong></p>
           <p>Events: <code>${(clawdbotConfig.events || ['completed', 'failed']).join(', ')}</code></p>
           <div style="display: flex; gap: 8px; margin-top: 12px;">
-            <form method="POST" action="/ui/notifications/test" style="margin: 0;">
-              <button type="submit" class="btn-primary btn-sm">Send Test</button>
-            </form>
+            <button type="button" class="btn-primary btn-sm" id="test-notification-btn" onclick="testNotification()">Send Test</button>
             <form method="POST" action="/ui/notifications/delete" style="margin: 0;">
               <button type="submit" class="btn-danger btn-sm">Disable</button>
             </form>
           </div>
+          <script>
+            async function testNotification() {
+              const btn = document.getElementById('test-notification-btn');
+              const feedback = document.getElementById('notification-feedback');
+              btn.disabled = true;
+              btn.textContent = 'Sending...';
+              feedback.innerHTML = '';
+              
+              try {
+                const res = await fetch('/ui/notifications/test', {
+                  method: 'POST',
+                  headers: { 'Accept': 'application/json' }
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                  feedback.innerHTML = '<div class="success-message" style="margin-bottom: 16px;">✓ Test notification sent!</div>';
+                } else {
+                  feedback.innerHTML = '<div class="error-message" style="margin-bottom: 16px;">✗ ' + (data.error || 'Failed to send') + '</div>';
+                }
+              } catch (err) {
+                feedback.innerHTML = '<div class="error-message" style="margin-bottom: 16px;">✗ ' + err.message + '</div>';
+              }
+              
+              btn.disabled = false;
+              btn.textContent = 'Send Test';
+            }
+          </script>
         ` : `
           <p class="help">Send notifications to <a href="https://docs.clawd.bot" target="_blank">Clawdbot</a> when queue items are completed, failed, or rejected.</p>
           <form method="POST" action="/ui/notifications/setup">
