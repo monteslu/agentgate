@@ -16,6 +16,7 @@ export default [
         URL: 'readonly',
         URLSearchParams: 'readonly',
         fetch: 'readonly',
+        setTimeout: 'readonly',
         // Jest globals
         describe: 'readonly',
         it: 'readonly',
