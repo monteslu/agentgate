@@ -60,20 +60,59 @@ The server runs on port 3050 by default. Set `PORT` environment variable to chan
 3. Add service accounts (OAuth or API tokens depending on service)
 4. Create API keys for your agents via CLI
 
-## API Key Management
+## Using with Clawdbot / OpenClaw
 
-Manage API keys in the admin UI at `/ui/keys`, or via CLI:
+> ⚠️ **IMPORTANT:** Do NOT run agentgate on the same machine as your AI agent (Clawdbot, OpenClaw, etc.). If the agent has local filesystem access, it could read the database directly and bypass all security controls. Always run agentgate on a **separate, isolated machine** that agents can only reach over the network.
+
+### Configure Your Agent
+
+Add agentgate to your agent's `TOOLS.md`:
+
+```markdown
+### agentgate
+- Base URL: `https://your-agentgate-server.com`
+- Bearer token: `rms_your_key_here`
+- **URL pattern:** `/api/{service}/{accountName}/...`
+- **Reads (GET):** Execute immediately
+- **Writes (POST/PUT/DELETE):** Queue for human approval
+
+#### Write Queue
+# Submit write request
+POST /api/queue/{service}/{accountName}/submit
+  body: { requests: [{method, path, body}], comment: "why" }
+
+# Check status  
+GET /api/queue/{service}/{accountName}/status/{id}
+```
+
+Or include in your agent's system prompt:
+
+```
+You have access to agentgate at https://your-server.com
+API key: rms_your_key_here
+
+For reads: GET /api/{service}/{account}/path
+For writes: POST to /api/queue/{service}/{account}/submit with {requests, comment}
+
+Always include a clear comment explaining your intent for write operations.
+A human will review and approve before execution.
+```
+
+### Generate a Skill File
+
+agentgate can generate an [AgentSkill](https://docs.openclaw.ai/tools/skills) compatible file:
 
 ```bash
-# List all API keys
-npm run keys list
-
-# Create a new key
-npm run keys create <name>
-
-# Delete a key
-npm run keys delete <id>
+curl -H "Authorization: Bearer rms_your_key" \
+  https://your-server.com/api/skill > SKILL.md
 ```
+
+
+
+## API Key Management
+
+Create and manage API keys for your agents in the admin UI at `/ui/keys`.
+
 
 ## Usage
 
@@ -206,63 +245,9 @@ BASE_URL=https://agentgate.yourdomain.com npm start
 
 ## TODO
 
-## Using with Clawdbot / OpenClaw
-
-Add agentgate to your agent's `TOOLS.md`:
-
-```markdown
-### agentgate
-- Base URL: `https://your-agentgate-server.com`
-- Bearer token: `rms_your_key_here`
-- **URL pattern:** `/api/{service}/{accountName}/...`
-- **Reads (GET):** Execute immediately
-- **Writes (POST/PUT/DELETE):** Queue for human approval
-
-#### Write Queue
-```bash
-# Submit write request
-POST /api/queue/{service}/{accountName}/submit
-  body: { requests: [{method, path, body}], comment: "why" }
-
-# Check status
-GET /api/queue/{service}/{accountName}/status/{id}
-```
-
-#### Services
-- GitHub: `/api/github/{account}/...`
-- Bluesky: `/api/bluesky/{account}/...`
-- Google Calendar: `/api/calendar/{account}/...`
-- (see /api/readme for full list)
-```
-
-Or include in your system prompt:
-
-```
-You have access to agentgate at https://your-server.com
-API key: rms_your_key_here
-
-For reads: GET /api/{service}/{account}/path
-For writes: POST to /api/queue/{service}/{account}/submit with {requests, comment}
-
-Always include a clear comment explaining your intent for write operations.
-A human will review and approve before execution.
-```
-
-### Generate a Skill File
-
-agentgate can generate an [AgentSkill](https://docs.openclaw.ai/tools/skills) file:
-
-```bash
-curl -H "Authorization: Bearer rms_your_key" \
-  https://your-server.com/api/skill > SKILL.md
-```
-
-- [ ] Per-agent service access control - different agents can access different services/accounts
-
-- [ ] Fine-grained endpoint control per service - whitelist/blacklist individual endpoints (even for read operations)
-
 ## License
 
 ISC
+
 
 
