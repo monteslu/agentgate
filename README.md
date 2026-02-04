@@ -245,6 +245,9 @@ BASE_URL=https://agentgate.yourdomain.com npm start
 
 ## TODO
 
+- [ ] Per-agent service access control - different agents can access different services/accounts
+- [ ] Fine-grained endpoint control per service - whitelist/blacklist individual endpoints (even for read operations)
+
 ## License
 
 ISC
