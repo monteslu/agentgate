@@ -63,7 +63,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       <h1 style="margin: 0;">agentgate</h1>
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
-      <a href="/ui/keys" class="nav-btn nav-btn-default">API Keys</a>
+      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Write Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
@@ -136,4 +136,26 @@ export function copyScript() {
       });
     }
   </script>`;
+}
+
+// Simple navigation header for sub-pages (no real-time counts)
+export function simpleNavHeader() {
+  return `
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <a href="/ui" style="display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit;">
+        <img src="/public/favicon.svg" alt="agentgate" style="height: 48px;">
+        <h1 style="margin: 0;">agentgate</h1>
+      </a>
+    </div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
+      <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
+      <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
+      <div class="nav-divider"></div>
+      <form method="POST" action="/ui/logout" style="margin: 0;">
+        <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
+      </form>
+    </div>
+  </div>`;
 }
