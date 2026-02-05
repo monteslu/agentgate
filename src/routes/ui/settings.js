@@ -1,10 +1,10 @@
 // Settings routes - hsync, messaging mode, queue settings
 import { Router } from 'express';
 import {
-  getSetting, setSetting, deleteSetting,
-  getMessagingMode, setMessagingMode,
-  getSharedQueueVisibility, setSharedQueueVisibility,
-  getAgentWithdrawEnabled, setAgentWithdrawEnabled
+  setSetting, deleteSetting,
+  setMessagingMode,
+  setSharedQueueVisibility,
+  setAgentWithdrawEnabled
 } from '../../lib/db.js';
 import { connectHsync, disconnectHsync } from '../../lib/hsyncManager.js';
 import { PORT } from './shared.js';
