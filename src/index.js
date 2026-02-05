@@ -259,7 +259,17 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         'Ensure hooks.enabled=true in your gateway config',
         'Test endpoint: curl -X POST <url> -H "Authorization: Bearer <token>" -d \'{"text":"test"}\''
       ],
-      compatible: 'OpenClaw/Clawdbot /hooks/wake endpoint'
+      compatible: 'OpenClaw/Clawdbot /hooks/wake endpoint',
+      bestPractice: {
+        description: 'Treat notifications as action triggers, not just acknowledgments',
+        examples: [
+          'Queue completed (PR created) → Request code review from teammate',
+          'PR merged → Update docs, notify stakeholders, start next task',
+          'Queue rejected → Read reason, fix issue, resubmit',
+          'Queue failed → Check error, debug, resubmit',
+          'Message received → Respond if needed and act on implied tasks'
+        ]
+      }
     },
     skill: {
       description: 'Generate a SKILL.md file for OpenClaw/AgentSkills compatible systems',
