@@ -660,6 +660,62 @@ router.post('/keys/:id/webhook', (req, res) => {
   res.redirect('/ui/keys');
 });
 
+// Test webhook - admin only
+router.post('/keys/:id/test-webhook', async (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  if (!agent.webhook_url) {
+    return res.status(400).json({ error: 'No webhook URL configured for this agent' });
+  }
+
+  const payload = {
+    text: `🧪 [agentgate] Webhook test for ${agent.name} - if you see this, your webhook is working!`,
+    mode: 'now',
+    test: true
+  };
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (agent.webhook_token) {
+      headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+    }
+
+    const response = await fetch(agent.webhook_url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text().catch(() => '');
+
+    if (response.ok) {
+      return res.json({ 
+        success: true, 
+        status: response.status,
+        message: `Webhook test successful (HTTP ${response.status})`
+      });
+    } else {
+      return res.json({ 
+        success: false, 
+        status: response.status,
+        message: `Webhook returned HTTP ${response.status}`,
+        response: responseText.substring(0, 500)
+      });
+    }
+  } catch (err) {
+    return res.json({ 
+      success: false, 
+      status: 0,
+      message: `Connection failed: ${err.message}`
+    });
+  }
+});
+
 router.delete('/keys/:id', (req, res) => {
   const { id } = req.params;
   const wantsJson = req.headers.accept?.includes('application/json');
@@ -2179,6 +2235,7 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
           <span class="webhook-status webhook-none">Not set</span>
         `}
         <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
+        ${k.webhook_url ? `<button type="button" class="btn-sm test-webhook-btn" data-id="${k.id}" style="margin-left: 4px;">Test</button>` : ''}
       </td>
       <td>${localDate(k.created_at)}</td>
       <td>
@@ -2342,6 +2399,47 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
     // Attach click handlers to webhook buttons
     document.querySelectorAll('.webhook-btn').forEach(btn => {
       btn.addEventListener('click', () => showWebhookModal(btn));
+    });
+
+    // Attach click handlers to test webhook buttons
+    document.querySelectorAll('.test-webhook-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.id;
+        const originalText = btn.textContent;
+        btn.textContent = 'Testing...';
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('/ui/keys/' + id + '/test-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            btn.textContent = '✓ OK';
+            btn.style.color = '#34d399';
+          } else {
+            btn.textContent = '✗ ' + (data.status || 'Error');
+            btn.style.color = '#f87171';
+            alert('Webhook test failed: ' + data.message);
+          }
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+            btn.disabled = false;
+          }, 2000);
+        } catch (err) {
+          btn.textContent = '✗ Error';
+          btn.style.color = '#f87171';
+          alert('Error: ' + err.message);
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+            btn.disabled = false;
+          }, 2000);
+        }
+      });
     });
 
     document.getElementById('webhook-form').addEventListener('submit', async (e) => {
