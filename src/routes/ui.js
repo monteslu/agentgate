@@ -673,6 +673,7 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
@@ -1165,6 +1166,7 @@ function renderQueuePage(entries, filter, counts = 0) {
       <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
       <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
@@ -1682,6 +1684,7 @@ function renderMessagesPage(messages, filter, counts, mode) {
       <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
       <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
@@ -2017,6 +2020,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
       <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
       <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
