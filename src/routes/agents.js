@@ -255,4 +255,61 @@ router.post('/broadcast', async (req, res) => {
   return res.json({ delivered, failed, total: recipients.length });
 });
 
+// POST /api/agents/:name/test-webhook - Test an agent's webhook
+router.post('/:name/test-webhook', async (req, res) => {
+  const { name } = req.params;
+  const apiKeys = listApiKeys();
+  const agent = apiKeys.find(k => k.name.toLowerCase() === name.toLowerCase());
+
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  if (!agent.webhook_url) {
+    return res.status(400).json({ error: 'No webhook URL configured for this agent' });
+  }
+
+  const payload = {
+    text: `🧪 [agentgate] Webhook test for ${agent.name} - if you see this, your webhook is working!`,
+    mode: 'now',
+    test: true
+  };
+
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (agent.webhook_token) {
+      headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+    }
+
+    const response = await fetch(agent.webhook_url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    const responseText = await response.text().catch(() => '');
+
+    if (response.ok) {
+      return res.json({ 
+        success: true, 
+        status: response.status,
+        message: `Webhook test successful (HTTP ${response.status})`
+      });
+    } else {
+      return res.json({ 
+        success: false, 
+        status: response.status,
+        message: `Webhook returned HTTP ${response.status}`,
+        response: responseText.substring(0, 500)
+      });
+    }
+  } catch (err) {
+    return res.json({ 
+      success: false, 
+      status: 0,
+      message: `Connection failed: ${err.message}`
+    });
+  }
+});
+
 export default router;
