@@ -137,99 +137,27 @@ Compatible with OpenClaw's `/hooks/wake` endpoint. See [OpenClaw webhook docs](h
 
 ## Inter-Agent Messaging
 
-Agents can communicate with each other through agentgate. This enables coordination between multiple AI agents while maintaining human oversight.
+Agents can communicate with each other through agentgate, with optional human oversight.
 
-### Messaging Modes
+📖 **[See full documentation](docs/inter-agent-messaging.md)**
 
-Configure in Admin UI under **Advanced > Agent Messaging**:
+**Quick overview:**
+- Three modes: **Off**, **Supervised** (human approval), **Open** (immediate delivery)
+- Configure agent webhooks in Admin UI under **API Keys > Configure**
+- Endpoints: `/api/agents/messageable`, `/api/agents/message`, `/api/agents/messages`, `/api/agents/status`
 
-| Mode | Description |
-|------|-------------|
-| **Off** | Messaging disabled - agents cannot communicate |
-| **Supervised** | Messages require human approval before delivery |
-| **Open** | Messages delivered immediately without approval |
+## Agent Registry
 
-### Configuring Agent Webhooks
+Manage your agents in the admin UI at `/ui/keys`. Each agent has:
 
-For agents to receive messages (and queue notifications), configure their webhook in the Admin UI:
+- **Name** - Unique identifier (case-insensitive)
+- **API Key** - Bearer token for agent → agentgate authentication (shown once at creation)
+- **Webhook URL** (optional) - Endpoint for agentgate → agent notifications
+- **Webhook Token** (optional) - Bearer token for webhook authentication
 
-1. Go to **API Keys** page
-2. Click **Configure** next to the agent
-3. Enter:
-   - **Webhook URL** - Endpoint to receive notifications (e.g., `https://your-gateway.com/hooks/agentgate`)
-   - **Authorization Token** - Bearer token for authentication
-
-### Agent API Endpoints
-
-```bash
-# Discover messageable agents
-GET /api/agents/messageable
-# Response: { mode, agents: [{ name }, ...] }
-
-# Send a message
-POST /api/agents/message
-  body: { to: "recipient_name", message: "Hello!" }
-# Response: { id, status: "pending"|"delivered", message }
-
-# Get received messages
-GET /api/agents/messages
-GET /api/agents/messages?unread=true
-# Response: { mode, messages: [{ id, from, message, created_at, read }, ...] }
-
-# Mark message as read
-POST /api/agents/messages/:id/read
-
-# Check messaging status
-GET /api/agents/status
-# Response: { mode, enabled, unread_count }
-```
-
-### Webhook Payload
-
-When a message is delivered, agentgate POSTs to the recipient's webhook:
-
-```json
-{
-  "type": "agent_message",
-  "message": {
-    "id": "abc123",
-    "from": "SenderAgent",
-    "message": "Hello from another agent!",
-    "created_at": "2024-01-15T10:30:00Z",
-    "delivered_at": "2024-01-15T10:30:01Z"
-  },
-  "text": "[agentgate] Message from SenderAgent:\nHello from another agent!",
-  "mode": "now"
-}
-```
-
-If a message is rejected (in supervised mode), the sender is notified:
-
-```json
-{
-  "type": "message_rejected",
-  "message": {
-    "id": "abc123",
-    "to": "RecipientAgent",
-    "message": "Original message...",
-    "rejection_reason": "Not appropriate",
-    "created_at": "...",
-    "rejected_at": "..."
-  },
-  "text": "[agentgate] Message to RecipientAgent was rejected\nReason: Not appropriate",
-  "mode": "now"
-}
-```
-
-### Notes
-
-- Agent names are **case-insensitive** ("WorkBot" and "workbot" are the same)
-- Agents **cannot message themselves**
-- Maximum message length is **10KB**
-
-## API Key Management
-
-Create and manage API keys for your agents in the admin UI at `/ui/keys`.
+When an agent's webhook is configured, agentgate will POST notifications for:
+- Queue item status changes (approved/rejected/completed/failed)
+- Inter-agent message delivery or rejection
 
 
 ## Usage
