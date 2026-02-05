@@ -1,0 +1,178 @@
+/* Mobile Responsive Styles for agentgate */
+/* Issue #39 */
+
+/* Tablet breakpoint */
+@media (max-width: 768px) {
+  body {
+    padding: 20px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  .card {
+    padding: 20px;
+    margin: 16px 0;
+  }
+
+  /* Nav buttons wrap */
+  [style*="display: flex"][style*="gap: 12px"] {
+    flex-wrap: wrap;
+  }
+
+  .nav-btn {
+    padding: 12px 16px;
+    font-size: 14px;
+  }
+
+  /* Tables scroll horizontally */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Full width inputs */
+  input[type="text"],
+  input[type="password"],
+  input[type="url"],
+  textarea {
+    width: 100% !important;
+    min-width: 0;
+  }
+
+  /* Stack filter bar */
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .filter-bar .clear-section {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+}
+
+/* Mobile breakpoint */
+@media (max-width: 480px) {
+  body {
+    padding: 12px;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+  }
+
+  h2 {
+    font-size: 1.1rem;
+  }
+
+  .card {
+    padding: 16px;
+    margin: 12px 0;
+    border-radius: 12px;
+  }
+
+  /* Header stacks vertically */
+  [style*="display: flex"][style*="justify-content: space-between"] {
+    flex-direction: column;
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  /* Nav buttons full width */
+  .nav-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Touch-friendly buttons */
+  button,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  input[type="submit"] {
+    min-height: 44px;
+    padding: 12px 20px;
+  }
+
+  .btn-sm {
+    min-height: 40px;
+    padding: 10px 16px;
+  }
+
+  /* Form actions stack */
+  .queue-actions,
+  .message-actions {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .queue-actions input,
+  .message-actions input {
+    width: 100% !important;
+  }
+
+  .queue-actions button,
+  .message-actions button {
+    width: 100%;
+  }
+
+  /* Copyable text wraps */
+  .copyable {
+    flex-wrap: wrap;
+    word-break: break-all;
+  }
+
+  pre {
+    padding: 16px;
+    font-size: 12px;
+  }
+
+  code {
+    font-size: 12px;
+    word-break: break-all;
+  }
+
+  /* Hide nav divider on mobile */
+  .nav-divider {
+    display: none;
+  }
+
+  /* Badge position adjustment */
+  .badge {
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  /* Account items stack */
+  .account-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  /* Login card */
+  .login-card {
+    margin: 40px auto;
+  }
+}
+
+/* Prevent horizontal scroll */
+html, body {
+  overflow-x: hidden;
+}
+
+/* Safe area padding for notched devices */
+@media (max-width: 480px) {
+  body {
+    padding-left: env(safe-area-inset-left, 12px);
+    padding-right: env(safe-area-inset-right, 12px);
+    padding-bottom: env(safe-area-inset-bottom, 12px);
+  }
+}
