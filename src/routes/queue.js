@@ -236,9 +236,13 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
       });
     }
 
-    // Update status to withdrawn
+    // Get optional reason from request body
+    const { reason } = req.body || {};
+
+    // Update status to withdrawn (with optional reason)
     updateQueueStatus(id, 'withdrawn', { 
-      reviewed_at: new Date().toISOString().replace('T', ' ').replace('Z', '')
+      reviewed_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
+      rejection_reason: reason || null
     });
 
     // Emit real-time update
@@ -247,7 +251,8 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
     res.json({
       success: true,
       message: 'Queue entry withdrawn',
-      id: id
+      id: id,
+      reason: reason || null
     });
 
   } catch (error) {
