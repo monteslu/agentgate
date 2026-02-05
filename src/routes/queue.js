@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter } from '../lib/db.js';
+import { emitCountUpdate } from '../lib/socketManager.js';
 
 const router = Router();
 
@@ -68,6 +69,9 @@ router.post('/:service/:accountName/submit', (req, res) => {
 
     // Create the queue entry
     const entry = createQueueEntry(service, accountName, requests, comment, submittedBy);
+
+    // Emit real-time update
+    emitCountUpdate();
 
     res.status(201).json({
       id: entry.id,
