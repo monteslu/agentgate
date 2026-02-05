@@ -2,6 +2,15 @@
 
 All notable changes to agentgate will be documented in this file.
 
+## [0.4.1] - 2026-02-05
+
+### Added
+- **Settings Gear** - Quick access to settings from nav bar on all pages (#36)
+- **Nav Badge Support** - Real-time queue/message counts in nav on all sub-pages (#37)
+
+### Fixed
+- Sub-pages (Agents, Queue, Messages) now have consistent nav with main dashboard
+
 ## [0.4.0] - 2026-02-05
 
 ### Added
