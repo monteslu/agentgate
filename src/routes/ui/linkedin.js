@@ -9,7 +9,7 @@ export function registerRoutes(router, baseUrl) {
     setAccountCredentials('linkedin', accountName, { clientId, clientSecret });
 
     const redirectUri = `${baseUrl}/ui/linkedin/callback`;
-    const scope = 'openid profile email r_liteprofile w_member_social';
+    const scope = 'profile email w_member_social';
     const state = `agentgate_linkedin_${accountName}`;
 
     const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
