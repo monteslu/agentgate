@@ -219,10 +219,18 @@ export function getAccountCredentials(service, name) {
 }
 
 export function listAccounts(service) {
+  let rows;
   if (service) {
-    return db.prepare('SELECT id, service, name, created_at, updated_at FROM service_accounts WHERE service = ?').all(service);
+    rows = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts WHERE service = ?').all(service);
+  } else {
+    rows = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts ORDER BY service, name').all();
   }
-  return db.prepare('SELECT id, service, name, created_at, updated_at FROM service_accounts ORDER BY service, name').all();
+  // Parse credentials JSON into data property
+  return rows.map(row => ({
+    ...row,
+    data: row.credentials ? JSON.parse(row.credentials) : null,
+    credentials: undefined // Remove raw JSON string
+  }));
 }
 
 export function deleteAccount(service, name) {
