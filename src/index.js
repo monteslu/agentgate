@@ -276,13 +276,24 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
             method: 'GET',
             path: '/api/agents/status',
             response: '{ mode, enabled, unread_count }'
+          },
+          discoverAgents: {
+            method: 'GET',
+            path: '/api/agents/messageable',
+            description: 'Discover which agents you can message',
+            response: '{ mode, agents: [{ name }, ...] }'
           }
         },
         modes: {
           off: 'Messaging disabled - agents cannot communicate',
           supervised: 'Messages require human approval before delivery',
           open: 'Messages delivered immediately without approval'
-        }
+        },
+        notes: [
+          'Agent names are case-insensitive (e.g., "WorkBot" and "workbot" are the same)',
+          'Agents cannot message themselves',
+          'Maximum message length is 10KB'
+        ]
       };
     })()
   });

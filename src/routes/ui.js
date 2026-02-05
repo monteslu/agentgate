@@ -1832,7 +1832,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
         ` : `
           <span class="webhook-status webhook-none">Not set</span>
         `}
-        <button type="button" class="btn-sm" onclick="showWebhookModal('${k.id}', '${escapeHtml(k.name)}', '${escapeHtml(k.webhook_url || '')}', '${escapeHtml(k.webhook_token || '')}')">Configure</button>
+        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
       <td>
@@ -1959,17 +1959,22 @@ function renderKeysPage(keys, error = null, newKey = null) {
       });
     }
 
-    function showWebhookModal(id, name, url, token) {
-      document.getElementById('webhook-agent-id').value = id;
-      document.getElementById('modal-agent-name').textContent = name;
-      document.getElementById('webhook-url').value = url;
-      document.getElementById('webhook-token').value = token;
+    function showWebhookModal(btn) {
+      document.getElementById('webhook-agent-id').value = btn.dataset.id;
+      document.getElementById('modal-agent-name').textContent = btn.dataset.name;
+      document.getElementById('webhook-url').value = btn.dataset.url;
+      document.getElementById('webhook-token').value = btn.dataset.token;
       document.getElementById('webhook-modal').classList.add('active');
     }
 
     function closeWebhookModal() {
       document.getElementById('webhook-modal').classList.remove('active');
     }
+
+    // Attach click handlers to webhook buttons
+    document.querySelectorAll('.webhook-btn').forEach(btn => {
+      btn.addEventListener('click', () => showWebhookModal(btn));
+    });
 
     document.getElementById('webhook-form').addEventListener('submit', async (e) => {
       e.preventDefault();

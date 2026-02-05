@@ -2,12 +2,17 @@ import { Router } from 'express';
 import {
   getMessagingMode,
   createAgentMessage,
+  getAgentMessage,
   getMessagesForAgent,
   markMessageRead,
-  listApiKeys
+  listApiKeys,
+  getApiKeyByName
 } from '../lib/db.js';
+import { notifyAgentMessage } from '../lib/agentNotifier.js';
 
 const router = Router();
+
+const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 
 // POST /api/agents/message - Send a message to another agent
 router.post('/message', async (req, res) => {
@@ -22,6 +27,15 @@ router.post('/message', async (req, res) => {
     return res.status(400).json({ error: 'Missing "message" field' });
   }
 
+  // Check message length
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({
+      error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`,
+      length: message.length,
+      max: MAX_MESSAGE_LENGTH
+    });
+  }
+
   const mode = getMessagingMode();
 
   if (mode === 'off') {
@@ -31,9 +45,8 @@ router.post('/message', async (req, res) => {
     });
   }
 
-  // Validate recipient exists (case-insensitive)
-  const apiKeys = listApiKeys();
-  const recipient = apiKeys.find(k => k.name.toLowerCase() === to.toLowerCase());
+  // Validate recipient exists (case-insensitive lookup)
+  const recipient = getApiKeyByName(to);
   if (!recipient) {
     return res.status(404).json({ error: `Agent "${to}" not found` });
   }
@@ -57,7 +70,10 @@ router.post('/message', async (req, res) => {
         message: 'Message queued for human approval'
       });
     } else {
-      // open mode
+      // open mode - notify recipient immediately
+      const fullMessage = getAgentMessage(result.id);
+      notifyAgentMessage(fullMessage);
+
       return res.json({
         id: result.id,
         status: 'delivered',

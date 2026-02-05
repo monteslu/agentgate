@@ -60,6 +60,9 @@ db.exec(`
     delivered_at TEXT,
     read_at TEXT
   );
+
+  CREATE INDEX IF NOT EXISTS idx_agent_messages_recipient
+  ON agent_messages(to_agent, status);
 `);
 
 // Migrate write_queue table to add notification columns
