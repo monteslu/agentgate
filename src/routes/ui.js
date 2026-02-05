@@ -11,7 +11,7 @@ import {
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
 import { notifyClawdbot, retryNotification } from '../lib/notifier.js';
-import { notifyAgentMessage, notifyMessageRejected } from '../lib/agentNotifier.js';
+import { notifyAgentMessage, notifyMessageRejected, notifyAgentQueueStatus } from '../lib/agentNotifier.js';
 import { registerAllRoutes, renderAllCards } from './ui/index.js';
 
 const router = Router();
@@ -412,8 +412,11 @@ router.post('/queue/:id/reject', async (req, res) => {
 
   updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided' });
 
-  // Send notification to Clawdbot
+  // Send notification to submitting agent and global Clawdbot webhook
   const updated = getQueueEntry(id);
+  notifyAgentQueueStatus(updated).catch(err => {
+    console.error('[agentNotifier] Failed to notify agent:', err.message);
+  });
   notifyClawdbot(updated).catch(err => {
     console.error('[notifier] Failed to notify Clawdbot:', err.message);
   });
