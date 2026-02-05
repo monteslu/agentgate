@@ -186,4 +186,73 @@ router.get('/messageable', async (req, res) => {
   });
 });
 
+
+// POST /api/agents/broadcast - Broadcast a message to all agents
+router.post('/broadcast', async (req, res) => {
+  const { message } = req.body;
+  const fromAgent = req.apiKeyName || 'system';
+
+  if (!message) {
+    return res.status(400).json({ error: 'Missing "message" field' });
+  }
+
+  if (message.length > MAX_MESSAGE_LENGTH) {
+    return res.status(400).json({
+      error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`
+    });
+  }
+
+  const mode = getMessagingMode();
+  if (mode === 'off') {
+    return res.status(403).json({ error: 'Agent messaging is disabled' });
+  }
+
+  // Get all agents with webhooks (excluding sender)
+  const apiKeys = listApiKeys();
+  const recipients = apiKeys.filter(k => 
+    k.webhook_url && k.name.toLowerCase() !== fromAgent.toLowerCase()
+  );
+
+  if (recipients.length === 0) {
+    return res.json({ delivered: [], failed: [], total: 0 });
+  }
+
+  const delivered = [];
+  const failed = [];
+
+  await Promise.all(recipients.map(async (agent) => {
+    const payload = {
+      type: 'broadcast',
+      from: fromAgent,
+      message: message,
+      timestamp: new Date().toISOString(),
+      text: `📢 [agentgate] Broadcast from ${fromAgent}:\n${message.substring(0, 500)}`,
+      mode: 'now'
+    };
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (agent.webhook_token) {
+        headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+      }
+
+      const response = await fetch(agent.webhook_url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        delivered.push(agent.name);
+      } else {
+        failed.push({ name: agent.name, error: `HTTP ${response.status}` });
+      }
+    } catch (err) {
+      failed.push({ name: agent.name, error: err.message });
+    }
+  }));
+
+  return res.json({ delivered, failed, total: recipients.length });
+});
+
 export default router;
