@@ -5,7 +5,8 @@ import {
   listQueueEntries, getQueueEntry, updateQueueStatus, clearQueueByStatus, deleteQueueEntry, getPendingQueueCount, getQueueCounts,
   listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById,
   getMessagingMode, setMessagingMode, listPendingMessages, listAgentMessages,
-  approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage
+  approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage,
+  getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setAgentWithdrawEnabled
 } from '../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
@@ -127,8 +128,10 @@ router.get('/', (req, res) => {
   const pendingQueueCount = getPendingQueueCount();
   const messagingMode = getMessagingMode();
   const pendingMessagesCount = listPendingMessages().length;
+  const sharedQueueVisibility = getSharedQueueVisibility();
+  const agentWithdrawEnabled = getAgentWithdrawEnabled();
 
-  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }));
+  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount, sharedQueueVisibility, agentWithdrawEnabled }));
 });
 
 // Register all service routes (github, bluesky, reddit, etc.)
@@ -168,6 +171,19 @@ router.post('/messaging/mode', (req, res) => {
   } catch (err) {
     res.status(400).send(err.message);
   }
+});
+
+// Queue Settings
+router.post('/queue/settings/shared-visibility', (req, res) => {
+  const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
+  setSharedQueueVisibility(enabled);
+  res.redirect('/ui');
+});
+
+router.post('/queue/settings/agent-withdraw', (req, res) => {
+  const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
+  setAgentWithdrawEnabled(enabled);
+  res.redirect('/ui');
 });
 
 // Agent Messages Queue
@@ -583,7 +599,7 @@ router.delete('/keys/:id', (req, res) => {
 
 // HTML Templates
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }) {
+function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount, sharedQueueVisibility, agentWithdrawEnabled }) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -738,6 +754,38 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
   </div>
 
   <div class="card">
+    <details ${sharedQueueVisibility || agentWithdrawEnabled ? 'open' : ''}>
+      <summary>Queue Settings ${sharedQueueVisibility || agentWithdrawEnabled ? '<span class="status configured">Configured</span>' : ''}</summary>
+      <div style="margin-top: 16px;">
+        <p class="help">Configure how agents interact with the write queue.</p>
+        
+        <div style="margin-bottom: 16px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <strong style="color: #f3f4f6;">Shared Queue Visibility</strong>
+              <p class="help" style="margin: 4px 0 0 0;">When enabled, agents can see ALL queue items, not just their own.</p>
+            </div>
+            <form method="POST" action="/ui/queue/settings/shared-visibility" style="margin: 0;">
+              <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}">
+              <button type="submit" class="btn-sm ${sharedQueueVisibility ? 'btn-danger' : 'btn-primary'}">${sharedQueueVisibility ? 'Disable' : 'Enable'}</button>
+            </form>
+          </div>
+        </div>
+
+        <div style="padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <strong style="color: #f3f4f6;">Agent Withdraw</strong>
+              <p class="help" style="margin: 4px 0 0 0;">Allow agents to withdraw their own pending queue submissions.</p>
+            </div>
+            <form method="POST" action="/ui/queue/settings/agent-withdraw" style="margin: 0;">
+              <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}">
+              <button type="submit" class="btn-sm ${agentWithdrawEnabled ? 'btn-danger' : 'btn-primary'}">${agentWithdrawEnabled ? 'Disable' : 'Enable'}</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </details>
   </div>
 </body>
 </html>`;
