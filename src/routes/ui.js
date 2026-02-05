@@ -926,9 +926,10 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
     }
 
     if (entry.rejection_reason) {
+      const reasonLabel = entry.status === 'withdrawn' ? 'Withdraw reason' : 'Rejection reason';
       resultSection = `
         <div class="rejection-reason">
-          <strong>Rejection reason:</strong> ${escapeHtml(entry.rejection_reason)}
+          <strong>${reasonLabel}:</strong> ${escapeHtml(entry.rejection_reason)}
         </div>
       `;
     }
@@ -1271,11 +1272,12 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
         }
       }
 
-      // Add rejection reason if rejected
-      if (entry.rejection_reason && entry.status === 'rejected') {
+      // Add rejection/withdraw reason if present
+      if (entry.rejection_reason && (entry.status === 'rejected' || entry.status === 'withdrawn')) {
         const existing = el.querySelector('.rejection-reason');
         if (!existing) {
-          const reasonHtml = '<div class="rejection-reason"><strong>Rejection reason:</strong> ' + escapeHtml(entry.rejection_reason) + '</div>';
+          const label = entry.status === 'withdrawn' ? 'Withdraw reason' : 'Rejection reason';
+          const reasonHtml = '<div class="rejection-reason"><strong>' + label + ':</strong> ' + escapeHtml(entry.rejection_reason) + '</div>';
           el.insertAdjacentHTML('beforeend', reasonHtml);
         }
       }
