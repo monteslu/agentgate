@@ -1,11 +1,11 @@
-// API Keys routes
+// Agents routes
 import { Router } from 'express';
 import { listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById } from '../../lib/db.js';
-import { escapeHtml, formatDate } from './shared.js';
+import { escapeHtml, formatDate, simpleNavHeader } from './shared.js';
 
 const router = Router();
 
-// API Keys Management
+// Agents Management
 router.get('/', (req, res) => {
   const keys = listApiKeys();
   res.send(renderKeysPage(keys));
@@ -101,7 +101,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>agentgate - API Keys</title>
+  <title>agentgate - Agents</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
   <style>
@@ -133,9 +133,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    <h1>API Keys</h1>
-    <a href="/ui" class="back-link">&larr; Back to Dashboard</a>
+  <div>
+    ${simpleNavHeader()}
   </div>
   <p>Manage API keys for your agents. Keys are hashed and can only be viewed once at creation.</p>
 
