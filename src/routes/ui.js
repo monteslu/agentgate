@@ -2250,8 +2250,8 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
   <title>agentgate - Agents</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
-  <style>
   <script src="/socket.io/socket.io.js"></script>
+  <style>
     .keys-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
     .keys-table th, .keys-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }
     .keys-table th { font-weight: 600; color: #9ca3af; font-size: 14px; }
