@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled } from '../lib/db.js';
 
 const router = Router();
 
@@ -196,6 +196,14 @@ router.get('/:service/:accountName/status/:id', (req, res) => {
 // DELETE /api/queue/:service/:accountName/status/:id
 router.delete('/:service/:accountName/status/:id', (req, res) => {
   try {
+    // Check if withdraw is enabled
+    if (!getAgentWithdrawEnabled()) {
+      return res.status(403).json({
+        error: 'Disabled',
+        message: 'Agent withdraw is not enabled. Ask admin to enable agent_withdraw_enabled setting.'
+      });
+    }
+
     const { id } = req.params;
     const agentName = req.agentName; // Set by auth middleware
 
