@@ -303,6 +303,33 @@ router.post('/messages/clear', (req, res) => {
   res.redirect('/ui/messages');
 });
 
+
+
+// Export messages as JSON or CSV
+router.get('/messages/export', (req, res) => {
+  const format = req.query.format || 'json';
+  const messages = listAgentMessages();
+  
+  if (format === 'csv') {
+    const headers = ['id', 'from_agent', 'to_agent', 'message', 'status', 'rejection_reason', 'created_at', 'delivered_at'];
+    const csvRows = [headers.join(',')];
+    for (const msg of messages) {
+      const row = headers.map(h => {
+        const val = msg[h] ?? '';
+        const str = String(val).replace(/"/g, '""');
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+      });
+      csvRows.push(row.join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="messages-export.csv"');
+    return res.send(csvRows.join('\n'));
+  }
+  
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="messages-export.json"');
+  res.json(messages);
+});
 // Broadcast message to all agents
 router.post('/broadcast', async (req, res) => {
   const { message } = req.body;
@@ -502,6 +529,33 @@ router.post('/queue/clear', (req, res) => {
   res.redirect('/ui/queue');
 });
 
+
+
+// Export queue items as JSON or CSV  
+router.get('/queue/export', (req, res) => {
+  const format = req.query.format || 'json';
+  const entries = listQueueEntries();
+  
+  if (format === 'csv') {
+    const headers = ['id', 'service', 'account_name', 'status', 'comment', 'submitted_by', 'rejection_reason', 'submitted_at', 'reviewed_at', 'completed_at'];
+    const csvRows = [headers.join(',')];
+    for (const entry of entries) {
+      const row = headers.map(h => {
+        const val = entry[h] ?? '';
+        const str = String(val).replace(/"/g, '""');
+        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+      });
+      csvRows.push(row.join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="queue-export.csv"');
+    return res.send(csvRows.join('\n'));
+  }
+  
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="queue-export.json"');
+  res.json(entries);
+});
 router.delete('/queue/:id', (req, res) => {
   const { id } = req.params;
   const wantsJson = req.headers.accept?.includes('application/json');
@@ -1084,6 +1138,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       border-color: rgba(239, 68, 68, 0.4);
     }
     .clear-section { margin-left: auto; display: flex; gap: 10px; }
+    .export-section { display: flex; gap: 10px; }
     .entry-header {
       display: flex;
       align-items: center;
@@ -1213,6 +1268,10 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+    </div>
+    <div class="export-section">
+      <a href="/ui/queue/export?format=json" class="btn-sm btn-secondary">Export JSON</a>
+      <a href="/ui/queue/export?format=csv" class="btn-sm btn-secondary">Export CSV</a>
     </div>
   </div>
 
@@ -1794,6 +1853,10 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
       ${filter === 'delivered' && counts.delivered > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'delivered\')">Clear Delivered</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+    </div>
+    <div class="export-section">
+      <a href="/ui/messages/export?format=json" class="btn-sm btn-secondary">Export JSON</a>
+      <a href="/ui/messages/export?format=csv" class="btn-sm btn-secondary">Export CSV</a>
     </div>
   </div>
 
