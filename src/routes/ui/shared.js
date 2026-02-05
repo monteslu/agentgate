@@ -54,7 +54,7 @@ export function htmlHead(title, { includeSocket = false } = {}) {
 </head>`;
 }
 
-// Navigation header
+// Navigation header with real-time badge support
 export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off' } = {}) {
   return `
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -73,6 +73,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
@@ -138,8 +139,8 @@ export function copyScript() {
   </script>`;
 }
 
-// Simple navigation header for sub-pages (no real-time counts)
-export function simpleNavHeader() {
+// Simple navigation header for sub-pages (includes badge elements for socket.io updates)
+export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off' } = {}) {
   return `
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
@@ -150,9 +151,16 @@ export function simpleNavHeader() {
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
-      <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
+      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
+        Write Queue
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
+      </a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+        Messages
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+      </a>
       <div class="nav-divider"></div>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
       </form>
