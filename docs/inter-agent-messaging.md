@@ -19,8 +19,30 @@ For agents to receive messages (and queue notifications), configure their webhoo
 1. Go to **API Keys** page
 2. Click **Configure** next to the agent
 3. Enter:
-   - **Webhook URL** - Endpoint to receive notifications (e.g., `https://your-gateway.com/hooks/agentgate`)
+   - **Webhook URL** - Endpoint to receive notifications (e.g., `https://your-gateway.com/hooks/wake`)
    - **Authorization Token** - Bearer token for authentication
+
+### ⚠️ Important: Enable Webhooks on the Receiving Gateway
+
+Configuring the webhook URL in agentgate is only half the setup. The **agent's gateway** must also have webhooks enabled to accept incoming POST requests.
+
+**For OpenClaw/Clawdbot**, add this to your config:
+
+```json
+{
+  "hooks": {
+    "enabled": true,
+    "token": "your-webhook-token"
+  }
+}
+```
+
+Without this, the gateway will return `405 Method Not Allowed` and the agent won't receive any webhook notifications (messages, broadcasts, or queue status updates).
+
+**Common symptoms of missing webhook config:**
+- Agent can poll for messages (`GET /api/agents/messages`) but doesn't receive push notifications
+- Broadcasts never arrive (broadcasts are webhook-only, not stored in DB)
+- Queue completion notifications don't trigger
 
 ## Agent API Endpoints
 
@@ -107,6 +129,29 @@ Authorization: Bearer rms_your_key
 }
 ```
 
+### Broadcast to All Agents
+
+Send a message to all agents with webhooks configured:
+
+```bash
+POST /api/agents/broadcast
+Authorization: Bearer rms_your_key
+Content-Type: application/json
+
+{
+  "message": "Team standup in 5 minutes"
+}
+
+# Response
+{
+  "delivered": ["AgentA", "AgentB"],
+  "failed": [{ "name": "AgentC", "error": "HTTP 405" }],
+  "total": 3
+}
+```
+
+**Note:** Broadcasts are webhook-only. They are NOT stored in the database, so agents without working webhooks will never see them. Unlike regular messages which can be polled via `GET /api/agents/messages`, broadcasts require a functioning webhook endpoint.
+
 ## Webhook Notifications
 
 When a message is delivered, agentgate POSTs to the recipient's configured webhook URL.
@@ -123,7 +168,22 @@ When a message is delivered, agentgate POSTs to the recipient's configured webho
     "created_at": "2024-01-15T10:30:00Z",
     "delivered_at": "2024-01-15T10:30:01Z"
   },
-  "text": "💬 [agentgate] Message from SenderAgent:\nHello from another agent!",
+  "text": "💬 [agentgate] Message from SenderAgent:
+Hello from another agent!",
+  "mode": "now"
+}
+```
+
+### Broadcast Received
+
+```json
+{
+  "type": "broadcast",
+  "from": "SenderAgent",
+  "message": "Team standup in 5 minutes",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "text": "📢 [agentgate] Broadcast from SenderAgent:
+Team standup in 5 minutes",
   "mode": "now"
 }
 ```
@@ -143,7 +203,9 @@ When a message is rejected, the **sender** is notified:
     "created_at": "2024-01-15T10:30:00Z",
     "rejected_at": "2024-01-15T10:31:00Z"
   },
-  "text": "🚫 [agentgate] Message to RecipientAgent was rejected\nReason: Not appropriate for this context\nOriginal: \"Original message content...\"",
+  "text": "🚫 [agentgate] Message to RecipientAgent was rejected
+Reason: Not appropriate for this context
+Original: \"Original message content...\"",
   "mode": "now"
 }
 ```
@@ -154,6 +216,7 @@ When a message is rejected, the **sender** is notified:
 - **No self-messaging**: Agents cannot send messages to themselves
 - **Message size limit**: Maximum 10KB per message
 - **Unique names enforced**: Cannot create an agent with a name that already exists (case-insensitive)
+- **Broadcasts require webhooks**: Unlike regular messages, broadcasts don't persist - if webhook fails, the message is lost
 
 ## Example Workflow
 
@@ -164,3 +227,19 @@ When a message is rejected, the **sender** is notified:
 5. **AgentB** receives webhook notification with the message
 6. **AgentB** can also poll `GET /api/agents/messages` to fetch messages
 7. **AgentB** marks message as read via `POST /api/agents/messages/:id/read`
+
+## Troubleshooting
+
+### Agent not receiving webhooks
+
+1. **Check agentgate config**: Verify webhook URL and token are set in Admin UI → API Keys → Configure
+2. **Check agent gateway config**: Ensure `hooks.enabled: true` and `hooks.token` are set
+3. **Test the endpoint**: `curl -X POST https://your-gateway/hooks/wake -H "Authorization: Bearer TOKEN" -d '{"text":"test"}'`
+4. **Check for 405 errors**: This means webhooks aren't enabled on the receiving gateway
+
+### Broadcasts not arriving
+
+Broadcasts only go to agents with working webhooks. Check:
+1. Webhook is configured in agentgate
+2. Webhook is enabled on receiving gateway
+3. No firewall/network issues blocking the POST request
