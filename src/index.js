@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { validateApiKey, getAccountsByService, getCookieSecret, getSetting, getMessagingMode } from './lib/db.js';
+import { validateApiKey, getAccountsByService, getCookieSecret, getMessagingMode } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { initSocket } from './lib/socketManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
