@@ -7,7 +7,7 @@ import {
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate } from './shared.js';
+import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader } from './shared.js';
 
 const router = Router();
 
@@ -283,10 +283,8 @@ function renderQueuePage(entries, filter, counts = {}) {
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    <h1>Write Queue</h1>
-    <a href="/ui" class="back-link">&larr; Back to Dashboard</a>
-  </div>
+  ${simpleNavHeader()}
+  <h2 style="margin-top: 0;">Write Queue</h2>
   <p>Review and approve write requests from agents.</p>
 
   <div class="filter-bar" id="filter-bar">

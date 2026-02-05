@@ -663,7 +663,7 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
       <h1 style="margin: 0;">agentgate</h1>
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
-      <a href="/ui/keys" class="nav-btn nav-btn-default">API Keys</a>
+      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Write Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
@@ -1945,7 +1945,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>agentgate - API Keys</title>
+  <title>agentgate - Agents</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
   <style>
@@ -1978,7 +1978,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
 </head>
 <body>
   <div style="display: flex; justify-content: space-between; align-items: center;">
-    <h1>API Keys</h1>
+    <h1>Agents</h1>
     <a href="/ui" class="back-link">&larr; Back to Dashboard</a>
   </div>
   <p>Manage API keys for your agents. Keys are hashed and can only be viewed once at creation.</p>
