@@ -135,9 +135,29 @@ agentgate can notify your agent when queue items are completed, failed, or rejec
 
 Compatible with OpenClaw's `/hooks/wake` endpoint. See [OpenClaw webhook docs](https://docs.openclaw.ai/automation/webhook).
 
-## API Key Management
+## Inter-Agent Messaging
 
-Create and manage API keys for your agents in the admin UI at `/ui/keys`.
+Agents can communicate with each other through agentgate, with optional human oversight.
+
+📖 **[See full documentation](docs/inter-agent-messaging.md)**
+
+**Quick overview:**
+- Three modes: **Off**, **Supervised** (human approval), **Open** (immediate delivery)
+- Configure agent webhooks in Admin UI under **API Keys > Configure**
+- Endpoints: `/api/agents/messageable`, `/api/agents/message`, `/api/agents/messages`, `/api/agents/status`
+
+## Agent Registry
+
+Manage your agents in the admin UI at `/ui/keys`. Each agent has:
+
+- **Name** - Unique identifier (case-insensitive)
+- **API Key** - Bearer token for agent → agentgate authentication (shown once at creation)
+- **Webhook URL** (optional) - Endpoint for agentgate → agent notifications
+- **Webhook Token** (optional) - Bearer token for webhook authentication
+
+When an agent's webhook is configured, agentgate will POST notifications for:
+- Queue item status changes (approved/rejected/completed/failed)
+- Inter-agent message delivery or rejection
 
 
 ## Usage

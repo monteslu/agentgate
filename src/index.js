@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { validateApiKey, getAccountsByService, getCookieSecret, getSetting } from './lib/db.js';
+import { validateApiKey, getAccountsByService, getCookieSecret, getSetting, getMessagingMode } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
 import blueskyRoutes, { serviceInfo as blueskyInfo } from './routes/bluesky.js';
@@ -14,6 +14,7 @@ import youtubeRoutes, { serviceInfo as youtubeInfo } from './routes/youtube.js';
 import jiraRoutes, { serviceInfo as jiraInfo } from './routes/jira.js';
 import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
+import agentsRoutes from './routes/agents.js';
 import uiRoutes from './routes/ui.js';
 
 // Aggregate service metadata from all routes
@@ -79,6 +80,13 @@ app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, fitbitRoutes);
 // Queue routes - require auth but allow POST for submitting write requests
 // Pattern: /api/queue/{service}/{accountName}/submit
 app.use('/api/queue', apiKeyAuth, queueRoutes);
+
+// Agent messaging routes - require auth, allow POST for sending messages
+// Includes apiKeyName in req for sender identification
+app.use('/api/agents', apiKeyAuth, (req, res, next) => {
+  req.apiKeyName = req.apiKeyInfo.name;
+  next();
+}, agentsRoutes);
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
@@ -233,7 +241,61 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
       queryParams: {
         base_url: 'Override the base URL in the generated skill (optional)'
       }
-    }
+    },
+    agentMessaging: (() => {
+      const mode = getMessagingMode();
+      return {
+        enabled: mode !== 'off',
+        mode,
+        description: mode === 'off'
+          ? 'Agent-to-agent messaging is disabled. Admin can enable it in the agentgate UI.'
+          : mode === 'supervised'
+            ? 'Agents can message each other. Messages require human approval before delivery.'
+            : 'Agents can message each other freely without approval.',
+        endpoints: {
+          sendMessage: {
+            method: 'POST',
+            path: '/api/agents/message',
+            body: { to: 'recipient_agent_name', message: 'Your message content' },
+            response: mode === 'supervised'
+              ? '{ id, status: "pending", message: "Message queued for human approval" }'
+              : '{ id, status: "delivered", message: "Message delivered" }'
+          },
+          getMessages: {
+            method: 'GET',
+            path: '/api/agents/messages',
+            queryParams: { unread: 'true (optional) - only return unread messages' },
+            response: '{ mode, messages: [{ id, from, message, created_at, read }, ...] }'
+          },
+          markRead: {
+            method: 'POST',
+            path: '/api/agents/messages/:id/read',
+            response: '{ success: true }'
+          },
+          status: {
+            method: 'GET',
+            path: '/api/agents/status',
+            response: '{ mode, enabled, unread_count }'
+          },
+          discoverAgents: {
+            method: 'GET',
+            path: '/api/agents/messageable',
+            description: 'Discover which agents you can message',
+            response: '{ mode, agents: [{ name }, ...] }'
+          }
+        },
+        modes: {
+          off: 'Messaging disabled - agents cannot communicate',
+          supervised: 'Messages require human approval before delivery',
+          open: 'Messages delivered immediately without approval'
+        },
+        notes: [
+          'Agent names are case-insensitive (e.g., "WorkBot" and "workbot" are the same)',
+          'Agents cannot message themselves',
+          'Maximum message length is 10KB'
+        ]
+      };
+    })()
   });
 });
 
