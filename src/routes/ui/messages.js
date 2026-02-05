@@ -1,7 +1,7 @@
 // Messages routes - agent messaging management
 import { Router } from 'express';
 import {
-  getMessagingMode, listPendingMessages, listAgentMessages,
+  getMessagingMode, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage,
   clearAgentMessagesByStatus, getMessageCounts, getAgentMessage,
   listApiKeys
