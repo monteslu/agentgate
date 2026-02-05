@@ -205,7 +205,7 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
     }
 
     const { id } = req.params;
-    const agentName = req.agentName; // Set by auth middleware
+    const agentName = req.apiKeyInfo?.name || 'unknown'; // Set by auth middleware
 
     const entry = getQueueEntry(id);
 
