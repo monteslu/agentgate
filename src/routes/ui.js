@@ -1543,6 +1543,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
 }
 
 function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 0, pendingMessagesCount = 0) {
+  const messagingMode = mode;
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = String(str);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
