@@ -8,7 +8,7 @@ import {
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, statusBadge, formatDate } from './shared.js';
+import { escapeHtml, statusBadge, formatDate, simpleNavHeader } from './shared.js';
 
 const router = Router();
 
@@ -273,12 +273,10 @@ function renderMessagesPage(messages, filter, counts, mode) {
   </style>
 </head>
 <body>
-  <div style="display: flex; justify-content: space-between; align-items: center;">
-    <h1>Agent Messages</h1>
-    <div style="display: flex; align-items: center; gap: 16px;">
-      <span class="mode-badge">Mode: ${mode}</span>
-      <a href="/ui" class="back-link">← Back to Dashboard</a>
-    </div>
+  ${simpleNavHeader()}
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+    <h2 style="margin: 0;">Agent Messages</h2>
+    <span class="mode-badge">Mode: ${mode}</span>
   </div>
   <p>Review and approve messages between agents${mode === 'supervised' ? ' (supervised mode)' : ''}.</p>
 
