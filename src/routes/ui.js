@@ -11,6 +11,7 @@ import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '..
 import { executeQueueEntry } from '../lib/queueExecutor.js';
 import { notifyAgentMessage, notifyMessageRejected, notifyAgentQueueStatus } from '../lib/agentNotifier.js';
 import { registerAllRoutes, renderAllCards } from './ui/index.js';
+import { emitCountUpdate } from '../lib/socketManager.js';
 
 const router = Router();
 
@@ -204,6 +205,9 @@ router.post('/messages/:id/approve', async (req, res) => {
   const updated = getAgentMessage(id);
   const counts = getMessageCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   // Try to notify the recipient agent
   notifyAgentMessage(updated).catch(err => {
     console.error('[agentNotifier] Failed to notify agent:', err.message);
@@ -237,6 +241,9 @@ router.post('/messages/:id/reject', (req, res) => {
   const updated = getAgentMessage(id);
   const counts = getMessageCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   // Notify sender that their message was rejected
   notifyMessageRejected(updated);
 
@@ -253,6 +260,9 @@ router.post('/messages/:id/delete', (req, res) => {
   deleteAgentMessage(id);
   const counts = getMessageCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   if (wantsJson) {
     return res.json({ success: true, counts });
   }
@@ -265,6 +275,9 @@ router.post('/messages/clear', (req, res) => {
 
   clearAgentMessagesByStatus(status || 'all');
   const counts = getMessageCounts();
+
+  // Emit real-time update
+  emitCountUpdate();
 
   if (wantsJson) {
     return res.json({ success: true, counts });
@@ -313,6 +326,9 @@ router.post('/queue/:id/approve', async (req, res) => {
   const updated = getQueueEntry(id);
   const counts = getQueueCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   if (wantsJson) {
     return res.json({ success: true, entry: updated, counts });
   }
@@ -347,6 +363,9 @@ router.post('/queue/:id/reject', async (req, res) => {
 
   const counts = getQueueCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   if (wantsJson) {
     return res.json({ success: true, entry: updated, counts });
   }
@@ -368,6 +387,9 @@ router.post('/queue/clear', (req, res) => {
   clearQueueByStatus(status || 'all');
   const counts = getQueueCounts();
 
+  // Emit real-time update
+  emitCountUpdate();
+
   if (wantsJson) {
     return res.json({ success: true, counts });
   }
@@ -387,6 +409,9 @@ router.delete('/queue/:id', (req, res) => {
 
   deleteQueueEntry(id);
   const counts = getQueueCounts();
+
+  // Emit real-time update
+  emitCountUpdate();
 
   if (wantsJson) {
     return res.json({ success: true, counts });
@@ -491,6 +516,7 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
   <title>agentgate - Admin</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     function copyText(text, btn) {
       navigator.clipboard.writeText(text).then(() => {
@@ -499,6 +525,45 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
         setTimeout(() => btn.textContent = orig, 1500);
       });
     }
+
+    // Real-time updates via Socket.io
+    document.addEventListener('DOMContentLoaded', function() {
+      const socket = io();
+
+      socket.on('counts', function(data) {
+        // Update queue badge
+        const queueBadge = document.getElementById('queue-badge');
+        if (queueBadge) {
+          if (data.queue.pending > 0) {
+            queueBadge.textContent = data.queue.pending;
+            queueBadge.style.display = '';
+          } else {
+            queueBadge.style.display = 'none';
+          }
+        }
+
+        // Update messages badge
+        const msgBadge = document.getElementById('messages-badge');
+        if (msgBadge) {
+          if (data.messages.pending > 0) {
+            msgBadge.textContent = data.messages.pending;
+            msgBadge.style.display = '';
+          } else {
+            msgBadge.style.display = 'none';
+          }
+        }
+
+        // Show/hide messages nav based on messaging mode
+        const msgNav = document.getElementById('messages-nav');
+        if (msgNav) {
+          msgNav.style.display = data.messagingEnabled ? '' : 'none';
+        }
+      });
+
+      socket.on('connect', function() {
+        console.log('Socket.io connected for real-time updates');
+      });
+    });
   </script>
 </head>
 <body>
@@ -511,14 +576,12 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
       <a href="/ui/keys" class="nav-btn nav-btn-default">API Keys</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Write Queue
-        ${pendingQueueCount > 0 ? `<span class="badge">${pendingQueueCount}</span>` : ''}
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
-      ${messagingMode !== 'off' ? `
-        <a href="/ui/messages" class="nav-btn nav-btn-default" style="position: relative;">
-          Messages
-          ${pendingMessagesCount > 0 ? `<span class="badge">${pendingMessagesCount}</span>` : ''}
-        </a>
-      ` : ''}
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+        Messages
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+      </a>
       <div class="nav-divider"></div>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>

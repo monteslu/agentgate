@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { validateApiKey, getAccountsByService, getCookieSecret, getSetting, getMessagingMode } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
+import { initSocket } from './lib/socketManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
 import blueskyRoutes, { serviceInfo as blueskyInfo } from './routes/bluesky.js';
 import redditRoutes, { serviceInfo as redditInfo } from './routes/reddit.js';
@@ -434,6 +435,10 @@ app.get('/', (req, res) => {
 const server = app.listen(PORT, async () => {
   console.log(`agentgate gateway running at http://localhost:${PORT}`);
   console.log(`Admin UI: http://localhost:${PORT}/ui`);
+
+  // Initialize socket.io for real-time updates
+  initSocket(server);
+  console.log('Socket.io initialized for real-time updates');
 
   // Start hsync if configured
   try {
