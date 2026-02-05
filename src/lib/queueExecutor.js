@@ -331,7 +331,7 @@ export async function executeQueueEntry(entry) {
         headers
       };
 
-      if (req.body && ['POST', 'PUT', 'PATCH'].includes(req.method.toUpperCase())) {
+      if (req.body && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method.toUpperCase())) {
         if (req.binaryBase64) {
           // Binary data encoded as base64 (for blob uploads)
           fetchOptions.body = Buffer.from(req.body, 'base64');
