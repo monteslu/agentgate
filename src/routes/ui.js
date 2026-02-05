@@ -729,6 +729,14 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
       socket.on('connect', function() {
         console.log('Socket.io connected for real-time updates');
       });
+
+      // Localize UTC dates to browser timezone
+      document.querySelectorAll('.utc-date').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.textContent = new Date(utc).toLocaleString();
+        }
+      });
     });
   </script>
 </head>
@@ -953,6 +961,12 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
     return d.toLocaleString();
   };
 
+  // Format date as span with data-utc for client-side localization
+  const localDate = (dateStr) => {
+    if (!dateStr) return '';
+    return `<span class="utc-date" data-utc="${dateStr}">${formatDate(dateStr)}</span>`;
+  };
+
   const renderEntry = (entry) => {
     const requestsSummary = entry.requests.map((r) =>
       `<div class="request-item"><code>${r.method}</code> <span>${escapeHtml(r.path)}</span></div>`
@@ -1016,7 +1030,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
             <span class="status-badge">${statusBadge(entry.status)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
-            <span class="help" style="margin: 0;">${formatDate(entry.submitted_at)}</span>
+            <span class="help" style="margin: 0;">${localDate(entry.submitted_at)}</span>
             <button type="button" class="delete-btn" onclick="deleteEntry('${entry.id}')" title="Delete">&times;</button>
           </div>
         </div>
@@ -1597,6 +1611,14 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
           msgNav.style.display = data.messagingEnabled ? '' : 'none';
         }
       });
+
+      // Localize UTC dates to browser timezone
+      document.querySelectorAll('.utc-date').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.textContent = new Date(utc).toLocaleString();
+        }
+      });
     });
   </script>
 </body>
@@ -1614,6 +1636,11 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleString();
+  };
+
+  const localDate = (dateStr) => {
+    if (!dateStr) return '';
+    return `<span class="utc-date" data-utc="${dateStr}">${formatDate(dateStr)}</span>`;
   };
 
   const statusBadge = (status) => {
@@ -1654,7 +1681,7 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
             <span class="status-badge">${statusBadge(msg.status)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
-            <span class="help" style="margin: 0;">${formatDate(msg.created_at)}</span>
+            <span class="help" style="margin: 0;">${localDate(msg.created_at)}</span>
             <button type="button" class="delete-btn" onclick="deleteMessage('${msg.id}')" title="Delete">&times;</button>
           </div>
         </div>
@@ -2096,6 +2123,14 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
           msgNav.style.display = data.messagingEnabled ? '' : 'none';
         }
       });
+
+      // Localize UTC dates to browser timezone
+      document.querySelectorAll('.utc-date').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.textContent = new Date(utc).toLocaleString();
+        }
+      });
     });
   </script>
 </body>
@@ -2114,6 +2149,11 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
     return d.toLocaleString();
   };
 
+  const localDate = (dateStr) => {
+    if (!dateStr) return '';
+    return `<span class="utc-date" data-utc="${dateStr}">${formatDate(dateStr)}</span>`;
+  };
+
   const renderKeyRow = (k) => `
     <tr id="key-${k.id}">
       <td><strong>${escapeHtml(k.name)}</strong></td>
@@ -2126,7 +2166,7 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
         `}
         <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
       </td>
-      <td>${formatDate(k.created_at)}</td>
+      <td>${localDate(k.created_at)}</td>
       <td>
         <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete">&times;</button>
       </td>
@@ -2382,6 +2422,14 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
         const msgNav = document.getElementById('messages-nav');
         if (msgNav) {
           msgNav.style.display = data.messagingEnabled ? '' : 'none';
+        }
+      });
+
+      // Localize UTC dates to browser timezone
+      document.querySelectorAll('.utc-date').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.textContent = new Date(utc).toLocaleString();
         }
       });
     });
