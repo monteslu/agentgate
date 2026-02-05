@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { validateApiKey, getAccountsByService, getCookieSecret, getSetting, getMessagingMode } from './lib/db.js';
+import { validateApiKey, getAccountsByService, getCookieSecret, getMessagingMode } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { initSocket } from './lib/socketManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
@@ -187,7 +187,19 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
           { method: 'GET', path: '/api/queue/list', description: 'List all your submissions across all services' },
           { method: 'GET', path: '/api/queue/{service}/{accountName}/list', description: 'List your submissions for a specific service/account' }
         ],
-        response: '{ count: number, entries: [{ id, service, account_name, comment, status, rejection_reason?, submitted_at, reviewed_at?, completed_at? }, ...] }'
+        response: '{ count: number, shared_visibility: boolean, entries: [{ id, service, account_name, comment, status, submitted_by, rejection_reason?, submitted_at, reviewed_at?, completed_at? }, ...] }',
+        sharedVisibility: 'When shared_queue_visibility is enabled by admin, agents can see ALL queue items (not just their own). Response includes shared_visibility: true when active.'
+      },
+      withdraw: {
+        description: 'Withdraw your own pending submission (requires agent_withdraw_enabled setting)',
+        method: 'DELETE',
+        path: '/api/queue/{service}/{accountName}/status/{id}',
+        constraints: [
+          'Only the submitting agent can withdraw their own items',
+          'Only works for "pending" status - cannot withdraw approved/completed/etc',
+          'Requires admin to enable agent_withdraw_enabled setting'
+        ],
+        response: '{ success: true, message: "Queue entry withdrawn", id }'
       },
       statuses: {
         pending: 'Waiting for human approval',
@@ -195,7 +207,8 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         executing: 'Currently running the requests',
         completed: 'All requests succeeded',
         failed: 'One or more requests failed (check results)',
-        rejected: 'Human rejected the request (check rejection_reason)'
+        rejected: 'Human rejected the request (check rejection_reason)',
+        withdrawn: 'Agent withdrew their own pending request'
       },
       example: {
         submit: {
@@ -214,27 +227,40 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         }
       }
     },
-    notifications: (() => {
-      const config = getSetting('notifications');
-      const enabled = config?.clawdbot?.enabled || false;
-      return {
-        enabled,
-        description: enabled
-          ? 'Webhook notifications are ENABLED. You will receive automatic notifications when queue items complete, fail, or are rejected. No need to poll.'
-          : 'Webhook notifications are NOT configured. You must poll the status endpoint to check request status.',
-        setup: 'Configure in Admin UI under Advanced → Clawdbot Notifications',
-        webhookFormat: {
-          description: 'POST to your webhook URL with JSON body',
-          payload: {
-            text: 'Notification message with status, service, result URL, and original comment',
-            mode: 'now'
-          },
-          example: '✅ [agentgate] Queue #abc123 completed\\n→ github/monteslu\\n→ https://github.com/...\\nOriginal: "Create PR"'
+    notifications: {
+      description: 'Agents receive webhook notifications for queue status updates (completed/failed/rejected) and agent messages. Each agent configures their own webhook.',
+      setup: {
+        agentgateConfig: {
+          description: 'Configure YOUR webhook in agentgate Admin UI',
+          steps: [
+            '1. Go to Admin UI → API Keys',
+            '2. Click "Configure" next to your API key',
+            '3. Enter Webhook URL (e.g., https://your-gateway.com/hooks/wake)',
+            '4. Enter Authorization Token (bearer token for your gateway)'
+          ]
         },
-        events: enabled ? (config.clawdbot.events || ['completed', 'failed']) : ['completed', 'failed', 'rejected'],
-        compatible: 'OpenClaw/Clawdbot /hooks/wake endpoint'
-      };
-    })(),
+        gatewayConfig: {
+          description: 'Your gateway must ALSO have webhooks enabled to receive POSTs',
+          openclaw: 'Add to config: { "hooks": { "enabled": true, "token": "your-token" } }',
+          note: 'Without this, your gateway returns 405 and notifications fail silently'
+        }
+      },
+      webhookFormat: {
+        description: 'POST to your webhook URL with JSON body',
+        payload: {
+          text: 'Notification message with status, service, result URL, and original comment',
+          mode: 'now'
+        },
+        example: '✅ [agentgate] Queue #abc123 completed\\n→ github/monteslu\\n→ https://github.com/...\\nOriginal: "Create PR"'
+      },
+      events: ['completed', 'failed', 'rejected', 'agent_message', 'broadcast', 'message_rejected'],
+      troubleshooting: [
+        'Check webhook URL/token in API Keys → Configure',
+        'Ensure hooks.enabled=true in your gateway config',
+        'Test endpoint: curl -X POST <url> -H "Authorization: Bearer <token>" -d \'{"text":"test"}\''
+      ],
+      compatible: 'OpenClaw/Clawdbot /hooks/wake endpoint'
+    },
     skill: {
       description: 'Generate a SKILL.md file for OpenClaw/AgentSkills compatible systems',
       endpoint: 'GET /api/skill',
@@ -283,6 +309,18 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
             path: '/api/agents/messageable',
             description: 'Discover which agents you can message',
             response: '{ mode, agents: [{ name }, ...] }'
+          },
+          broadcast: {
+            method: 'POST',
+            path: '/api/agents/broadcast',
+            description: 'Send a message to ALL agents with webhooks (excluding yourself)',
+            body: { message: 'Your broadcast message' },
+            response: '{ delivered: ["Agent1", "Agent2"], failed: [{ name: "Agent3", error: "HTTP 500" }], total: 3 }',
+            notes: [
+              'Broadcasts go directly to agent webhooks - not stored in messages table',
+              'Sender is automatically excluded from recipients',
+              'Requires messaging mode to be "supervised" or "open" (not "off")'
+            ]
           }
         },
         modes: {
