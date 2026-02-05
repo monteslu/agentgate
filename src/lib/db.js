@@ -406,7 +406,7 @@ export function getPendingQueueCount() {
 
 export function getQueueCounts() {
   const rows = db.prepare('SELECT status, COUNT(*) as count FROM write_queue GROUP BY status').all();
-  const counts = { all: 0, pending: 0, completed: 0, failed: 0, rejected: 0 };
+  const counts = { all: 0, pending: 0, completed: 0, failed: 0, rejected: 0, withdrawn: 0 };
   for (const row of rows) {
     counts[row.status] = row.count;
     counts.all += row.count;
