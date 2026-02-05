@@ -593,3 +593,12 @@ export function listAllQueueEntries(service = null, accountName = null) {
     notified: Boolean(row.notified)
   }));
 }
+
+// Agent Withdraw helpers
+export function getAgentWithdrawEnabled() {
+  return getSetting('agent_withdraw_enabled') === true;
+}
+
+export function setAgentWithdrawEnabled(enabled) {
+  setSetting('agent_withdraw_enabled', enabled);
+}
