@@ -1,21 +1,26 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
 
 export function registerRoutes(router, baseUrl) {
+  const DEFAULT_SCOPES = 'profile email w_member_social';
+
   router.post('/linkedin/setup', (req, res) => {
-    const { accountName, clientId, clientSecret } = req.body;
+    const { accountName, clientId, clientSecret, scopes } = req.body;
     if (!accountName || !clientId || !clientSecret) {
       return res.status(400).send('Account name, client ID, and secret required');
     }
-    setAccountCredentials('linkedin', accountName, { clientId, clientSecret });
+    
+    // Use provided scopes or default, normalize comma/space separated to space separated
+    const scopeList = (scopes || DEFAULT_SCOPES).split(/[,\s]+/).filter(s => s).join(' ');
+    
+    setAccountCredentials('linkedin', accountName, { clientId, clientSecret, scopes: scopeList });
 
     const redirectUri = `${baseUrl}/ui/linkedin/callback`;
-    const scope = 'openid profile email r_liteprofile w_member_social';
     const state = `agentgate_linkedin_${accountName}`;
 
     const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
       `response_type=code&client_id=${clientId}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
+      `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(state)}`;
 
     res.redirect(authUrl);
   });
@@ -109,6 +114,8 @@ export function renderCard(accounts, baseUrl) {
           <input type="text" name="clientId" placeholder="LinkedIn client ID" required>
           <label>Client Secret</label>
           <input type="password" name="clientSecret" placeholder="LinkedIn client secret" required>
+          <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(comma or space separated)</span></label>
+          <input type="text" name="scopes" placeholder="profile email w_member_social" value="profile email w_member_social">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
