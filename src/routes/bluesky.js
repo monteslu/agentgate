@@ -16,6 +16,15 @@ export const serviceInfo = {
     'GET /api/bluesky/{accountName}/app.bsky.feed.getTimeline',
     'GET /api/bluesky/{accountName}/app.bsky.feed.getAuthorFeed?actor={handle}',
     'GET /api/bluesky/{accountName}/app.bsky.actor.getProfile?actor={handle}'
+  ],
+  writeGuidelines: [
+    'Posts require FACETS for clickable links, mentions, and hashtags - they are NOT auto-detected',
+    'Facet positions use UTF-8 BYTE offsets, not character positions (emoji=4 bytes, em-dash=3 bytes)',
+    'Link facet: { index: { byteStart, byteEnd }, features: [{ $type: "app.bsky.richtext.facet#link", uri: "https://..." }] }',
+    'Mention facet requires DID (resolve via com.atproto.identity.resolveHandle), not handle',
+    'Hashtag facet: tag value should NOT include the # symbol',
+    'Always include "langs" array (e.g. ["en"]) and "createdAt" ISO timestamp',
+    'Use TextEncoder to calculate byte offsets: encoder.encode(text.slice(0, start)).length'
   ]
 };
 
