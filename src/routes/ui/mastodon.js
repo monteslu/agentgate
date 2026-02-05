@@ -1,4 +1,5 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
   router.post('/mastodon/setup', async (req, res) => {
@@ -22,7 +23,7 @@ export function registerRoutes(router, baseUrl) {
       });
 
       if (!response.ok) {
-        return res.status(400).send(`Failed to register app with ${cleanInstance}`);
+        return res.status(400).send(renderErrorPage('Registration Error', `Failed to register app with ${cleanInstance}. Make sure the instance URL is correct.`));
       }
 
       const app = await response.json();
@@ -40,20 +41,25 @@ export function registerRoutes(router, baseUrl) {
 
       res.redirect(authUrl);
     } catch (err) {
-      res.status(500).send(`Mastodon setup failed: ${err.message}`);
+      res.status(500).send(renderErrorPage('Setup Error', `Mastodon setup failed: ${err.message}`));
     }
   });
 
   router.get('/mastodon/callback', async (req, res) => {
     const { code, error, state } = req.query;
+    const accountName = state?.replace('agentgate_mastodon_', '') || 'default';
+    
     if (error) {
-      return res.status(400).send(`Mastodon OAuth error: ${error}`);
+      const creds = getAccountCredentials('mastodon', accountName);
+      if (creds) {
+        setAccountCredentials('mastodon', accountName, { ...creds, authStatus: 'failed', authError: error });
+      }
+      return res.status(400).send(renderErrorPage('Mastodon OAuth Error', `Mastodon returned an error: ${error}`));
     }
 
-    const accountName = state?.replace('agentgate_mastodon_', '') || 'default';
     const creds = getAccountCredentials('mastodon', accountName);
     if (!creds) {
-      return res.status(400).send('Mastodon account not found. Please try setup again.');
+      return res.status(400).send(renderErrorPage('Setup Error', 'Mastodon account not found. Please try setup again.'));
     }
 
     try {
@@ -72,17 +78,20 @@ export function registerRoutes(router, baseUrl) {
 
       const tokens = await response.json();
       if (tokens.error) {
-        return res.status(400).send(`Mastodon token error: ${tokens.error}`);
+        setAccountCredentials('mastodon', accountName, { ...creds, authStatus: 'failed', authError: tokens.error });
+        return res.status(400).send(renderErrorPage('Token Error', `Mastodon token exchange failed: ${tokens.error}`));
       }
 
       setAccountCredentials('mastodon', accountName, {
         ...creds,
-        accessToken: tokens.access_token
+        accessToken: tokens.access_token,
+        authStatus: 'success'
       });
 
       res.redirect('/ui');
     } catch (err) {
-      res.status(500).send(`Mastodon OAuth failed: ${err.message}`);
+      setAccountCredentials('mastodon', accountName, { ...creds, authStatus: 'failed', authError: err.message });
+      res.status(500).send(renderErrorPage('Connection Error', `Mastodon OAuth failed: ${err.message}`));
     }
   });
 
@@ -90,6 +99,21 @@ export function registerRoutes(router, baseUrl) {
     const { accountName } = req.body;
     deleteAccount('mastodon', accountName);
     res.redirect('/ui');
+  });
+
+  router.post('/mastodon/retry', (req, res) => {
+    const { accountName } = req.body;
+    const creds = getAccountCredentials('mastodon', accountName);
+    if (!creds || !creds.instance || !creds.clientId) {
+      return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
+    }
+
+    const authUrl = `https://${creds.instance}/oauth/authorize?` +
+      `client_id=${creds.clientId}&response_type=code&` +
+      `redirect_uri=${encodeURIComponent(`${baseUrl}/ui/mastodon/callback`)}&` +
+      `scope=read&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
+
+    res.redirect(authUrl);
   });
 }
 
@@ -99,17 +123,37 @@ export function renderCard(accounts, _baseUrl) {
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
     return serviceAccounts.map(acc => {
-      const creds = getAccountCredentials('mastodon', acc.name);
-      const info = creds?.instance ? `${acc.name} @${creds.instance}` : acc.name;
+      const hasToken = !!acc.data?.accessToken;
+      const authStatus = acc.data?.authStatus;
+      const isFailed = authStatus === 'failed' || (!hasToken && acc.data?.clientId);
+      const info = acc.data?.instance ? `${acc.name} @${acc.data.instance}` : acc.name;
+      
+      let statusBadge = '';
+      if (hasToken) {
+        statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
+      } else if (isFailed) {
+        statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
+      } else if (acc.data?.clientId) {
+        statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
+      }
+      
+      const retryBtn = (!hasToken && acc.data?.clientId) ? `
+        <form method="POST" action="/ui/mastodon/retry" style="margin:0;">
+          <input type="hidden" name="accountName" value="${acc.name}">
+          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+        </form>` : '';
+      
       return `
-        <div class="account-item">
-          <span><strong>${info}</strong></span>
+      <div class="account-item">
+        <span><strong>${info}</strong>${statusBadge}</span>
+        <div style="display: flex; gap: 8px;">
+          ${retryBtn}
           <form method="POST" action="/ui/mastodon/delete" style="margin:0;">
             <input type="hidden" name="accountName" value="${acc.name}">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
-      `;
+      </div>`;
     }).join('');
   };
 
