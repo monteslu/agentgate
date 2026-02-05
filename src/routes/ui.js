@@ -3,12 +3,15 @@ import {
   listAccounts, getSetting, setSetting, deleteSetting,
   setAdminPassword, verifyAdminPassword, hasAdminPassword,
   listQueueEntries, getQueueEntry, updateQueueStatus, clearQueueByStatus, deleteQueueEntry, getPendingQueueCount, getQueueCounts,
-  listApiKeys, createApiKey, deleteApiKey,
-  listUnnotifiedEntries
+  listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById,
+  listUnnotifiedEntries,
+  getMessagingMode, setMessagingMode, listPendingMessages, listAgentMessages,
+  approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage
 } from '../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
 import { notifyClawdbot, retryNotification } from '../lib/notifier.js';
+import { notifyAgentMessage, notifyMessageRejected } from '../lib/agentNotifier.js';
 import { registerAllRoutes, renderAllCards } from './ui/index.js';
 
 const router = Router();
@@ -124,8 +127,10 @@ router.get('/', (req, res) => {
   const hsyncConnected = isHsyncConnected();
   const pendingQueueCount = getPendingQueueCount();
   const notificationsConfig = getSetting('notifications');
+  const messagingMode = getMessagingMode();
+  const pendingMessagesCount = listPendingMessages().length;
 
-  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig }));
+  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, messagingMode, pendingMessagesCount }));
 });
 
 // Register all service routes (github, bluesky, reddit, etc.)
@@ -223,6 +228,120 @@ router.post('/notifications/test', async (req, res) => {
       ? res.status(500).json({ success: false, error: err.message })
       : res.redirect('/ui?notification_test=failed');
   }
+});
+
+// Agent Messaging settings
+router.post('/messaging/mode', (req, res) => {
+  const { mode } = req.body;
+  try {
+    setMessagingMode(mode);
+    res.redirect('/ui');
+  } catch (err) {
+    res.status(400).send(err.message);
+  }
+});
+
+// Agent Messages Queue
+router.get('/messages', (req, res) => {
+  const filter = req.query.filter || 'all';
+  let messages;
+  if (filter === 'all') {
+    messages = listAgentMessages();
+  } else {
+    messages = listAgentMessages(filter);
+  }
+  const counts = getMessageCounts();
+  const mode = getMessagingMode();
+  res.send(renderMessagesPage(messages, filter, counts, mode));
+});
+
+router.post('/messages/:id/approve', async (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const msg = getAgentMessage(id);
+  if (!msg) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Message not found' })
+      : res.status(404).send('Message not found');
+  }
+
+  if (msg.status !== 'pending') {
+    return wantsJson
+      ? res.status(400).json({ error: 'Can only approve pending messages' })
+      : res.status(400).send('Can only approve pending messages');
+  }
+
+  approveAgentMessage(id);
+  const updated = getAgentMessage(id);
+  const counts = getMessageCounts();
+
+  // Try to notify the recipient agent
+  notifyAgentMessage(updated).catch(err => {
+    console.error('[agentNotifier] Failed to notify agent:', err.message);
+  });
+
+  if (wantsJson) {
+    return res.json({ success: true, message: updated, counts });
+  }
+  res.redirect('/ui/messages');
+});
+
+router.post('/messages/:id/reject', (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const msg = getAgentMessage(id);
+  if (!msg) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Message not found' })
+      : res.status(404).send('Message not found');
+  }
+
+  if (msg.status !== 'pending') {
+    return wantsJson
+      ? res.status(400).json({ error: 'Can only reject pending messages' })
+      : res.status(400).send('Can only reject pending messages');
+  }
+
+  rejectAgentMessage(id, reason);
+  const updated = getAgentMessage(id);
+  const counts = getMessageCounts();
+
+  // Notify sender that their message was rejected
+  notifyMessageRejected(updated);
+
+  if (wantsJson) {
+    return res.json({ success: true, message: updated, counts });
+  }
+  res.redirect('/ui/messages');
+});
+
+router.post('/messages/:id/delete', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  deleteAgentMessage(id);
+  const counts = getMessageCounts();
+
+  if (wantsJson) {
+    return res.json({ success: true, counts });
+  }
+  res.redirect('/ui/messages');
+});
+
+router.post('/messages/clear', (req, res) => {
+  const { status } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  clearAgentMessagesByStatus(status || 'all');
+  const counts = getMessageCounts();
+
+  if (wantsJson) {
+    return res.json({ success: true, counts });
+  }
+  res.redirect('/ui/messages');
 });
 
 // Write Queue Management
@@ -422,6 +541,27 @@ router.post('/keys/:id/delete', (req, res) => {
   res.redirect('/ui/keys');
 });
 
+router.post('/keys/:id/webhook', (req, res) => {
+  const { id } = req.params;
+  const { webhook_url, webhook_token } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  updateAgentWebhook(id, webhook_url, webhook_token);
+  const keys = listApiKeys();
+
+  if (wantsJson) {
+    return res.json({ success: true, keys });
+  }
+  res.redirect('/ui/keys');
+});
+
 router.delete('/keys/:id', (req, res) => {
   const { id } = req.params;
   const wantsJson = req.headers.accept?.includes('application/json');
@@ -437,7 +577,7 @@ router.delete('/keys/:id', (req, res) => {
 
 // HTML Templates
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig }) {
+function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, messagingMode, pendingMessagesCount }) {
   const clawdbotConfig = notificationsConfig?.clawdbot;
   return `<!DOCTYPE html>
 <html>
@@ -467,6 +607,12 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
         Write Queue
         ${pendingQueueCount > 0 ? `<span class="badge">${pendingQueueCount}</span>` : ''}
       </a>
+      ${messagingMode !== 'off' ? `
+        <a href="/ui/messages" class="nav-btn nav-btn-default" style="position: relative;">
+          Messages
+          ${pendingMessagesCount > 0 ? `<span class="badge">${pendingMessagesCount}</span>` : ''}
+        </a>
+      ` : ''}
       <div class="nav-divider"></div>
       <form method="POST" action="/ui/logout" style="margin: 0;">
         <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
@@ -497,6 +643,33 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
   </div>
 
   <h2>Advanced</h2>
+  <div class="card">
+    <details ${messagingMode !== 'off' ? 'open' : ''}>
+      <summary>Agent Messaging ${messagingMode !== 'off' ? `<span class="status configured">${messagingMode}</span>` : ''}</summary>
+      <div style="margin-top: 16px;">
+        <p class="help">Allow agents to send messages to each other. Messages can require human approval (supervised) or be delivered immediately (open).</p>
+        <form method="POST" action="/ui/messaging/mode" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+            <input type="radio" name="mode" value="off" ${messagingMode === 'off' ? 'checked' : ''}>
+            <span>Off</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+            <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''}>
+            <span>Supervised</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+            <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''}>
+            <span>Open</span>
+          </label>
+          <button type="submit" class="btn-primary btn-sm">Save</button>
+        </form>
+        ${messagingMode === 'supervised' && pendingMessagesCount > 0 ? `
+          <p style="margin-top: 12px;"><a href="/ui/messages" style="color: #818cf8;">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
+        ` : ''}
+      </div>
+    </details>
+  </div>
+
   <div class="card">
     <details ${hsyncConfig?.enabled ? 'open' : ''}>
       <summary>hsync (Remote Access) ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</summary>
@@ -1259,6 +1432,384 @@ function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
 </html>`;
 }
 
+function renderMessagesPage(messages, filter, counts, mode) {
+  const escapeHtml = (str) => {
+    if (typeof str !== 'string') str = String(str);
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  };
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleString();
+  };
+
+  const statusBadge = (status) => {
+    const colors = {
+      pending: 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);',
+      delivered: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);',
+      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);'
+    };
+    return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
+  };
+
+  const renderMessage = (msg) => {
+    let actions = '';
+    if (msg.status === 'pending') {
+      actions = `
+        <div class="message-actions">
+          <button type="button" class="btn-primary btn-sm" onclick="approveMessage('${msg.id}')">Approve</button>
+          <input type="text" id="reason-${msg.id}" placeholder="Rejection reason (optional)" class="reject-input" style="width: 200px;">
+          <button type="button" class="btn-danger btn-sm" onclick="rejectMessage('${msg.id}')">Reject</button>
+        </div>
+      `;
+    }
+
+    let rejectionSection = '';
+    if (msg.rejection_reason) {
+      rejectionSection = `
+        <div class="rejection-reason">
+          <strong>Rejection reason:</strong> ${escapeHtml(msg.rejection_reason)}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="card message-entry" id="message-${msg.id}" data-status="${msg.status}">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+          <div class="entry-header">
+            <strong>${escapeHtml(msg.from_agent)}</strong> → <strong>${escapeHtml(msg.to_agent)}</strong>
+            <span class="status-badge">${statusBadge(msg.status)}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <span class="help" style="margin: 0;">${formatDate(msg.created_at)}</span>
+            <button type="button" class="delete-btn" onclick="deleteMessage('${msg.id}')" title="Delete">&times;</button>
+          </div>
+        </div>
+
+        <div class="message-content">
+          <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(msg.message)}</pre>
+        </div>
+
+        ${rejectionSection}
+        ${actions}
+      </div>
+    `;
+  };
+
+  const filters = ['all', 'pending', 'delivered', 'rejected'];
+  const filterLinks = filters.map(f =>
+    `<a href="/ui/messages?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
+  ).join('');
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>agentgate - Agent Messages</title>
+  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+  <link rel="stylesheet" href="/public/style.css">
+  <style>
+    .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
+    .filter-link {
+      padding: 10px 20px;
+      border-radius: 25px;
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.05);
+      color: #9ca3af;
+      font-weight: 600;
+      font-size: 13px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+    }
+    .filter-link:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #e5e7eb;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+    .filter-link.active {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      border-color: transparent;
+      box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+    }
+    .message-entry { margin-bottom: 20px; }
+    .message-actions {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .back-link {
+      color: #818cf8;
+      text-decoration: none;
+      font-weight: 600;
+      transition: color 0.2s ease;
+    }
+    .back-link:hover { color: #ffffff; }
+    .delete-btn {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px 10px;
+      line-height: 1;
+      font-weight: bold;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+    .delete-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+    .clear-section { margin-left: auto; display: flex; gap: 10px; }
+    .entry-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .entry-header strong {
+      color: #f3f4f6;
+      font-size: 16px;
+    }
+    .rejection-reason {
+      margin-top: 16px;
+      padding: 16px;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 10px;
+      border-left: 4px solid #f87171;
+      color: #e5e7eb;
+    }
+    .rejection-reason strong { color: #f87171; }
+    .empty-state {
+      text-align: center;
+      padding: 60px 40px;
+    }
+    .empty-state p { color: #6b7280; margin: 0; font-size: 16px; }
+    .reject-input {
+      padding: 10px 14px;
+      margin: 0;
+      font-size: 13px;
+      background: rgba(15, 15, 25, 0.6);
+      border: 2px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      color: #f3f4f6;
+    }
+    .reject-input:focus {
+      outline: none;
+      border-color: #f87171;
+      box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15);
+    }
+    .reject-input::placeholder { color: #6b7280; }
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: rgba(99, 102, 241, 0.15);
+      color: #818cf8;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+  </style>
+</head>
+<body>
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h1>Agent Messages</h1>
+    <div style="display: flex; align-items: center; gap: 16px;">
+      <span class="mode-badge">Mode: ${mode}</span>
+      <a href="/ui" class="back-link">← Back to Dashboard</a>
+    </div>
+  </div>
+  <p>Review and approve messages between agents${mode === 'supervised' ? ' (supervised mode)' : ''}.</p>
+
+  <div class="filter-bar" id="filter-bar">
+    ${filterLinks}
+    <div class="clear-section">
+      ${filter === 'delivered' && counts.delivered > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'delivered\')">Clear Delivered</button>' : ''}
+      ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
+      ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+    </div>
+  </div>
+
+  <div id="messages-container">
+  ${messages.length === 0 ? `
+    <div class="card empty-state">
+      <p>No ${filter === 'all' ? '' : filter + ' '}messages</p>
+    </div>
+  ` : messages.map(renderMessage).join('')}
+  </div>
+
+  <script>
+    function escapeHtml(str) {
+      if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function approveMessage(id) {
+      const btn = event.target;
+      btn.disabled = true;
+      btn.textContent = 'Approving...';
+
+      try {
+        const res = await fetch('/ui/messages/' + id + '/approve', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const el = document.getElementById('message-' + id);
+          if (el) {
+            el.dataset.status = 'delivered';
+            // Update status badge
+            const badge = el.querySelector('.status-badge');
+            if (badge) {
+              badge.innerHTML = '<span class="status" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);">delivered</span>';
+            }
+            // Remove actions
+            const actions = el.querySelector('.message-actions');
+            if (actions) actions.remove();
+          }
+        } else {
+          alert(data.error || 'Failed to approve');
+          btn.disabled = false;
+          btn.textContent = 'Approve';
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Approve';
+      }
+    }
+
+    async function rejectMessage(id) {
+      const btn = event.target;
+      const reason = document.getElementById('reason-' + id)?.value || '';
+      btn.disabled = true;
+      btn.textContent = 'Rejecting...';
+
+      try {
+        const res = await fetch('/ui/messages/' + id + '/reject', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const el = document.getElementById('message-' + id);
+          if (el) {
+            el.dataset.status = 'rejected';
+            // Update status badge
+            const badge = el.querySelector('.status-badge');
+            if (badge) {
+              badge.innerHTML = '<span class="status" style="background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);">rejected</span>';
+            }
+            // Remove actions and add rejection reason
+            const actions = el.querySelector('.message-actions');
+            if (actions) {
+              actions.outerHTML = '<div class="rejection-reason"><strong>Rejection reason:</strong> ' + escapeHtml(reason || 'No reason provided') + '</div>';
+            }
+          }
+        } else {
+          alert(data.error || 'Failed to reject');
+          btn.disabled = false;
+          btn.textContent = 'Reject';
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Reject';
+      }
+    }
+
+    async function deleteMessage(id) {
+      if (!confirm('Delete this message?')) return;
+
+      try {
+        const res = await fetch('/ui/messages/' + id + '/delete', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          const el = document.getElementById('message-' + id);
+          if (el) el.remove();
+
+          // Show empty message if no messages left
+          const container = document.getElementById('messages-container');
+          if (container.querySelectorAll('.message-entry').length === 0) {
+            container.innerHTML = '<div class="card empty-state"><p>No messages</p></div>';
+          }
+        } else {
+          alert(data.error || 'Failed to delete');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function clearByStatus(status) {
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Clearing...';
+
+      try {
+        const res = await fetch('/ui/messages/clear', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // Remove cleared messages from DOM
+          const container = document.getElementById('messages-container');
+          if (status === 'all') {
+            container.querySelectorAll('.message-entry').forEach(el => {
+              if (el.dataset.status !== 'pending') el.remove();
+            });
+          } else {
+            container.querySelectorAll('.message-entry[data-status="' + status + '"]').forEach(el => el.remove());
+          }
+
+          // Show empty message if no messages left
+          if (container.querySelectorAll('.message-entry').length === 0) {
+            container.innerHTML = '<div class="card empty-state"><p>No messages</p></div>';
+          }
+
+          // Hide the clear button
+          btn.style.display = 'none';
+        }
+
+        btn.disabled = false;
+        btn.textContent = originalText;
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    }
+  </script>
+</body>
+</html>`;
+}
+
 function renderKeysPage(keys, error = null, newKey = null) {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') return '';
@@ -1275,6 +1826,14 @@ function renderKeysPage(keys, error = null, newKey = null) {
     <tr id="key-${k.id}">
       <td><strong>${escapeHtml(k.name)}</strong></td>
       <td><code class="key-value">${escapeHtml(k.key_prefix)}</code></td>
+      <td>
+        ${k.webhook_url ? `
+          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}">✓ Configured</span>
+        ` : `
+          <span class="webhook-status webhook-none">Not set</span>
+        `}
+        <button type="button" class="btn-sm" onclick="showWebhookModal('${k.id}', '${escapeHtml(k.name)}', '${escapeHtml(k.webhook_url || '')}', '${escapeHtml(k.webhook_token || '')}')">Configure</button>
+      </td>
       <td>${formatDate(k.created_at)}</td>
       <td>
         <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete">&times;</button>
@@ -1290,16 +1849,30 @@ function renderKeysPage(keys, error = null, newKey = null) {
   <link rel="stylesheet" href="/public/style.css">
   <style>
     .keys-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    .keys-table th, .keys-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--gray-200); }
-    .keys-table th { font-weight: 600; color: var(--gray-600); font-size: 14px; }
-    .key-value { background: var(--gray-100); padding: 4px 8px; border-radius: 4px; font-size: 13px; }
-    .new-key-banner { background: #d1fae5; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; }
-    .new-key-banner code { background: white; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
-    .delete-btn { background: none; border: none; color: #dc2626; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; font-weight: bold; }
-    .delete-btn:hover { color: #991b1b; }
-    .back-link { color: var(--primary); text-decoration: none; font-weight: 500; }
+    .keys-table th, .keys-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }
+    .keys-table th { font-weight: 600; color: #9ca3af; font-size: 14px; }
+    .key-value { background: #1f2937; padding: 4px 8px; border-radius: 4px; font-size: 13px; color: #e5e7eb; }
+    .new-key-banner { background: #065f46; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; color: #d1fae5; }
+    .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
+    .delete-btn { background: none; border: none; color: #f87171; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; font-weight: bold; }
+    .delete-btn:hover { color: #dc2626; }
+    .back-link { color: #a78bfa; text-decoration: none; font-weight: 500; }
     .back-link:hover { text-decoration: underline; }
-    .error-message { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .webhook-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
+    .webhook-configured { background: #065f46; color: #6ee7b7; }
+    .webhook-none { background: #374151; color: #9ca3af; }
+    .btn-sm { font-size: 12px; padding: 4px 8px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .btn-sm:hover { background: #4338ca; }
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+    .modal-overlay.active { display: flex; }
+    .modal { background: #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+    .modal h3 { margin: 0 0 16px 0; color: #f3f4f6; }
+    .modal label { display: block; margin-bottom: 4px; color: #d1d5db; font-size: 14px; }
+    .modal input { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; }
+    .modal input:focus { border-color: #6366f1; outline: none; }
+    .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+    .modal .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -1340,6 +1913,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
           <tr>
             <th>Name</th>
             <th>Key Prefix</th>
+            <th>Webhook</th>
             <th>Created</th>
             <th></th>
           </tr>
@@ -1351,6 +1925,31 @@ function renderKeysPage(keys, error = null, newKey = null) {
     `}
   </div>
 
+  <!-- Webhook Modal -->
+  <div id="webhook-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Configure Webhook for <span id="modal-agent-name"></span></h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
+        When messages or queue updates are ready, agentgate will POST to this URL.
+      </p>
+      <form id="webhook-form">
+        <input type="hidden" id="webhook-agent-id" name="id">
+        <label for="webhook-url">Webhook URL</label>
+        <input type="url" id="webhook-url" name="webhook_url" placeholder="https://your-agent-gateway.com/webhook">
+        <p class="help-text">The endpoint that will receive POST notifications</p>
+
+        <label for="webhook-token">Authorization Token (optional)</label>
+        <input type="text" id="webhook-token" name="webhook_token" placeholder="secret-token">
+        <p class="help-text">Sent as Bearer token in Authorization header</p>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeWebhookModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Webhook</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     function copyKey(key, btn) {
       navigator.clipboard.writeText(key).then(() => {
@@ -1359,6 +1958,51 @@ function renderKeysPage(keys, error = null, newKey = null) {
         setTimeout(() => btn.textContent = orig, 1500);
       });
     }
+
+    function showWebhookModal(id, name, url, token) {
+      document.getElementById('webhook-agent-id').value = id;
+      document.getElementById('modal-agent-name').textContent = name;
+      document.getElementById('webhook-url').value = url;
+      document.getElementById('webhook-token').value = token;
+      document.getElementById('webhook-modal').classList.add('active');
+    }
+
+    function closeWebhookModal() {
+      document.getElementById('webhook-modal').classList.remove('active');
+    }
+
+    document.getElementById('webhook-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('webhook-agent-id').value;
+      const webhookUrl = document.getElementById('webhook-url').value;
+      const webhookToken = document.getElementById('webhook-token').value;
+
+      try {
+        const res = await fetch('/ui/keys/' + id + '/webhook', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ webhook_url: webhookUrl, webhook_token: webhookToken })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          closeWebhookModal();
+          // Reload to show updated status
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to save webhook');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+
+    // Close modal on overlay click
+    document.getElementById('webhook-modal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeWebhookModal();
+      }
+    });
 
     async function deleteKey(id) {
       if (!confirm('Delete this API key? Any agents using it will lose access.')) return;
@@ -1383,7 +2027,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
           if (count === 0) {
             const table = document.querySelector('.keys-table');
             if (table) {
-              table.outerHTML = '<p style="color: var(--gray-500); text-align: center; padding: 20px;">No API keys yet. Create one above.</p>';
+              table.outerHTML = '<p style="color: #9ca3af; text-align: center; padding: 20px;">No API keys yet. Create one above.</p>';
             }
           }
         } else {

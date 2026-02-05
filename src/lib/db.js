@@ -47,6 +47,19 @@ db.exec(`
     notified_at TEXT,
     notify_error TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS agent_messages (
+    id TEXT PRIMARY KEY,
+    from_agent TEXT NOT NULL,
+    to_agent TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    rejection_reason TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at TEXT,
+    delivered_at TEXT,
+    read_at TEXT
+  );
 `);
 
 // Migrate write_queue table to add notification columns
@@ -71,19 +84,23 @@ try {
 }
 
 // Initialize api_keys table with migration support for old schema
-// Old schema had: id, name, key, created_at
-// New schema has: id, name, key_prefix, key_hash, created_at
+// Schema evolution:
+// v1: id, name, key, created_at
+// v2: id, name, key_prefix, key_hash, created_at
+// v3: + webhook_url, webhook_token (for agent configurations)
 try {
   const tableInfo = db.prepare('PRAGMA table_info(api_keys)').all();
 
   if (tableInfo.length === 0) {
-    // Table doesn't exist, create with new schema
+    // Table doesn't exist, create with latest schema
     db.exec(`
       CREATE TABLE api_keys (
         id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
+        name TEXT NOT NULL UNIQUE,
         key_prefix TEXT NOT NULL,
         key_hash TEXT NOT NULL,
+        webhook_url TEXT,
+        webhook_token TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -99,22 +116,46 @@ try {
         DROP TABLE api_keys;
         CREATE TABLE api_keys (
           id TEXT PRIMARY KEY,
-          name TEXT NOT NULL,
+          name TEXT NOT NULL UNIQUE,
           key_prefix TEXT NOT NULL,
           key_hash TEXT NOT NULL,
+          webhook_url TEXT,
+          webhook_token TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `);
       console.log('Migration complete.');
+    } else {
+      // Check if we need to add webhook columns (v2 -> v3 migration)
+      const hasWebhookUrl = tableInfo.some(col => col.name === 'webhook_url');
+      if (!hasWebhookUrl) {
+        console.log('Adding webhook columns to api_keys table...');
+        db.exec(`
+          ALTER TABLE api_keys ADD COLUMN webhook_url TEXT;
+          ALTER TABLE api_keys ADD COLUMN webhook_token TEXT;
+        `);
+        console.log('Webhook columns added.');
+      }
     }
-    // else: table exists with new schema, nothing to do
   }
 } catch (err) {
   console.error('Error initializing api_keys table:', err.message);
 }
 
 // API Keys
+
+// Check if an agent name already exists (case-insensitive)
+export function agentNameExists(name) {
+  const result = db.prepare('SELECT id FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+  return !!result;
+}
+
 export async function createApiKey(name) {
+  // Check for duplicate names (case-insensitive)
+  if (agentNameExists(name)) {
+    throw new Error(`An agent with name "${name}" already exists (names are case-insensitive)`);
+  }
+
   const id = nanoid();
   const key = `rms_${nanoid(32)}`;
   const keyPrefix = key.substring(0, 8) + '...' + key.substring(key.length - 4);
@@ -124,11 +165,24 @@ export async function createApiKey(name) {
 }
 
 export function listApiKeys() {
-  return db.prepare('SELECT id, name, key_prefix, created_at FROM api_keys').all();
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys').all();
+}
+
+export function getApiKeyByName(name) {
+  // Case-insensitive lookup
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+}
+
+export function getApiKeyById(id) {
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys WHERE id = ?').get(id);
 }
 
 export function deleteApiKey(id) {
   return db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
+}
+
+export function updateAgentWebhook(id, webhookUrl, webhookToken) {
+  return db.prepare('UPDATE api_keys SET webhook_url = ?, webhook_token = ? WHERE id = ?').run(webhookUrl || null, webhookToken || null, id);
 }
 
 export async function validateApiKey(key) {
@@ -137,7 +191,7 @@ export async function validateApiKey(key) {
   for (const row of allKeys) {
     const match = await bcrypt.compare(key, row.key_hash);
     if (match) {
-      return { id: row.id, name: row.name };
+      return { id: row.id, name: row.name, webhookUrl: row.webhook_url, webhookToken: row.webhook_token };
     }
   }
   return null;
@@ -380,6 +434,126 @@ export function listQueueEntriesBySubmitter(submittedBy, service = null, account
   sql += ' ORDER BY submitted_at DESC';
 
   return db.prepare(sql).all(params);
+}
+
+// Agent Messaging
+
+// Get messaging mode: 'off', 'supervised', 'open'
+export function getMessagingMode() {
+  const setting = getSetting('agent_messaging');
+  return setting?.mode || 'off';
+}
+
+export function setMessagingMode(mode) {
+  if (!['off', 'supervised', 'open'].includes(mode)) {
+    throw new Error('Invalid messaging mode');
+  }
+  setSetting('agent_messaging', { mode });
+}
+
+export function createAgentMessage(fromAgent, toAgent, message) {
+  const id = nanoid();
+  const mode = getMessagingMode();
+
+  if (mode === 'off') {
+    throw new Error('Agent messaging is disabled');
+  }
+
+  // In open mode, messages are delivered immediately
+  const status = mode === 'open' ? 'delivered' : 'pending';
+  const deliveredAt = mode === 'open' ? new Date().toISOString() : null;
+
+  db.prepare(`
+    INSERT INTO agent_messages (id, from_agent, to_agent, message, status, delivered_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, fromAgent, toAgent, message, status, deliveredAt);
+
+  return { id, status };
+}
+
+export function getAgentMessage(id) {
+  return db.prepare('SELECT * FROM agent_messages WHERE id = ?').get(id);
+}
+
+// Get messages for a specific agent (recipient)
+export function getMessagesForAgent(agentName, unreadOnly = false) {
+  let sql = `
+    SELECT * FROM agent_messages
+    WHERE to_agent = ? AND status = 'delivered'
+  `;
+  if (unreadOnly) {
+    sql += ' AND read_at IS NULL';
+  }
+  sql += ' ORDER BY created_at DESC';
+  return db.prepare(sql).all(agentName);
+}
+
+// Mark message as read
+export function markMessageRead(id, agentName) {
+  return db.prepare(`
+    UPDATE agent_messages
+    SET read_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND to_agent = ? AND read_at IS NULL
+  `).run(id, agentName);
+}
+
+// Admin: list pending messages (for supervised mode)
+export function listPendingMessages() {
+  return db.prepare(`
+    SELECT * FROM agent_messages
+    WHERE status = 'pending'
+    ORDER BY created_at DESC
+  `).all();
+}
+
+// Admin: approve message
+export function approveAgentMessage(id) {
+  return db.prepare(`
+    UPDATE agent_messages
+    SET status = 'delivered', reviewed_at = CURRENT_TIMESTAMP, delivered_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND status = 'pending'
+  `).run(id);
+}
+
+// Admin: reject message
+export function rejectAgentMessage(id, reason) {
+  return db.prepare(`
+    UPDATE agent_messages
+    SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP, rejection_reason = ?
+    WHERE id = ? AND status = 'pending'
+  `).run(reason || 'No reason provided', id);
+}
+
+// Admin: list all messages (for UI)
+export function listAgentMessages(status = null) {
+  if (status) {
+    return db.prepare('SELECT * FROM agent_messages WHERE status = ? ORDER BY created_at DESC').all(status);
+  }
+  return db.prepare('SELECT * FROM agent_messages ORDER BY created_at DESC').all();
+}
+
+// Admin: delete message
+export function deleteAgentMessage(id) {
+  return db.prepare('DELETE FROM agent_messages WHERE id = ?').run(id);
+}
+
+// Admin: clear messages by status
+export function clearAgentMessagesByStatus(status) {
+  if (status === 'all') {
+    return db.prepare("DELETE FROM agent_messages WHERE status IN ('delivered', 'rejected')").run();
+  }
+  return db.prepare('DELETE FROM agent_messages WHERE status = ?').run(status);
+}
+
+// Get counts for message queue
+export function getMessageCounts() {
+  const rows = db.prepare('SELECT status, COUNT(*) as count FROM agent_messages GROUP BY status').all();
+  const counts = { all: 0, pending: 0, delivered: 0, rejected: 0 };
+  for (const row of rows) {
+    counts[row.status] = row.count;
+    counts.all += row.count;
+  }
+  return counts;
 }
 
 export default db;
