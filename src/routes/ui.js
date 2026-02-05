@@ -4,13 +4,11 @@ import {
   setAdminPassword, verifyAdminPassword, hasAdminPassword,
   listQueueEntries, getQueueEntry, updateQueueStatus, clearQueueByStatus, deleteQueueEntry, getPendingQueueCount, getQueueCounts,
   listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById,
-  listUnnotifiedEntries,
   getMessagingMode, setMessagingMode, listPendingMessages, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage
 } from '../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
-import { notifyClawdbot, retryNotification } from '../lib/notifier.js';
 import { notifyAgentMessage, notifyMessageRejected, notifyAgentQueueStatus } from '../lib/agentNotifier.js';
 import { registerAllRoutes, renderAllCards } from './ui/index.js';
 
@@ -126,11 +124,10 @@ router.get('/', (req, res) => {
   const hsyncUrl = getHsyncUrl();
   const hsyncConnected = isHsyncConnected();
   const pendingQueueCount = getPendingQueueCount();
-  const notificationsConfig = getSetting('notifications');
   const messagingMode = getMessagingMode();
   const pendingMessagesCount = listPendingMessages().length;
 
-  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, messagingMode, pendingMessagesCount }));
+  res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }));
 });
 
 // Register all service routes (github, bluesky, reddit, etc.)
@@ -157,78 +154,9 @@ router.post('/hsync/delete', async (req, res) => {
   res.redirect('/ui');
 });
 
-// Notification settings
-router.post('/notifications/setup', (req, res) => {
-  const { url, token, events } = req.body;
-  if (!url) {
-    return res.status(400).send('Webhook URL required');
-  }
+// Notification settings removed - using agent-specific webhooks
 
-  // Parse events - could be comma-separated string or array
-  let eventList = ['completed', 'failed'];
-  if (events) {
-    eventList = Array.isArray(events) ? events : events.split(',').map(e => e.trim());
-  }
 
-  setSetting('notifications', {
-    clawdbot: {
-      enabled: true,
-      url: url.replace(/\/$/, ''),
-      token: token || '',
-      events: eventList,
-      retryAttempts: 3,
-      retryDelayMs: 5000
-    }
-  });
-  res.redirect('/ui');
-});
-
-router.post('/notifications/delete', (req, res) => {
-  deleteSetting('notifications');
-  res.redirect('/ui');
-});
-
-router.post('/notifications/test', async (req, res) => {
-  const wantsJson = req.headers.accept?.includes('application/json');
-  const config = getSetting('notifications');
-
-  if (!config?.clawdbot?.enabled || !config.clawdbot.url || !config.clawdbot.token) {
-    const error = 'Notifications not configured';
-    return wantsJson
-      ? res.status(400).json({ success: false, error })
-      : res.status(400).send(error);
-  }
-
-  try {
-    const response = await fetch(config.clawdbot.url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${config.clawdbot.token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        text: '🧪 [agentgate] Test notification - webhook is working!',
-        mode: 'now'
-      })
-    });
-
-    if (response.ok) {
-      return wantsJson
-        ? res.json({ success: true })
-        : res.redirect('/ui?notification_test=success');
-    } else {
-      const text = await response.text().catch(() => '');
-      const error = `HTTP ${response.status}: ${text.substring(0, 100)}`;
-      return wantsJson
-        ? res.status(400).json({ success: false, error })
-        : res.redirect('/ui?notification_test=failed');
-    }
-  } catch (err) {
-    return wantsJson
-      ? res.status(500).json({ success: false, error: err.message })
-      : res.redirect('/ui?notification_test=failed');
-  }
-});
 
 // Agent Messaging settings
 router.post('/messaging/mode', (req, res) => {
@@ -354,8 +282,7 @@ router.get('/queue', (req, res) => {
     entries = listQueueEntries(filter);
   }
   const counts = getQueueCounts();
-  const unnotified = listUnnotifiedEntries();
-  res.send(renderQueuePage(entries, filter, counts, unnotified.length));
+  res.send(renderQueuePage(entries, filter, counts));
 });
 
 router.post('/queue/:id/approve', async (req, res) => {
@@ -417,9 +344,6 @@ router.post('/queue/:id/reject', async (req, res) => {
   notifyAgentQueueStatus(updated).catch(err => {
     console.error('[agentNotifier] Failed to notify agent:', err.message);
   });
-  notifyClawdbot(updated).catch(err => {
-    console.error('[notifier] Failed to notify Clawdbot:', err.message);
-  });
 
   const counts = getQueueCounts();
 
@@ -475,35 +399,15 @@ router.post('/queue/:id/notify', async (req, res) => {
   const { id } = req.params;
   const wantsJson = req.headers.accept?.includes('application/json');
 
-  const result = await retryNotification(id, getQueueEntry);
   const updated = getQueueEntry(id);
 
   if (wantsJson) {
-    return res.json({ success: result.success, error: result.error, entry: updated });
+    return res.json({ success: true, entry: updated });
   }
   res.redirect('/ui/queue');
 });
 
-// Retry all failed notifications
-router.post('/queue/notify-all', async (req, res) => {
-  const wantsJson = req.headers.accept?.includes('application/json');
-  const unnotified = listUnnotifiedEntries();
 
-  if (unnotified.length === 0) {
-    return wantsJson
-      ? res.json({ success: true, count: 0 })
-      : res.redirect('/ui/queue');
-  }
-
-  // Batch into single notification
-  const { notifyClawdbotBatch } = await import('../lib/notifier.js');
-  const result = await notifyClawdbotBatch(unnotified);
-
-  if (wantsJson) {
-    return res.json({ success: result.success, error: result.error, count: unnotified.length });
-  }
-  res.redirect('/ui/queue');
-});
 
 // API Keys Management
 router.get('/keys', (req, res) => {
@@ -580,8 +484,7 @@ router.delete('/keys/:id', (req, res) => {
 
 // HTML Templates
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, notificationsConfig, messagingMode, pendingMessagesCount }) {
-  const clawdbotConfig = notificationsConfig?.clawdbot;
+function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -698,61 +601,6 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
   </div>
 
   <div class="card">
-    <details ${clawdbotConfig?.enabled ? 'open' : ''}>
-      <summary>Clawdbot Notifications ${clawdbotConfig?.enabled ? '<span class="status configured">Configured</span>' : ''}</summary>
-      <div style="margin-top: 16px;">
-        <div id="notification-feedback"></div>
-        ${clawdbotConfig?.enabled ? `
-          <p>Webhook URL: <strong>${clawdbotConfig.url}</strong></p>
-          <p>Events: <code>${(clawdbotConfig.events || ['completed', 'failed']).join(', ')}</code></p>
-          <div style="display: flex; gap: 8px; margin-top: 12px;">
-            <button type="button" class="btn-primary btn-sm" id="test-notification-btn" onclick="testNotification()">Send Test</button>
-            <form method="POST" action="/ui/notifications/delete" style="margin: 0;">
-              <button type="submit" class="btn-danger btn-sm">Disable</button>
-            </form>
-          </div>
-          <script>
-            async function testNotification() {
-              const btn = document.getElementById('test-notification-btn');
-              const feedback = document.getElementById('notification-feedback');
-              btn.disabled = true;
-              btn.textContent = 'Sending...';
-              feedback.innerHTML = '';
-              
-              try {
-                const res = await fetch('/ui/notifications/test', {
-                  method: 'POST',
-                  headers: { 'Accept': 'application/json' }
-                });
-                const data = await res.json();
-                
-                if (data.success) {
-                  feedback.innerHTML = '<div class="success-message" style="margin-bottom: 16px;">✓ Test notification sent!</div>';
-                } else {
-                  feedback.innerHTML = '<div class="error-message" style="margin-bottom: 16px;">✗ ' + (data.error || 'Failed to send') + '</div>';
-                }
-              } catch (err) {
-                feedback.innerHTML = '<div class="error-message" style="margin-bottom: 16px;">✗ ' + err.message + '</div>';
-              }
-              
-              btn.disabled = false;
-              btn.textContent = 'Send Test';
-            }
-          </script>
-        ` : `
-          <p class="help">Send notifications to <a href="https://docs.clawd.bot" target="_blank">Clawdbot</a> when queue items are completed, failed, or rejected.</p>
-          <form method="POST" action="/ui/notifications/setup">
-            <label>Webhook URL</label>
-            <input type="text" name="url" placeholder="https://your-gateway.example.com/hooks/wake" required>
-            <label>Token</label>
-            <input type="password" name="token" placeholder="Clawdbot hooks token" required>
-            <label>Events (comma-separated)</label>
-            <input type="text" name="events" placeholder="completed, failed, rejected" value="completed, failed, rejected">
-            <button type="submit" class="btn-primary">Enable Notifications</button>
-          </form>
-        `}
-      </div>
-    </details>
   </div>
 </body>
 </html>`;
@@ -807,7 +655,7 @@ function renderSetupPasswordPage(error = '') {
 </html>`;
 }
 
-function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
+function renderQueuePage(entries, filter, counts = 0) {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1129,7 +977,7 @@ function renderQueuePage(entries, filter, counts, unnotifiedCount = 0) {
   <div class="filter-bar" id="filter-bar">
     ${filterLinks}
     <div class="clear-section">
-      ${unnotifiedCount > 0 ? `<button type="button" class="btn-sm btn-primary" onclick="retryAllNotifications()" id="retry-all-btn">Retry ${unnotifiedCount} Notification${unnotifiedCount > 1 ? 's' : ''}</button>` : ''}
+      
       ${filter === 'completed' && counts.completed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'completed\')">Clear Completed</button>' : ''}
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}

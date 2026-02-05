@@ -1,5 +1,4 @@
 import { getAccountCredentials, setAccountCredentials, updateQueueStatus, getQueueEntry } from './db.js';
-import { notifyClawdbot } from './notifier.js';
 import { notifyAgentQueueStatus } from './agentNotifier.js';
 
 // Service base URLs
@@ -280,9 +279,6 @@ function finalizeEntry(entryId, status, results) {
   const updatedEntry = getQueueEntry(entryId);
   notifyAgentQueueStatus(updatedEntry).catch(err => {
     console.error('[agentNotifier] Failed to notify agent:', err.message);
-  });
-  notifyClawdbot(updatedEntry).catch(err => {
-    console.error('[notifier] Failed to notify Clawdbot:', err.message);
   });
 }
 
