@@ -737,6 +737,13 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
           el.textContent = new Date(utc).toLocaleString();
         }
       });
+      // Localize title attributes with UTC dates
+      document.querySelectorAll('.utc-title').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.title = 'Notified at ' + new Date(utc).toLocaleString();
+        }
+      });
     });
   </script>
 </head>
@@ -1006,7 +1013,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
     let notificationSection = '';
     if (['completed', 'failed', 'rejected'].includes(entry.status)) {
       const notifyStatus = entry.notified
-        ? `<span class="notify-status notify-sent" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
+        ? `<span class="notify-status notify-sent utc-title" data-utc="${entry.notified_at}" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
         : entry.notify_error
           ? `<span class="notify-status notify-failed" title="${escapeHtml(entry.notify_error)}">⚠ Notify failed</span>`
           : '<span class="notify-status notify-pending">— Not notified</span>';
@@ -1617,6 +1624,13 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
         const utc = el.dataset.utc;
         if (utc) {
           el.textContent = new Date(utc).toLocaleString();
+        }
+      });
+      // Localize title attributes with UTC dates
+      document.querySelectorAll('.utc-title').forEach(function(el) {
+        const utc = el.dataset.utc;
+        if (utc) {
+          el.title = 'Notified at ' + new Date(utc).toLocaleString();
         }
       });
     });
