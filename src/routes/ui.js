@@ -197,7 +197,9 @@ router.get('/messages', (req, res) => {
   }
   const counts = getMessageCounts();
   const mode = getMessagingMode();
-  res.send(renderMessagesPage(messages, filter, counts, mode));
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  res.send(renderMessagesPage(messages, filter, counts, mode, pendingQueueCount, pendingMessagesCount));
 });
 
 router.post('/messages/:id/approve', async (req, res) => {
@@ -314,6 +316,8 @@ router.post('/broadcast', async (req, res) => {
   }
 
   const mode = getMessagingMode();
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
   if (mode === 'off') {
     if (wantsJson) {
       return res.status(403).json({ error: 'Agent messaging is disabled' });
@@ -385,7 +389,10 @@ router.get('/queue', (req, res) => {
     entries = listQueueEntries(filter);
   }
   const counts = getQueueCounts();
-  res.send(renderQueuePage(entries, filter, counts));
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
+  res.send(renderQueuePage(entries, filter, counts, pendingQueueCount, pendingMessagesCount, messagingMode));
 });
 
 router.post('/queue/:id/approve', async (req, res) => {
@@ -415,6 +422,9 @@ router.post('/queue/:id/approve', async (req, res) => {
 
   const updated = getQueueEntry(id);
   const counts = getQueueCounts();
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -452,6 +462,9 @@ router.post('/queue/:id/reject', async (req, res) => {
   });
 
   const counts = getQueueCounts();
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -476,6 +489,9 @@ router.post('/queue/clear', (req, res) => {
 
   clearQueueByStatus(status || 'all');
   const counts = getQueueCounts();
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -499,6 +515,9 @@ router.delete('/queue/:id', (req, res) => {
 
   deleteQueueEntry(id);
   const counts = getQueueCounts();
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -527,7 +546,10 @@ router.post('/queue/:id/notify', async (req, res) => {
 // API Keys Management
 router.get('/keys', (req, res) => {
   const keys = listApiKeys();
-  res.send(renderKeysPage(keys));
+  const pendingQueueCount = getPendingQueueCount();
+  const pendingMessagesCount = listPendingMessages().length;
+  const messagingMode = getMessagingMode();
+  res.send(renderKeysPage(keys, null, null, pendingQueueCount, pendingMessagesCount, messagingMode));
 });
 
 router.post('/keys/create', async (req, res) => {
@@ -841,7 +863,7 @@ function renderSetupPasswordPage(error = '') {
 </html>`;
 }
 
-function renderQueuePage(entries, filter, counts = 0) {
+function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off') {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -975,6 +997,7 @@ function renderQueuePage(entries, filter, counts = 0) {
   <title>agentgate - Write Queue</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
+  <script src="/socket.io/socket.io.js"></script>
   <style>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link {
@@ -1163,8 +1186,14 @@ function renderQueuePage(entries, filter, counts = 0) {
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
-      <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
+      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
+        Write Queue
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
+      </a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+        Messages
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+      </a>
       <div class="nav-divider"></div>
       <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" >⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
@@ -1480,11 +1509,40 @@ function renderQueuePage(entries, filter, counts = 0) {
       }
     }
   </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const socket = io();
+      socket.on('counts', function(data) {
+        const queueBadge = document.getElementById('queue-badge');
+        if (queueBadge) {
+          if (data.queue.pending > 0) {
+            queueBadge.textContent = data.queue.pending;
+            queueBadge.style.display = '';
+          } else {
+            queueBadge.style.display = 'none';
+          }
+        }
+        const msgBadge = document.getElementById('messages-badge');
+        if (msgBadge) {
+          if (data.messages.pending > 0) {
+            msgBadge.textContent = data.messages.pending;
+            msgBadge.style.display = '';
+          } else {
+            msgBadge.style.display = 'none';
+          }
+        }
+        const msgNav = document.getElementById('messages-nav');
+        if (msgNav) {
+          msgNav.style.display = data.messagingEnabled ? '' : 'none';
+        }
+      });
+    });
+  </script>
 </body>
 </html>`;
 }
 
-function renderMessagesPage(messages, filter, counts, mode) {
+function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 0, pendingMessagesCount = 0) {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = String(str);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1561,6 +1619,7 @@ function renderMessagesPage(messages, filter, counts, mode) {
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
   <style>
+  <script src="/socket.io/socket.io.js"></script>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link {
       padding: 10px 20px;
@@ -1681,8 +1740,14 @@ function renderMessagesPage(messages, filter, counts, mode) {
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
-      <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
+      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
+        Write Queue
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
+      </a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+        Messages
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+      </a>
       <div class="nav-divider"></div>
       <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" >⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
@@ -1938,11 +2003,40 @@ function renderMessagesPage(messages, filter, counts, mode) {
       }
     }
   </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const socket = io();
+      socket.on('counts', function(data) {
+        const queueBadge = document.getElementById('queue-badge');
+        if (queueBadge) {
+          if (data.queue.pending > 0) {
+            queueBadge.textContent = data.queue.pending;
+            queueBadge.style.display = '';
+          } else {
+            queueBadge.style.display = 'none';
+          }
+        }
+        const msgBadge = document.getElementById('messages-badge');
+        if (msgBadge) {
+          if (data.messages.pending > 0) {
+            msgBadge.textContent = data.messages.pending;
+            msgBadge.style.display = '';
+          } else {
+            msgBadge.style.display = 'none';
+          }
+        }
+        const msgNav = document.getElementById('messages-nav');
+        if (msgNav) {
+          msgNav.style.display = data.messagingEnabled ? '' : 'none';
+        }
+      });
+    });
+  </script>
 </body>
 </html>`;
 }
 
-function renderKeysPage(keys, error = null, newKey = null) {
+function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off') {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -1980,6 +2074,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
   <style>
+  <script src="/socket.io/socket.io.js"></script>
     .keys-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
     .keys-table th, .keys-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }
     .keys-table th { font-weight: 600; color: #9ca3af; font-size: 14px; }
@@ -2017,8 +2112,14 @@ function renderKeysPage(keys, error = null, newKey = null) {
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/queue" class="nav-btn nav-btn-default">Write Queue</a>
-      <a href="/ui/messages" class="nav-btn nav-btn-default">Messages</a>
+      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
+        Write Queue
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
+      </a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+        Messages
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+      </a>
       <div class="nav-divider"></div>
       <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" >⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
@@ -2189,6 +2290,35 @@ function renderKeysPage(keys, error = null, newKey = null) {
         alert('Error: ' + err.message);
       }
     }
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const socket = io();
+      socket.on('counts', function(data) {
+        const queueBadge = document.getElementById('queue-badge');
+        if (queueBadge) {
+          if (data.queue.pending > 0) {
+            queueBadge.textContent = data.queue.pending;
+            queueBadge.style.display = '';
+          } else {
+            queueBadge.style.display = 'none';
+          }
+        }
+        const msgBadge = document.getElementById('messages-badge');
+        if (msgBadge) {
+          if (data.messages.pending > 0) {
+            msgBadge.textContent = data.messages.pending;
+            msgBadge.style.display = '';
+          } else {
+            msgBadge.style.display = 'none';
+          }
+        }
+        const msgNav = document.getElementById('messages-nav');
+        if (msgNav) {
+          msgNav.style.display = data.messagingEnabled ? '' : 'none';
+        }
+      });
+    });
   </script>
 </body>
 </html>`;
