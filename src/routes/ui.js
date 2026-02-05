@@ -316,8 +316,8 @@ router.post('/broadcast', async (req, res) => {
   }
 
   const mode = getMessagingMode();
-  const pendingQueueCount = getPendingQueueCount();
-  const pendingMessagesCount = listPendingMessages().length;
+  const _pendingQueueCount = getPendingQueueCount();
+  const _pendingMessagesCount = listPendingMessages().length;
   if (mode === 'off') {
     if (wantsJson) {
       return res.status(403).json({ error: 'Agent messaging is disabled' });
@@ -422,9 +422,9 @@ router.post('/queue/:id/approve', async (req, res) => {
 
   const updated = getQueueEntry(id);
   const counts = getQueueCounts();
-  const pendingQueueCount = getPendingQueueCount();
-  const pendingMessagesCount = listPendingMessages().length;
-  const messagingMode = getMessagingMode();
+  const _pendingQueueCount = getPendingQueueCount();
+  const _pendingMessagesCount = listPendingMessages().length;
+  const _messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -462,9 +462,9 @@ router.post('/queue/:id/reject', async (req, res) => {
   });
 
   const counts = getQueueCounts();
-  const pendingQueueCount = getPendingQueueCount();
-  const pendingMessagesCount = listPendingMessages().length;
-  const messagingMode = getMessagingMode();
+  const _pendingQueueCount = getPendingQueueCount();
+  const _pendingMessagesCount = listPendingMessages().length;
+  const _messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -489,9 +489,9 @@ router.post('/queue/clear', (req, res) => {
 
   clearQueueByStatus(status || 'all');
   const counts = getQueueCounts();
-  const pendingQueueCount = getPendingQueueCount();
-  const pendingMessagesCount = listPendingMessages().length;
-  const messagingMode = getMessagingMode();
+  const _pendingQueueCount = getPendingQueueCount();
+  const _pendingMessagesCount = listPendingMessages().length;
+  const _messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
@@ -515,9 +515,9 @@ router.delete('/queue/:id', (req, res) => {
 
   deleteQueueEntry(id);
   const counts = getQueueCounts();
-  const pendingQueueCount = getPendingQueueCount();
-  const pendingMessagesCount = listPendingMessages().length;
-  const messagingMode = getMessagingMode();
+  const _pendingQueueCount = getPendingQueueCount();
+  const _pendingMessagesCount = listPendingMessages().length;
+  const _messagingMode = getMessagingMode();
 
   // Emit real-time update
   emitCountUpdate();
