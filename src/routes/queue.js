@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled } from '../lib/db.js';
 
 const router = Router();
 
@@ -88,10 +88,14 @@ router.post('/:service/:accountName/submit', (req, res) => {
 router.get('/list', (req, res) => {
   try {
     const submittedBy = req.apiKeyInfo?.name || 'unknown';
-    const entries = listQueueEntriesBySubmitter(submittedBy);
+    const sharedVisibility = getSharedQueueVisibility();
+    const entries = sharedVisibility 
+      ? listAllQueueEntries() 
+      : listQueueEntriesBySubmitter(submittedBy);
 
     res.json({
       count: entries.length,
+      shared_visibility: sharedVisibility,
       entries: entries
     });
   } catch (error) {
@@ -115,10 +119,14 @@ router.get('/:service/:accountName/list', (req, res) => {
       });
     }
 
-    const entries = listQueueEntriesBySubmitter(submittedBy, service, accountName);
+    const sharedVisibility = getSharedQueueVisibility();
+    const entries = sharedVisibility 
+      ? listAllQueueEntries(service, accountName) 
+      : listQueueEntriesBySubmitter(submittedBy, service, accountName);
 
     res.json({
       count: entries.length,
+      shared_visibility: sharedVisibility,
       entries: entries
     });
   } catch (error) {
@@ -178,6 +186,66 @@ router.get('/:service/:accountName/status/:id', (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to get status',
+      message: error.message
+    });
+  }
+});
+
+
+// Withdraw a pending queue item (agent can only withdraw their own submissions)
+// DELETE /api/queue/:service/:accountName/status/:id
+router.delete('/:service/:accountName/status/:id', (req, res) => {
+  try {
+    // Check if withdraw is enabled
+    if (!getAgentWithdrawEnabled()) {
+      return res.status(403).json({
+        error: 'Disabled',
+        message: 'Agent withdraw is not enabled. Ask admin to enable agent_withdraw_enabled setting.'
+      });
+    }
+
+    const { id } = req.params;
+    const agentName = req.agentName; // Set by auth middleware
+
+    const entry = getQueueEntry(id);
+
+    if (!entry) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Queue entry not found'
+      });
+    }
+
+    // Verify the requesting agent is the submitter
+    if (entry.submitted_by !== agentName) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only withdraw your own submissions'
+      });
+    }
+
+    // Only allow withdrawal of pending items
+    if (entry.status !== 'pending') {
+      return res.status(400).json({
+        error: 'Cannot withdraw',
+        message: `Cannot withdraw entry with status "${entry.status}". Only pending items can be withdrawn.`
+      });
+    }
+
+    // Update status to withdrawn
+    updateQueueStatus(id, 'withdrawn', { 
+      reviewed_at: new Date().toISOString().replace('T', ' ').replace('Z', '')
+    });
+
+    res.json({
+      success: true,
+      message: 'Queue entry withdrawn',
+      id: id
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to withdraw',
       message: error.message
     });
   }

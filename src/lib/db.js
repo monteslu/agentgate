@@ -560,3 +560,45 @@ export function getMessageCounts() {
 }
 
 export default db;
+
+// Shared Queue Visibility helpers
+export function getSharedQueueVisibility() {
+  return getSetting('shared_queue_visibility') === true;
+}
+
+export function setSharedQueueVisibility(enabled) {
+  setSetting('shared_queue_visibility', enabled);
+}
+
+// List all queue entries (for shared visibility mode)
+export function listAllQueueEntries(service = null, accountName = null) {
+  let sql = 'SELECT * FROM write_queue';
+  const params = [];
+  
+  if (service && accountName) {
+    sql += ' WHERE service = ? AND account_name = ?';
+    params.push(service, accountName);
+  } else if (service) {
+    sql += ' WHERE service = ?';
+    params.push(service);
+  }
+  
+  sql += ' ORDER BY submitted_at DESC';
+  
+  const rows = db.prepare(sql).all(...params);
+  return rows.map(row => ({
+    ...row,
+    requests: JSON.parse(row.requests),
+    results: row.results ? JSON.parse(row.results) : null,
+    notified: Boolean(row.notified)
+  }));
+}
+
+// Agent Withdraw helpers
+export function getAgentWithdrawEnabled() {
+  return getSetting('agent_withdraw_enabled') === true;
+}
+
+export function setAgentWithdrawEnabled(enabled) {
+  setSetting('agent_withdraw_enabled', enabled);
+}
