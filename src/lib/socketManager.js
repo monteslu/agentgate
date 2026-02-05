@@ -1,5 +1,5 @@
 import { Server } from 'socket.io';
-import { getQueueCounts, getMessageCounts, getPendingQueueCount, getMessagingMode } from './db.js';
+import { getQueueCounts, getMessageCounts, getMessagingMode } from './db.js';
 
 let io = null;
 
