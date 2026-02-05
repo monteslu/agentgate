@@ -9,6 +9,7 @@ import {
   getApiKeyByName
 } from '../lib/db.js';
 import { notifyAgentMessage } from '../lib/agentNotifier.js';
+import { emitCountUpdate } from '../lib/socketManager.js';
 
 const router = Router();
 
@@ -62,6 +63,9 @@ router.post('/message', async (req, res) => {
   try {
     // Use canonical recipient name from database
     const result = createAgentMessage(fromAgent, recipientName, message);
+
+    // Emit real-time update
+    emitCountUpdate();
 
     if (mode === 'supervised') {
       return res.json({
