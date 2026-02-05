@@ -285,6 +285,80 @@ router.post('/messages/clear', (req, res) => {
   res.redirect('/ui/messages');
 });
 
+// Broadcast message to all agents
+router.post('/broadcast', async (req, res) => {
+  const { message } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  if (!message || !message.trim()) {
+    if (wantsJson) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    return res.redirect('/ui/messages?broadcast_error=Message+is+required');
+  }
+
+  const mode = getMessagingMode();
+  if (mode === 'off') {
+    if (wantsJson) {
+      return res.status(403).json({ error: 'Agent messaging is disabled' });
+    }
+    return res.redirect('/ui/messages?broadcast_error=Messaging+disabled');
+  }
+
+  // Get all agents with webhooks
+  const apiKeys = listApiKeys();
+  const recipients = apiKeys.filter(k => k.webhook_url);
+
+  if (recipients.length === 0) {
+    if (wantsJson) {
+      return res.json({ delivered: [], failed: [], total: 0 });
+    }
+    return res.redirect('/ui/messages?broadcast_result=No+agents+with+webhooks');
+  }
+
+  const delivered = [];
+  const failed = [];
+
+  await Promise.all(recipients.map(async (agent) => {
+    const payload = {
+      type: 'broadcast',
+      from: 'admin',
+      message: message,
+      timestamp: new Date().toISOString(),
+      text: `📢 [agentgate] Broadcast from admin:\n${message.substring(0, 500)}`,
+      mode: 'now'
+    };
+
+    try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (agent.webhook_token) {
+        headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+      }
+
+      const response = await fetch(agent.webhook_url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        delivered.push(agent.name);
+      } else {
+        failed.push({ name: agent.name, error: `HTTP ${response.status}` });
+      }
+    } catch (err) {
+      failed.push({ name: agent.name, error: err.message });
+    }
+  }));
+
+  if (wantsJson) {
+    return res.json({ delivered, failed, total: recipients.length });
+  }
+
+  const resultMsg = `Delivered: ${delivered.length}, Failed: ${failed.length}`;
+  res.redirect(`/ui/messages?broadcast_result=${encodeURIComponent(resultMsg)}`);
+});
+
 // Write Queue Management
 router.get('/queue', (req, res) => {
   const filter = req.query.filter || 'all';
@@ -1543,6 +1617,30 @@ function renderMessagesPage(messages, filter, counts, mode) {
   </div>
   <p>Review and approve messages between agents${mode === 'supervised' ? ' (supervised mode)' : ''}.</p>
 
+  <!-- Broadcast Section -->
+  <div class="card" style="margin-bottom: 24px;">
+    <h3 style="margin-top: 0; display: flex; align-items: center; gap: 8px;">
+      <span>📢</span> Broadcast Message
+    </h3>
+    <p class="help" style="margin-bottom: 16px;">Send a message to all agents with webhooks configured.</p>
+    <form method="POST" action="/ui/broadcast" id="broadcast-form">
+      <textarea 
+        name="message" 
+        id="broadcast-message"
+        placeholder="Enter your broadcast message..." 
+        rows="3" 
+        style="width: 100%; margin-bottom: 12px; padding: 12px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #f3f4f6; font-family: inherit; resize: vertical;"
+        required
+      ></textarea>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <button type="submit" class="btn-primary" id="broadcast-btn">Send Broadcast</button>
+        <span id="broadcast-status" class="help" style="margin: 0;"></span>
+      </div>
+    </form>
+  </div>
+
+  <h3>Message Queue</h3>
+
   <div class="filter-bar" id="filter-bar">
     ${filterLinks}
     <div class="clear-section">
@@ -1565,6 +1663,47 @@ function renderMessagesPage(messages, filter, counts, mode) {
       if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
+
+    // Broadcast form handler
+    document.getElementById('broadcast-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('broadcast-btn');
+      const status = document.getElementById('broadcast-status');
+      const message = document.getElementById('broadcast-message').value;
+
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      status.textContent = '';
+
+      try {
+        const res = await fetch('/ui/broadcast', {
+          method: 'POST',
+          headers: { 
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded'
+          },
+          body: 'message=' + encodeURIComponent(message)
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          status.textContent = '❌ ' + data.error;
+          status.style.color = '#f87171';
+        } else {
+          const deliveredNames = data.delivered.join(', ') || 'none';
+          const failedCount = data.failed.length;
+          status.textContent = '✅ Delivered to: ' + deliveredNames + (failedCount > 0 ? ' | Failed: ' + failedCount : '');
+          status.style.color = '#34d399';
+          document.getElementById('broadcast-message').value = '';
+        }
+      } catch (err) {
+        status.textContent = '❌ Error: ' + err.message;
+        status.style.color = '#f87171';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Send Broadcast';
+    });
 
     async function approveMessage(id) {
       const btn = event.target;
