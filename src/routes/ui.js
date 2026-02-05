@@ -1707,8 +1707,8 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
   <title>agentgate - Agent Messages</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
-  <style>
   <script src="/socket.io/socket.io.js"></script>
+  <style>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link {
       padding: 10px 20px;
