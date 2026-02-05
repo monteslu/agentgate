@@ -2179,6 +2179,7 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
           <span class="webhook-status webhook-none">Not set</span>
         `}
         <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
+        ${k.webhook_url ? `<button type="button" class="btn-sm test-webhook-btn" data-name="${escapeHtml(k.name)}" style="margin-left: 4px;">Test</button>` : ''}
       </td>
       <td>${localDate(k.created_at)}</td>
       <td>
@@ -2342,6 +2343,52 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
     // Attach click handlers to webhook buttons
     document.querySelectorAll('.webhook-btn').forEach(btn => {
       btn.addEventListener('click', () => showWebhookModal(btn));
+    });
+
+    // Attach click handlers to test webhook buttons
+    document.querySelectorAll('.test-webhook-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const name = btn.dataset.name;
+        const originalText = btn.textContent;
+        btn.textContent = 'Testing...';
+        btn.disabled = true;
+
+        try {
+          const res = await fetch('/api/agents/' + encodeURIComponent(name) + '/test-webhook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const data = await res.json();
+
+          if (data.success) {
+            btn.textContent = '✓ OK';
+            btn.style.color = '#34d399';
+            setTimeout(() => {
+              btn.textContent = originalText;
+              btn.style.color = '';
+              btn.disabled = false;
+            }, 2000);
+          } else {
+            btn.textContent = '✗ ' + (data.status || 'Error');
+            btn.style.color = '#f87171';
+            alert('Webhook test failed: ' + data.message);
+            setTimeout(() => {
+              btn.textContent = originalText;
+              btn.style.color = '';
+              btn.disabled = false;
+            }, 2000);
+          }
+        } catch (err) {
+          btn.textContent = '✗ Error';
+          btn.style.color = '#f87171';
+          alert('Error: ' + err.message);
+          setTimeout(() => {
+            btn.textContent = originalText;
+            btn.style.color = '';
+            btn.disabled = false;
+          }, 2000);
+        }
+      });
     });
 
     document.getElementById('webhook-form').addEventListener('submit', async (e) => {
