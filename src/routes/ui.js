@@ -4,7 +4,6 @@ import {
   setAdminPassword, verifyAdminPassword, hasAdminPassword,
   listQueueEntries, getQueueEntry, updateQueueStatus, clearQueueByStatus, deleteQueueEntry, getPendingQueueCount, getQueueCounts,
   listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById,
-  listUnnotifiedEntries,
   getMessagingMode, setMessagingMode, listPendingMessages, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage
 } from '../lib/db.js';
