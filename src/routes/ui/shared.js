@@ -48,8 +48,10 @@ export function htmlHead(title, { includeSocket = false } = {}) {
 <html>
 <head>
   <title>agentgate - ${title}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
+  <link rel="stylesheet" href="/public/mobile.css">
   ${includeSocket ? '<script src="/socket.io/socket.io.js"></script>' : ''}
 </head>`;
 }
