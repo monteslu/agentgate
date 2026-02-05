@@ -123,7 +123,8 @@ router.get('/', (req, res) => {
   const hsyncConfig = getSetting('hsync');
   const hsyncUrl = getHsyncUrl();
   const hsyncConnected = isHsyncConnected();
-  const pendingQueueCount = getPendingQueueCount();  const messagingMode = getMessagingMode();
+  const pendingQueueCount = getPendingQueueCount();
+  const messagingMode = getMessagingMode();
   const pendingMessagesCount = listPendingMessages().length;
 
   res.send(renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }));
@@ -153,10 +154,11 @@ router.post('/hsync/delete', async (req, res) => {
   res.redirect('/ui');
 });
 
-// Notification settings
+// Notification settings removed - using agent-specific webhooks
 
 
 
+// Agent Messaging settings
 router.post('/messaging/mode', (req, res) => {
   const { mode } = req.body;
   try {
@@ -279,7 +281,8 @@ router.get('/queue', (req, res) => {
   } else {
     entries = listQueueEntries(filter);
   }
-  const counts = getQueueCounts();  res.send(renderQueuePage(entries, filter, counts));
+  const counts = getQueueCounts();
+  res.send(renderQueuePage(entries, filter, counts));
 });
 
 router.post('/queue/:id/approve', async (req, res) => {
@@ -341,7 +344,14 @@ router.post('/queue/:id/reject', async (req, res) => {
   notifyAgentQueueStatus(updated).catch(err => {
     console.error('[agentNotifier] Failed to notify agent:', err.message);
   });
-  
+
+  const counts = getQueueCounts();
+
+  if (wantsJson) {
+    return res.json({ success: true, entry: updated, counts });
+  }
+  res.redirect('/ui/queue');
+});
 
 router.post('/queue/clear', (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
@@ -380,6 +390,19 @@ router.delete('/queue/:id', (req, res) => {
 
   if (wantsJson) {
     return res.json({ success: true, counts });
+  }
+  res.redirect('/ui/queue');
+});
+
+// Retry notification for a specific queue entry
+router.post('/queue/:id/notify', async (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const updated = getQueueEntry(id);
+
+  if (wantsJson) {
+    return res.json({ success: true, entry: updated });
   }
   res.redirect('/ui/queue');
 });
@@ -462,7 +485,7 @@ router.delete('/keys/:id', (req, res) => {
 // HTML Templates
 
 function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount }) {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <title>agentgate - Admin</title>
@@ -577,7 +600,8 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
     </details>
   </div>
 
-  
+  <div class="card">
+  </div>
 </body>
 </html>`;
 }
@@ -631,7 +655,7 @@ function renderSetupPasswordPage(error = '') {
 </html>`;
 }
 
-function renderQueuePage(entries, filter, counts) {
+function renderQueuePage(entries, filter, counts = 0) {
   const escapeHtml = (str) => {
     if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -701,10 +725,28 @@ function renderQueuePage(entries, filter, counts) {
       `;
     }
 
-    
+    // Notification status (only show for completed/failed/rejected)
+    let notificationSection = '';
+    if (['completed', 'failed', 'rejected'].includes(entry.status)) {
+      const notifyStatus = entry.notified
+        ? `<span class="notify-status notify-sent" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
+        : entry.notify_error
+          ? `<span class="notify-status notify-failed" title="${escapeHtml(entry.notify_error)}">⚠ Notify failed</span>`
+          : '<span class="notify-status notify-pending">— Not notified</span>';
+
+      const retryBtn = !entry.notified
+        ? `<button type="button" class="btn-sm btn-link" onclick="retryNotify('${entry.id}')" id="retry-${entry.id}">Retry</button>`
+        : '';
+
+      notificationSection = `
+        <div class="notification-status" id="notify-status-${entry.id}">
+          ${notifyStatus} ${retryBtn}
+        </div>
+      `;
+    }
 
     return `
-      <div class="card queue-entry" id="entry-${entry.id}" data-status="${entry.status}">
+      <div class="card queue-entry" id="entry-${entry.id}" data-status="${entry.status}" data-notified="${entry.notified ? '1' : '0'}">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
@@ -730,7 +772,7 @@ function renderQueuePage(entries, filter, counts) {
         </details>
 
         ${resultSection}
-        
+        ${notificationSection}
         ${actions}
       </div>
     `;
@@ -883,7 +925,35 @@ function renderQueuePage(entries, filter, counts) {
       padding: 60px 40px;
     }
     .empty-state p { color: #6b7280; margin: 0; font-size: 16px; }
-        
+    .notification-status {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .notify-status {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .notify-sent {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .notify-failed {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .notify-pending {
+      background: rgba(156, 163, 175, 0.15);
+      color: #9ca3af;
+      border: 1px solid rgba(156, 163, 175, 0.3);
+    }
     .btn-link {
       background: none;
       border: none;
@@ -907,7 +977,7 @@ function renderQueuePage(entries, filter, counts) {
   <div class="filter-bar" id="filter-bar">
     ${filterLinks}
     <div class="clear-section">
-      ''</button>` : ''}
+      
       ${filter === 'completed' && counts.completed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'completed\')">Clear Completed</button>' : ''}
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
@@ -1126,7 +1196,88 @@ function renderQueuePage(entries, filter, counts) {
       }
     }
 
-    
+    function updateRetryAllButton() {
+      // Count remaining unnotified entries in DOM
+      const unnotified = document.querySelectorAll('.queue-entry[data-notified="0"]').length;
+      const btn = document.getElementById('retry-all-btn');
+      
+      if (unnotified === 0) {
+        if (btn) btn.remove();
+      } else if (btn) {
+        btn.textContent = 'Retry ' + unnotified + ' Notification' + (unnotified > 1 ? 's' : '');
+      }
+    }
+
+    async function retryAllNotifications() {
+      const btn = document.getElementById('retry-all-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      try {
+        const res = await fetch('/ui/queue/notify-all', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          // Refresh the page to show updated status
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to send notifications');
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Retry Notifications';
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Retry Notifications';
+        }
+      }
+    }
+
+    async function retryNotify(id) {
+      const btn = document.getElementById('retry-' + id);
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+      }
+
+      try {
+        const res = await fetch('/ui/queue/' + id + '/notify', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        const statusEl = document.getElementById('notify-status-' + id);
+        if (data.success && data.entry?.notified) {
+          // Update to show success
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="notify-status notify-sent">✓ Notified</span>';
+          }
+          const entryEl = document.getElementById('entry-' + id);
+          if (entryEl) entryEl.dataset.notified = '1';
+        } else {
+          // Show error
+          const error = data.error || 'Failed to send';
+          if (statusEl) {
+            statusEl.innerHTML = '<span class="notify-status notify-failed" title="' + escapeHtml(error) + '">⚠ Notify failed</span> <button type="button" class="btn-sm btn-link" onclick="retryNotify(\\''+id+'\\')">Retry</button>';
+          }
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Retry';
+        }
+      }
+    }
   </script>
 </body>
 </html>`;
