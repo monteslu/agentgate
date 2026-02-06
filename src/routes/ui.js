@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { join } from 'path';
+import { writeFileSync } from 'fs';
 import {
   listAccounts, getSetting, setSetting, deleteSetting,
   setAdminPassword, verifyAdminPassword, hasAdminPassword,
@@ -6,7 +8,8 @@ import {
   listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById,
   getMessagingMode, setMessagingMode, listPendingMessages, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage, clearAgentMessagesByStatus, getMessageCounts, getAgentMessage,
-  getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setAgentWithdrawEnabled
+  getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setAgentWithdrawEnabled,
+  getAvatarsDir, getAvatarFilename, deleteAgentAvatar
 } from '../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../lib/hsyncManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
@@ -22,6 +25,35 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 // Auth cookie settings
 const AUTH_COOKIE = 'rms_auth';
 const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 1 week
+
+// HTML escape helper (module-level)
+function escapeHtml(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Avatar helpers
+function stringToColor(str) {
+  if (!str) return '#6b7280';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 60%, 45%)`;
+}
+
+function renderAvatar(agentName, { size = 32, className = '' } = {}) {
+  if (!agentName) return '';
+  const safeName = escapeHtml(agentName);
+  const initial = agentName.charAt(0).toUpperCase();
+  const color = stringToColor(agentName);
+  
+  return `<span class="avatar ${className}" style="width: ${size}px; height: ${size}px; background-color: ${color};" data-agent="${safeName}">
+    <img src="/ui/keys/avatar/${encodeURIComponent(agentName)}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <span class="avatar-initials" style="display: none;">${initial}</span>
+  </span>`;
+}
 
 // Check if user is authenticated
 function isAuthenticated(req) {
@@ -725,6 +757,99 @@ router.delete('/keys/:id', (req, res) => {
 
   if (wantsJson) {
     return res.json({ success: true, keys });
+  }
+  res.redirect('/ui/keys');
+});
+
+// Avatar routes
+
+// Get avatar for an agent by name
+router.get('/keys/avatar/:name', (req, res) => {
+  const { name } = req.params;
+  const filename = getAvatarFilename(name);
+  
+  if (filename) {
+    const filepath = join(getAvatarsDir(), filename);
+    return res.sendFile(filepath);
+  }
+  
+  // Return 404 - client should handle with fallback/initials
+  res.status(404).send('Avatar not found');
+});
+
+// Upload avatar for an agent (by id)
+router.post('/keys/:id/avatar', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+  
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+  
+  if (!req.body || !req.body.avatar) {
+    return wantsJson
+      ? res.status(400).json({ error: 'No avatar data provided' })
+      : res.status(400).send('No avatar data provided');
+  }
+  
+  try {
+    const avatarData = req.body.avatar;
+    const matches = avatarData.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+    
+    if (!matches) {
+      return wantsJson
+        ? res.status(400).json({ error: 'Invalid image format. Use base64 data URI.' })
+        : res.status(400).send('Invalid image format');
+    }
+    
+    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    if (buffer.length > 500 * 1024) {
+      return wantsJson
+        ? res.status(400).json({ error: 'Avatar too large. Maximum size is 500KB.' })
+        : res.status(400).send('Avatar too large');
+    }
+    
+    deleteAgentAvatar(agent.name);
+    
+    const safeName = agent.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const avatarFilename = `${safeName}.${ext}`;
+    const filepath = join(getAvatarsDir(), avatarFilename);
+    writeFileSync(filepath, buffer);
+    
+    if (wantsJson) {
+      return res.json({ success: true, filename: avatarFilename, url: `/ui/keys/avatar/${encodeURIComponent(agent.name)}` });
+    }
+    res.redirect('/ui/keys');
+  } catch (err) {
+    console.error('Avatar upload error:', err);
+    return wantsJson
+      ? res.status(500).json({ error: 'Failed to save avatar' })
+      : res.status(500).send('Failed to save avatar');
+  }
+});
+
+// Delete avatar for an agent
+router.delete('/keys/:id/avatar', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+  
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+  
+  deleteAgentAvatar(agent.name);
+  
+  if (wantsJson) {
+    return res.json({ success: true });
   }
   res.redirect('/ui/keys');
 });
@@ -2231,7 +2356,17 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
 
   const renderKeyRow = (k) => `
     <tr id="key-${k.id}">
-      <td><strong>${escapeHtml(k.name)}</strong></td>
+      <td>
+        <div class="agent-with-avatar">
+          ${renderAvatar(k.name, { size: 32 })}
+          <div>
+            <strong>${escapeHtml(k.name)}</strong>
+            <div style="margin-top: 4px;">
+              <button type="button" class="btn-xs avatar-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}">Change Avatar</button>
+            </div>
+          </div>
+        </div>
+      </td>
       <td><code class="key-value">${escapeHtml(k.key_prefix)}</code></td>
       <td>
         ${k.webhook_url ? `
@@ -2282,6 +2417,14 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
     .modal input:focus { border-color: #6366f1; outline: none; }
     .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
     .modal .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
+    .agent-with-avatar { display: flex; align-items: center; gap: 12px; }
+    .avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-initials { font-weight: 600; color: white; font-size: 14px; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+    .btn-xs { font-size: 11px; padding: 2px 6px; background: #374151; color: #d1d5db; border: none; border-radius: 3px; cursor: pointer; }
+    .btn-xs:hover { background: #4b5563; }
+    .btn-danger { background: #dc2626; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; }
+    .btn-danger:hover { background: #b91c1c; }
   </style>
 </head>
 <body>
@@ -2377,6 +2520,33 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
           <button type="submit" class="btn-primary">Save Webhook</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Avatar Modal -->
+  <div id="avatar-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Avatar for <span id="avatar-agent-name"></span></h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
+        Upload an image (PNG, JPG, GIF, WebP). Max size: 500KB.
+      </p>
+      <input type="hidden" id="avatar-agent-id">
+      
+      <div id="avatar-preview-container" style="text-align: center; margin-bottom: 16px;">
+        <div id="avatar-preview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; background: #374151; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+          <span id="avatar-preview-text" style="color: #9ca3af;">No image</span>
+          <img id="avatar-preview-img" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+        </div>
+      </div>
+      
+      <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" style="margin-bottom: 16px; width: 100%;">
+      <p class="help-text">Select an image file to upload</p>
+      
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeAvatarModal()">Cancel</button>
+        <button type="button" id="avatar-delete-btn" class="btn-danger" onclick="deleteAvatar()" style="display: none;">Delete</button>
+        <button type="button" id="avatar-upload-btn" class="btn-primary" onclick="uploadAvatar()" disabled>Upload</button>
+      </div>
     </div>
   </div>
 
@@ -2513,6 +2683,127 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
         alert('Error: ' + err.message);
       }
     }
+
+    // Avatar functionality
+    let currentAvatarData = null;
+
+    function showAvatarModal(btn) {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      document.getElementById('avatar-agent-id').value = id;
+      document.getElementById('avatar-agent-name').textContent = name;
+      document.getElementById('avatar-file').value = '';
+      document.getElementById('avatar-upload-btn').disabled = true;
+      currentAvatarData = null;
+      
+      // Try to load existing avatar
+      const img = document.getElementById('avatar-preview-img');
+      const text = document.getElementById('avatar-preview-text');
+      img.src = '/ui/keys/avatar/' + encodeURIComponent(name) + '?t=' + Date.now();
+      img.onload = function() {
+        img.style.display = 'block';
+        text.style.display = 'none';
+        document.getElementById('avatar-delete-btn').style.display = '';
+      };
+      img.onerror = function() {
+        img.style.display = 'none';
+        text.style.display = '';
+        document.getElementById('avatar-delete-btn').style.display = 'none';
+      };
+      
+      document.getElementById('avatar-modal').classList.add('active');
+    }
+
+    function closeAvatarModal() {
+      document.getElementById('avatar-modal').classList.remove('active');
+    }
+
+    document.querySelectorAll('.avatar-btn').forEach(btn => {
+      btn.addEventListener('click', () => showAvatarModal(btn));
+    });
+
+    document.getElementById('avatar-file').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (file.size > 500 * 1024) {
+        alert('File too large. Maximum size is 500KB.');
+        e.target.value = '';
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        currentAvatarData = event.target.result;
+        const img = document.getElementById('avatar-preview-img');
+        const text = document.getElementById('avatar-preview-text');
+        img.src = currentAvatarData;
+        img.style.display = 'block';
+        text.style.display = 'none';
+        document.getElementById('avatar-upload-btn').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    async function uploadAvatar() {
+      if (!currentAvatarData) return;
+      
+      const id = document.getElementById('avatar-agent-id').value;
+      const btn = document.getElementById('avatar-upload-btn');
+      btn.disabled = true;
+      btn.textContent = 'Uploading...';
+      
+      try {
+        const res = await fetch('/ui/keys/' + id + '/avatar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ avatar: currentAvatarData })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          closeAvatarModal();
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to upload avatar');
+          btn.disabled = false;
+          btn.textContent = 'Upload';
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+      }
+    }
+
+    async function deleteAvatar() {
+      if (!confirm('Delete this avatar?')) return;
+      
+      const id = document.getElementById('avatar-agent-id').value;
+      
+      try {
+        const res = await fetch('/ui/keys/' + id + '/avatar', {
+          method: 'DELETE',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          closeAvatarModal();
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to delete avatar');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    document.getElementById('avatar-modal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeAvatarModal();
+      }
+    });
   </script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
