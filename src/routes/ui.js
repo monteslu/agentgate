@@ -1118,7 +1118,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
     `;
   };
 
-  const filters = ['all', 'pending', 'completed', 'failed', 'rejected'];
+  const filters = ['all', 'pending', 'completed', 'failed', 'rejected', 'withdrawn'];
   const filterLinks = filters.map(f =>
     `<a href="/ui/queue?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');
@@ -1344,7 +1344,8 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       ${filter === 'completed' && counts.completed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'completed\')">Clear Completed</button>' : ''}
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
-      ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      ${filter === 'withdrawn' && counts.withdrawn > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'withdrawn\')">Clear Withdrawn</button>' : ''}
+      ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0 || counts.withdrawn > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
     </div>
     <div class="export-section">
       <a href="/ui/queue/export?format=json" class="btn-sm btn-secondary">Export JSON</a>
@@ -1371,7 +1372,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
     };
 
     function updateCounts(counts) {
-      const filters = ['all', 'pending', 'completed', 'failed', 'rejected'];
+      const filters = ['all', 'pending', 'completed', 'failed', 'rejected', 'withdrawn'];
       const filterBar = document.getElementById('filter-bar');
       const links = filterBar.querySelectorAll('.filter-link');
       links.forEach((link, i) => {
@@ -2551,3 +2552,4 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
 }
 
 export default router;
+
