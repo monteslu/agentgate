@@ -120,6 +120,16 @@ db.exec(`
   ON agent_messages(to_agent, status);
 `);
 
+// Initialize webhook_secrets table for service webhook verification
+db.exec(`
+  CREATE TABLE IF NOT EXISTS webhook_secrets (
+    service TEXT PRIMARY KEY,
+    secret TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Migrate write_queue table to add notification columns
 try {
   const queueInfo = db.prepare('PRAGMA table_info(write_queue)').all();
@@ -638,6 +648,34 @@ export function getMessageCounts() {
     counts.all += row.count;
   }
   return counts;
+}
+
+
+// ============================================
+// Webhook Secrets (for signature verification)
+// ============================================
+
+export function getWebhookSecret(service) {
+  const row = db.prepare('SELECT secret FROM webhook_secrets WHERE service = ?').get(service);
+  return row?.secret || null;
+}
+
+export function setWebhookSecret(service, secret) {
+  db.prepare(`
+    INSERT INTO webhook_secrets (service, secret)
+    VALUES (?, ?)
+    ON CONFLICT(service) DO UPDATE SET
+      secret = excluded.secret,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(service, secret);
+}
+
+export function deleteWebhookSecret(service) {
+  return db.prepare('DELETE FROM webhook_secrets WHERE service = ?').run(service);
+}
+
+export function listWebhookSecrets() {
+  return db.prepare('SELECT service, created_at, updated_at FROM webhook_secrets').all();
 }
 
 export default db;
