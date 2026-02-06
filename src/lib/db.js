@@ -4,6 +4,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { mkdirSync, existsSync, unlinkSync, readdirSync } from 'fs';
 import bcrypt from 'bcrypt';
+import { stemmer } from 'stemmer';
 
 // Data directory: AGENTGATE_DATA_DIR env var, or ~/.agentgate/
 const dataDir = process.env.AGENTGATE_DATA_DIR || join(homedir(), '.agentgate');
@@ -118,6 +119,27 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_agent_messages_recipient
   ON agent_messages(to_agent, status);
+
+  -- Mementos table (append-only agent memory storage)
+  CREATE TABLE IF NOT EXISTS mementos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id TEXT NOT NULL,
+    model TEXT,
+    role TEXT,
+    content TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Keywords junction table (normalized, stemmed)
+  CREATE TABLE IF NOT EXISTS memento_keywords (
+    memento_id INTEGER REFERENCES mementos(id) ON DELETE CASCADE,
+    keyword TEXT NOT NULL,
+    PRIMARY KEY (memento_id, keyword)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_memento_keyword ON memento_keywords(keyword);
+  CREATE INDEX IF NOT EXISTS idx_memento_agent ON mementos(agent_id);
+  CREATE INDEX IF NOT EXISTS idx_memento_created ON mementos(created_at);
 `);
 
 // Migrate write_queue table to add notification columns
@@ -682,4 +704,297 @@ export function getAgentWithdrawEnabled() {
 
 export function setAgentWithdrawEnabled(enabled) {
   setSetting('agent_withdraw_enabled', enabled);
+}
+
+// Memento helpers
+
+// Max content length (roughly 3K tokens ≈ 12KB characters)
+const MEMENTO_MAX_CONTENT_LENGTH = 12 * 1024;
+
+// Normalize and stem a keyword
+export function normalizeKeyword(keyword) {
+  // Lowercase, trim, remove special characters except hyphens
+  const normalized = keyword.toLowerCase().trim().replace(/[^a-z0-9-]/g, '');
+  if (!normalized) return null;
+  // Apply Porter stemming
+  return stemmer(normalized);
+}
+
+// Create a memento
+export function createMemento(agentId, content, keywords, options = {}) {
+  if (!content || content.trim().length === 0) {
+    throw new Error('Memento content cannot be empty');
+  }
+
+  if (content.length > MEMENTO_MAX_CONTENT_LENGTH) {
+    throw new Error(`Memento content too long. Maximum ${MEMENTO_MAX_CONTENT_LENGTH} characters allowed.`);
+  }
+
+  if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+    throw new Error('Memento must have at least one keyword');
+  }
+
+  if (keywords.length > 10) {
+    throw new Error('Memento cannot have more than 10 keywords');
+  }
+
+  const { model, role } = options;
+
+  // Normalize and stem keywords, filter out empty ones
+  const normalizedKeywords = keywords
+    .map(k => normalizeKeyword(k))
+    .filter(k => k !== null);
+
+  if (normalizedKeywords.length === 0) {
+    throw new Error('No valid keywords provided after normalization');
+  }
+
+  // Insert memento
+  const result = db.prepare(`
+    INSERT INTO mementos (agent_id, model, role, content)
+    VALUES (?, ?, ?, ?)
+  `).run(agentId, model || null, role || null, content);
+
+  const mementoId = result.lastInsertRowid;
+
+  // Insert keywords
+  const insertKeyword = db.prepare(`
+    INSERT OR IGNORE INTO memento_keywords (memento_id, keyword)
+    VALUES (?, ?)
+  `);
+
+  for (const keyword of normalizedKeywords) {
+    insertKeyword.run(mementoId, keyword);
+  }
+
+  return {
+    id: mementoId,
+    agent_id: agentId,
+    keywords: normalizedKeywords,
+    created_at: new Date().toISOString()
+  };
+}
+
+// Get all keywords for an agent
+export function getMementoKeywords(agentId) {
+  const rows = db.prepare(`
+    SELECT DISTINCT mk.keyword
+    FROM memento_keywords mk
+    JOIN mementos m ON mk.memento_id = m.id
+    WHERE m.agent_id = ?
+    ORDER BY mk.keyword
+  `).all(agentId);
+
+  return rows.map(r => r.keyword);
+}
+
+// Search mementos by keywords (returns metadata only)
+export function searchMementos(agentId, keywords, options = {}) {
+  const { limit = 20 } = options;
+
+  // Normalize search keywords
+  const normalizedKeywords = keywords
+    .map(k => normalizeKeyword(k))
+    .filter(k => k !== null);
+
+  if (normalizedKeywords.length === 0) {
+    return [];
+  }
+
+  // Find mementos that have ANY of the keywords (OR search)
+  // Rank by number of matching keywords
+  const placeholders = normalizedKeywords.map(() => '?').join(', ');
+
+  const rows = db.prepare(`
+    SELECT 
+      m.id,
+      m.agent_id,
+      m.model,
+      m.role,
+      m.created_at,
+      COUNT(DISTINCT mk.keyword) as match_count,
+      SUBSTR(m.content, 1, 200) as preview
+    FROM mementos m
+    JOIN memento_keywords mk ON m.id = mk.memento_id
+    WHERE m.agent_id = ? AND mk.keyword IN (${placeholders})
+    GROUP BY m.id
+    ORDER BY match_count DESC, m.created_at DESC
+    LIMIT ?
+  `).all(agentId, ...normalizedKeywords, limit);
+
+  // Get all keywords for each memento
+  const getKeywords = db.prepare(`
+    SELECT keyword FROM memento_keywords WHERE memento_id = ?
+  `);
+
+  return rows.map(row => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    model: row.model,
+    role: row.role,
+    keywords: getKeywords.all(row.id).map(k => k.keyword),
+    created_at: row.created_at,
+    preview: row.preview + (row.preview.length >= 200 ? '...' : ''),
+    match_count: row.match_count
+  }));
+}
+
+// Get recent mementos (metadata only)
+export function getRecentMementos(agentId, limit = 5) {
+  const rows = db.prepare(`
+    SELECT id, agent_id, model, role, created_at, SUBSTR(content, 1, 200) as preview
+    FROM mementos
+    WHERE agent_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(agentId, limit);
+
+  const getKeywords = db.prepare(`
+    SELECT keyword FROM memento_keywords WHERE memento_id = ?
+  `);
+
+  return rows.map(row => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    model: row.model,
+    role: row.role,
+    keywords: getKeywords.all(row.id).map(k => k.keyword),
+    created_at: row.created_at,
+    preview: row.preview + (row.preview.length >= 200 ? '...' : '')
+  }));
+}
+
+// Fetch full memento content by IDs
+export function getMementosById(agentId, ids) {
+  if (!ids || ids.length === 0) return [];
+
+  // Sanitize IDs (must be integers)
+  const sanitizedIds = ids.filter(id => Number.isInteger(Number(id))).map(Number);
+  if (sanitizedIds.length === 0) return [];
+
+  const placeholders = sanitizedIds.map(() => '?').join(', ');
+
+  const rows = db.prepare(`
+    SELECT id, agent_id, model, role, content, created_at
+    FROM mementos
+    WHERE agent_id = ? AND id IN (${placeholders})
+    ORDER BY created_at DESC
+  `).all(agentId, ...sanitizedIds);
+
+  const getKeywords = db.prepare(`
+    SELECT keyword FROM memento_keywords WHERE memento_id = ?
+  `);
+
+  return rows.map(row => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    model: row.model,
+    role: row.role,
+    keywords: getKeywords.all(row.id).map(k => k.keyword),
+    content: row.content,
+    created_at: row.created_at
+  }));
+}
+
+// Admin: list all mementos (with optional filters)
+export function listMementos(options = {}) {
+  const { agentId, keyword, limit = 50, offset = 0 } = options;
+
+  let sql = `
+    SELECT m.id, m.agent_id, m.model, m.role, m.created_at, SUBSTR(m.content, 1, 200) as preview
+    FROM mementos m
+  `;
+  const params = [];
+
+  const conditions = [];
+
+  if (agentId) {
+    conditions.push('m.agent_id = ?');
+    params.push(agentId);
+  }
+
+  if (keyword) {
+    const normalizedKeyword = normalizeKeyword(keyword);
+    if (normalizedKeyword) {
+      sql = `
+        SELECT DISTINCT m.id, m.agent_id, m.model, m.role, m.created_at, SUBSTR(m.content, 1, 200) as preview
+        FROM mementos m
+        JOIN memento_keywords mk ON m.id = mk.memento_id
+      `;
+      conditions.push('mk.keyword = ?');
+      params.push(normalizedKeyword);
+    }
+  }
+
+  if (conditions.length > 0) {
+    sql += ' WHERE ' + conditions.join(' AND ');
+  }
+
+  sql += ' ORDER BY m.created_at DESC LIMIT ? OFFSET ?';
+  params.push(limit, offset);
+
+  const rows = db.prepare(sql).all(...params);
+
+  const getKeywords = db.prepare(`
+    SELECT keyword FROM memento_keywords WHERE memento_id = ?
+  `);
+
+  return rows.map(row => ({
+    id: row.id,
+    agent_id: row.agent_id,
+    model: row.model,
+    role: row.role,
+    keywords: getKeywords.all(row.id).map(k => k.keyword),
+    created_at: row.created_at,
+    preview: row.preview + (row.preview.length >= 200 ? '...' : '')
+  }));
+}
+
+// Admin: get memento by ID (full content, any agent)
+export function getMementoById(id) {
+  const row = db.prepare(`
+    SELECT id, agent_id, model, role, content, created_at
+    FROM mementos
+    WHERE id = ?
+  `).get(id);
+
+  if (!row) return null;
+
+  const keywords = db.prepare(`
+    SELECT keyword FROM memento_keywords WHERE memento_id = ?
+  `).all(id).map(k => k.keyword);
+
+  return { ...row, keywords };
+}
+
+// Admin: delete memento
+export function deleteMemento(id) {
+  // Keywords will be cascade deleted due to foreign key
+  return db.prepare('DELETE FROM mementos WHERE id = ?').run(id);
+}
+
+// Get memento counts
+export function getMementoCounts() {
+  const total = db.prepare('SELECT COUNT(*) as count FROM mementos').get();
+  const byAgent = db.prepare(`
+    SELECT agent_id, COUNT(*) as count
+    FROM mementos
+    GROUP BY agent_id
+    ORDER BY count DESC
+  `).all();
+
+  return {
+    total: total.count,
+    byAgent: byAgent.reduce((acc, row) => {
+      acc[row.agent_id] = row.count;
+      return acc;
+    }, {})
+  };
+}
+
+// Get all unique agents that have mementos
+export function getMementoAgents() {
+  return db.prepare(`
+    SELECT DISTINCT agent_id FROM mementos ORDER BY agent_id
+  `).all().map(r => r.agent_id);
 }
