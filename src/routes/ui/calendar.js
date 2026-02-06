@@ -111,7 +111,6 @@ export function renderCard(accounts, baseUrl) {
     if (serviceAccounts.length === 0) return '';
     return serviceAccounts.map(acc => {
       const { hasToken, hasCredentials, authStatus } = acc.status || {};
-      const isFailed = authStatus === 'failed' || (!hasToken && hasCredentials);
       
       let statusBadge = '';
       if (hasToken) {
