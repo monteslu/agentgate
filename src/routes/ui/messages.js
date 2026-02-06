@@ -451,4 +451,35 @@ ${localizeScript()}
 </html>`;
 }
 
+// Export messages data
+router.get('/export', (req, res) => {
+  try {
+    const format = req.query.format || 'json';
+    const messages = listAgentMessages();
+    
+    if (format === 'csv') {
+      const headers = ['id', 'from_agent', 'to_agent', 'message', 'status', 'rejection_reason', 'created_at', 'delivered_at'];
+      const csvRows = [headers.join(',')];
+      for (const msg of messages) {
+        const row = headers.map(h => {
+          const val = msg[h] ?? '';
+          const str = String(val).replace(/"/g, '""');
+          return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+        });
+        csvRows.push(row.join(','));
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="messages-export.csv"');
+      return res.send(csvRows.join('\n'));
+    }
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="messages-export.json"');
+    res.json(messages);
+  } catch (err) {
+    console.error('Messages export error:', err);
+    res.status(500).json({ error: 'Export failed', message: err.message });
+  }
+});
+
 export default router;

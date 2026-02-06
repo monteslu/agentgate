@@ -17,7 +17,7 @@ import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
-import uiRoutes from './routes/ui.js';
+import uiRoutes from './routes/ui/index.js';
 import webhooksRoutes from './routes/webhooks.js';
 
 // Aggregate service metadata from all routes
