@@ -34,6 +34,19 @@ router.post('/:service/:accountName/submit', (req, res) => {
       });
     }
 
+    // Check service access
+    const agentName = req.apiKeyInfo?.name;
+    if (agentName) {
+      const access = checkServiceAccess(service, accountName, agentName);
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: `Agent '${agentName}' does not have access to service '${service}/${accountName}'`,
+          reason: access.reason
+        });
+      }
+    }
+
+
     // Validate requests array
     if (!Array.isArray(requests) || requests.length === 0) {
       return res.status(400).json({
