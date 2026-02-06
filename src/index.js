@@ -16,6 +16,7 @@ import jiraRoutes, { serviceInfo as jiraInfo } from './routes/jira.js';
 import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
+import mementoRoutes from './routes/memento.js';
 import uiRoutes from './routes/ui.js';
 
 // Aggregate service metadata from all routes
@@ -88,6 +89,12 @@ app.use('/api/agents', apiKeyAuth, (req, res, next) => {
   req.apiKeyName = req.apiKeyInfo.name;
   next();
 }, agentsRoutes);
+
+// Memento routes - require auth, allow POST for creating mementos
+app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
+  req.apiKeyName = req.apiKeyInfo.name;
+  next();
+}, mementoRoutes);
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
@@ -344,7 +351,64 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
           'Maximum message length is 10KB'
         ]
       };
-    })()
+    })(),
+    memento: {
+      description: 'Durable memory storage for agents. Store and retrieve memory snapshots tagged with keywords.',
+      design: {
+        appendOnly: 'Mementos are immutable once stored. New memories can be added but not edited.',
+        keywordTagging: 'Each memento has 1-10 keywords. Keywords are normalized (lowercase) and stemmed (Porter stemmer).',
+        twoStepRetrieval: 'Search returns metadata only. Fetch specific IDs to get full content. This prevents context bloat.',
+        tokenBudget: 'Recommended ~1.5-2K tokens per memento. Hard cap: 12KB characters.'
+      },
+      endpoints: {
+        store: {
+          method: 'POST',
+          path: '/api/agents/memento',
+          body: {
+            content: 'Your memory content (required)',
+            keywords: ['keyword1', 'keyword2', '...'],
+            model: 'Model at time of storage (optional)',
+            role: 'Agent role/tier (optional)'
+          },
+          response: '{ id, agent_id, keywords, created_at }'
+        },
+        listKeywords: {
+          method: 'GET',
+          path: '/api/agents/memento/keywords',
+          description: 'List all keywords you have used',
+          response: '{ keywords: ["keyword1", "keyword2", ...] }'
+        },
+        search: {
+          method: 'GET',
+          path: '/api/agents/memento/search?keywords=game,project&limit=10',
+          description: 'Search mementos by keyword. Returns metadata only (preview, not full content).',
+          response: '{ matches: [{ id, keywords, created_at, preview, match_count }, ...] }'
+        },
+        recent: {
+          method: 'GET',
+          path: '/api/agents/memento/recent?limit=5',
+          description: 'Get most recent mementos (metadata only)',
+          response: '{ mementos: [{ id, keywords, created_at, preview }, ...] }'
+        },
+        fetch: {
+          method: 'GET',
+          path: '/api/agents/memento/42,38,15',
+          description: 'Fetch full content by IDs (comma-separated, max 20)',
+          response: '{ mementos: [{ id, agent_id, model, role, keywords, content, created_at }, ...] }'
+        }
+      },
+      retrievalHierarchy: [
+        '1. Check current context first — already in conversation?',
+        '2. Query Memento — if not in context, search by keyword',
+        '3. Web search — if no memento, fall back to internet'
+      ],
+      notes: [
+        'Each agent sees only their own mementos',
+        'Keywords are stemmed: "games" matches "game", "running" matches "run"',
+        'Maximum 10 keywords per memento',
+        'Maximum 12KB content per memento'
+      ]
+    }
   });
 });
 
