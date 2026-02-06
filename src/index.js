@@ -495,20 +495,6 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
           path: '/api/services/:service/:account/access',
           description: 'Get access config for a specific service/account',
           response: '{ service, account_name, access_mode, agents: [{ name, allowed }, ...] }'
-        },
-        setMode: {
-          method: 'PUT',
-          path: '/api/services/:service/:account/access',
-          body: { access_mode: 'all | allowlist | denylist' },
-          description: 'Set access mode for a service/account',
-          response: '{ success: true, access_mode }'
-        },
-        setAgents: {
-          method: 'POST',
-          path: '/api/services/:service/:account/access/agents',
-          body: { agents: [{ name: 'AgentName', allowed: true }, '...'] },
-          description: 'Set which agents are in the allow/deny list',
-          response: '{ success: true, agents: [...] }'
         }
       },
       errorResponse: {
