@@ -108,6 +108,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
+      <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Write Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
@@ -247,6 +248,7 @@ export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 
     </div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
+      <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Write Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
