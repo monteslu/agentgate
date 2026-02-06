@@ -156,6 +156,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_memento_keyword ON memento_keywords(keyword);
   CREATE INDEX IF NOT EXISTS idx_memento_agent ON mementos(agent_id);
   CREATE INDEX IF NOT EXISTS idx_memento_created ON mementos(created_at);
+
+  -- Broadcast history
+  CREATE TABLE IF NOT EXISTS broadcasts (
+    id TEXT PRIMARY KEY,
+    from_agent TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    total_recipients INTEGER DEFAULT 0,
+    delivered_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS broadcast_recipients (
+    broadcast_id TEXT NOT NULL,
+    to_agent TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    delivered_at TEXT,
+    error_message TEXT,
+    PRIMARY KEY (broadcast_id, to_agent),
+    FOREIGN KEY (broadcast_id) REFERENCES broadcasts(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_broadcasts_from
+  ON broadcasts(from_agent, created_at DESC);
 `);
 
 // Migrate write_queue table to add notification columns
@@ -1192,3 +1216,69 @@ export function listServicesWithAccess() {
   });
 }
 
+
+
+// ============================================
+// Broadcast History
+// ============================================
+
+export function createBroadcast(id, fromAgent, message, recipientCount) {
+  db.prepare(`
+    INSERT INTO broadcasts (id, from_agent, message, total_recipients)
+    VALUES (?, ?, ?, ?)
+  `).run(id, fromAgent, message, recipientCount);
+  return id;
+}
+
+export function addBroadcastRecipient(broadcastId, toAgent, status, errorMessage = null) {
+  db.prepare(`
+    INSERT INTO broadcast_recipients (broadcast_id, to_agent, status, delivered_at, error_message)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    broadcastId,
+    toAgent,
+    status,
+    status === 'delivered' ? new Date().toISOString() : null,
+    errorMessage
+  );
+  
+  // Update counts
+  if (status === 'delivered') {
+    db.prepare('UPDATE broadcasts SET delivered_count = delivered_count + 1 WHERE id = ?').run(broadcastId);
+  } else if (status === 'failed') {
+    db.prepare('UPDATE broadcasts SET failed_count = failed_count + 1 WHERE id = ?').run(broadcastId);
+  }
+}
+
+export function getBroadcast(id) {
+  const broadcast = db.prepare('SELECT * FROM broadcasts WHERE id = ?').get(id);
+  if (!broadcast) return null;
+  
+  const recipients = db.prepare(`
+    SELECT to_agent, status, delivered_at, error_message
+    FROM broadcast_recipients
+    WHERE broadcast_id = ?
+  `).all(id);
+  
+  return { ...broadcast, recipients };
+}
+
+export function listBroadcasts(limit = 50) {
+  return db.prepare(`
+    SELECT * FROM broadcasts
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(limit);
+}
+
+export function listBroadcastsWithRecipients(limit = 50) {
+  const broadcasts = listBroadcasts(limit);
+  return broadcasts.map(b => {
+    const recipients = db.prepare(`
+      SELECT to_agent, status, delivered_at, error_message
+      FROM broadcast_recipients
+      WHERE broadcast_id = ?
+    `).all(b.id);
+    return { ...b, recipients };
+  });
+}

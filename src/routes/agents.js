@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { nanoid } from 'nanoid';
 import {
   getMessagingMode,
   createAgentMessage,
@@ -6,7 +7,11 @@ import {
   getMessagesForAgent,
   markMessageRead,
   listApiKeys,
-  getApiKeyByName
+  getApiKeyByName,
+  createBroadcast,
+  addBroadcastRecipient,
+  listBroadcastsWithRecipients,
+  getBroadcast
 } from '../lib/db.js';
 import { notifyAgentMessage } from '../lib/agentNotifier.js';
 import { emitCountUpdate } from '../lib/socketManager.js';
@@ -190,7 +195,7 @@ router.get('/messageable', async (req, res) => {
 // POST /api/agents/broadcast - Broadcast a message to all agents
 router.post('/broadcast', async (req, res) => {
   const { message } = req.body;
-  const fromAgent = req.apiKeyName || 'system';
+  const fromAgent = req.apiKeyName || 'admin';
 
   if (!message) {
     return res.status(400).json({ error: 'Missing "message" field' });
@@ -214,8 +219,12 @@ router.post('/broadcast', async (req, res) => {
   );
 
   if (recipients.length === 0) {
-    return res.json({ delivered: [], failed: [], total: 0 });
+    return res.json({ broadcast_id: null, delivered: [], failed: [], total: 0 });
   }
+
+  // Create broadcast record
+  const broadcastId = nanoid();
+  createBroadcast(broadcastId, fromAgent, message, recipients.length);
 
   const delivered = [];
   const failed = [];
@@ -225,6 +234,7 @@ router.post('/broadcast', async (req, res) => {
       type: 'broadcast',
       from: fromAgent,
       message: message,
+      broadcast_id: broadcastId,
       timestamp: new Date().toISOString(),
       text: `📢 [agentgate] Broadcast from ${fromAgent}:\n${message.substring(0, 500)}`,
       mode: 'now'
@@ -244,15 +254,45 @@ router.post('/broadcast', async (req, res) => {
 
       if (response.ok) {
         delivered.push(agent.name);
+        addBroadcastRecipient(broadcastId, agent.name, 'delivered');
       } else {
-        failed.push({ name: agent.name, error: `HTTP ${response.status}` });
+        const errorMsg = `HTTP ${response.status}`;
+        failed.push({ name: agent.name, error: errorMsg });
+        addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
       }
     } catch (err) {
       failed.push({ name: agent.name, error: err.message });
+      addBroadcastRecipient(broadcastId, agent.name, 'failed', err.message);
     }
   }));
 
-  return res.json({ delivered, failed, total: recipients.length });
+  return res.json({ broadcast_id: broadcastId, delivered, failed, total: recipients.length });
+});
+
+// GET /api/agents/broadcasts - List broadcast history
+router.get('/broadcasts', (req, res) => {
+  const mode = getMessagingMode();
+  if (mode === 'off') {
+    return res.status(403).json({ error: 'Agent messaging is disabled' });
+  }
+
+  const limit = parseInt(req.query.limit) || 50;
+  const broadcasts = listBroadcastsWithRecipients(Math.min(limit, 100));
+  return res.json({ broadcasts });
+});
+
+// GET /api/agents/broadcasts/:id - Get specific broadcast
+router.get('/broadcasts/:id', (req, res) => {
+  const mode = getMessagingMode();
+  if (mode === 'off') {
+    return res.status(403).json({ error: 'Agent messaging is disabled' });
+  }
+
+  const broadcast = getBroadcast(req.params.id);
+  if (!broadcast) {
+    return res.status(404).json({ error: 'Broadcast not found' });
+  }
+  return res.json(broadcast);
 });
 
 export default router;
