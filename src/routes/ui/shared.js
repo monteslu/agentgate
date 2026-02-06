@@ -35,11 +35,28 @@ export function statusBadge(status) {
   return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
 }
 
-// Format date for display
+// Format date for display - outputs span with data-utc for client-side localization
 export function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleString();
+  // Return span with UTC timestamp - client JS will localize
+  return `<span class="local-time" data-utc="${dateStr}"></span>`;
+}
+
+// Client-side script to localize all dates to browser timezone
+export function localizeScript() {
+  return `
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.local-time[data-utc]').forEach(function(el) {
+        const utc = el.getAttribute('data-utc');
+        if (utc) {
+          const d = new Date(utc);
+          el.textContent = d.toLocaleString();
+          el.title = utc + ' UTC';
+        }
+      });
+    });
+  </script>`;
 }
 
 // Shared HTML head with common styles/scripts
