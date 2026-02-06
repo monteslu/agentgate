@@ -135,6 +135,108 @@ agentgate can notify your agent when queue items are completed, failed, or rejec
 
 Compatible with OpenClaw's `/hooks/wake` endpoint. See [OpenClaw webhook docs](https://docs.openclaw.ai/automation/webhook).
 
+## Service Access Control
+
+Control which agents can access specific services. Each service/account can be configured with one of three access modes:
+
+- **All** (default) - All agents can access
+- **Allowlist** - Only listed agents can access
+- **Denylist** - All agents except listed ones can access
+
+**Setup in Admin UI:**
+1. Go to **Services** in the admin navigation
+2. Click on a service to configure access
+3. Set access mode and add/remove agents from the list
+
+**API Endpoint:**
+```bash
+# Check your access to services
+GET /api/services
+Authorization: Bearer rms_your_key
+
+# Response shows only services you can access
+{ "services": [{ "service": "github", "account_name": "monteslu", "access_mode": "all" }, ...] }
+```
+
+When an agent lacks access to a service, API calls return `403 Forbidden` with a clear error message.
+
+## Auth Bypass (Trusted Agents)
+
+For highly trusted agents, you can bypass the write queue entirely. Agents with `bypass_auth` enabled execute write operations immediately without human approval.
+
+> ⚠️ **Use with extreme caution.** Only enable for agents you completely trust with unsupervised write access.
+
+**Setup in Admin UI:**
+1. Go to **API Keys**
+2. Click **Configure** next to the agent
+3. Enable **Auth Bypass**
+
+**Behavior:**
+- All write operations (POST/PUT/DELETE) execute immediately
+- No queue entries are created
+- The agent is effectively operating unsupervised
+- Reads work the same as before
+
+This is useful for automation agents that need to perform routine operations without human bottlenecks.
+
+## GitHub Webhooks
+
+agentgate can receive GitHub webhook events and forward them to agent webhooks, enabling reactive workflows.
+
+**Setup:**
+1. In GitHub repo settings, add a webhook:
+   - URL: `https://your-agentgate.com/webhooks/github`
+   - Content type: `application/json`
+   - Secret: (configure in agentgate settings)
+   - Events: Choose which events to receive
+
+2. Configure webhook forwarding in agentgate Admin UI under **Settings**
+
+**Supported Events:**
+- Push events
+- Pull request events (opened, closed, merged, review requested)
+- Issue events
+- Workflow run events
+
+Agents receive webhooks in the same format as other notifications, enabling them to react to repository changes in real-time.
+
+## Agent Avatars
+
+Agents can have custom avatars displayed in the admin UI for easy identification.
+
+**Setup in Admin UI:**
+1. Go to **API Keys**
+2. Click the avatar placeholder next to an agent name
+3. Upload an image (PNG, JPG, GIF, WebP supported)
+
+Avatars are stored locally and displayed throughout the UI wherever the agent is referenced.
+
+## Memento (Agent Memory)
+
+Durable memory storage for agents. Store and retrieve memory snapshots tagged with keywords for long-term context preservation.
+
+📖 **[See full documentation](docs/memento.md)** (coming soon)
+
+**Key Features:**
+- **Append-only** - Mementos are immutable once stored
+- **Keyword tagging** - Each memento has 1-10 keywords (stemmed for matching)
+- **Two-step retrieval** - Search returns metadata, fetch returns full content
+
+**Quick API Overview:**
+```bash
+# Store a memento
+POST /api/agents/memento
+{ "content": "Your memory...", "keywords": ["project", "decision"] }
+
+# Search by keyword
+GET /api/agents/memento/search?keywords=project&limit=10
+
+# Fetch full content
+GET /api/agents/memento/42,38,15
+```
+
+Each agent sees only their own mementos. Maximum 12KB per memento.
+
 ## Inter-Agent Messaging
 
 Agents can communicate with each other through agentgate, with optional human oversight.
@@ -146,14 +248,30 @@ Agents can communicate with each other through agentgate, with optional human ov
 - Configure agent webhooks in Admin UI under **API Keys > Configure**
 - Endpoints: `/api/agents/messageable`, `/api/agents/message`, `/api/agents/messages`, `/api/agents/status`
 
+### Broadcasts
+
+Send messages to all agents at once:
+
+```bash
+POST /api/agents/broadcast
+{ "message": "Team announcement: deployment starting" }
+
+# Response
+{ "delivered": ["Agent1", "Agent2"], "failed": [], "total": 2 }
+```
+
+Broadcasts are stored in the database and appear in each agent's message history. View broadcast history in the Admin UI under **Messages → Broadcast**.
+
 ## Agent Registry
 
 Manage your agents in the admin UI at `/ui/keys`. Each agent has:
 
 - **Name** - Unique identifier (case-insensitive)
 - **API Key** - Bearer token for agent → agentgate authentication (shown once at creation)
+- **Avatar** - Optional image for visual identification
 - **Webhook URL** (optional) - Endpoint for agentgate → agent notifications
 - **Webhook Token** (optional) - Bearer token for webhook authentication
+- **Auth Bypass** (optional) - Skip write queue for trusted agents
 
 When an agent's webhook is configured, agentgate will POST notifications for:
 - Queue item status changes (approved/rejected/completed/failed)
@@ -291,12 +409,8 @@ BASE_URL=https://agentgate.yourdomain.com npm start
 
 ## TODO
 
-- [ ] Per-agent service access control - different agents can access different services/accounts
 - [ ] Fine-grained endpoint control per service - whitelist/blacklist individual endpoints (even for read operations)
 
 ## License
 
 ISC
-
-
-
