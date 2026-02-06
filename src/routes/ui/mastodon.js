@@ -123,21 +123,19 @@ export function renderCard(accounts, _baseUrl) {
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
     return serviceAccounts.map(acc => {
-      const hasToken = !!acc.data?.accessToken;
-      const authStatus = acc.data?.authStatus;
-      const isFailed = authStatus === 'failed' || (!hasToken && acc.data?.clientId);
-      const info = acc.data?.instance ? `${acc.name} @${acc.data.instance}` : acc.name;
+      const { hasToken, hasCredentials, authStatus, instance } = acc.status || {};
+      const info = instance ? `${acc.name} @${instance}` : acc.name;
       
       let statusBadge = '';
       if (hasToken) {
         statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
-      } else if (isFailed) {
+      } else if (authStatus === 'failed') {
         statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
-      } else if (acc.data?.clientId) {
+      } else if (hasCredentials) {
         statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
       }
       
-      const retryBtn = (!hasToken && acc.data?.clientId) ? `
+      const retryBtn = (!hasToken && hasCredentials) ? `
         <form method="POST" action="/ui/mastodon/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}">
           <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
