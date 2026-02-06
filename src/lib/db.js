@@ -225,12 +225,25 @@ export function listAccounts(service) {
   } else {
     rows = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts ORDER BY service, name').all();
   }
-  // Parse credentials JSON into data property
-  return rows.map(row => ({
-    ...row,
-    data: row.credentials ? JSON.parse(row.credentials) : null,
-    credentials: undefined // Remove raw JSON string
-  }));
+  // Parse credentials and extract ONLY safe display fields (no secrets!)
+  return rows.map(row => {
+    const creds = row.credentials ? JSON.parse(row.credentials) : null;
+    return {
+      id: row.id,
+      service: row.service,
+      name: row.name,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      // Safe display-only fields (no clientSecret, accessToken, refreshToken!)
+      status: {
+        hasCredentials: !!(creds?.clientId || creds?.clientSecret),
+        hasToken: !!creds?.accessToken,
+        authStatus: creds?.authStatus || null,
+        authError: creds?.authError || null,
+        instance: creds?.instance || null  // For mastodon display
+      }
+    };
+  });
 }
 
 export function deleteAccount(service, name) {
