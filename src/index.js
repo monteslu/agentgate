@@ -38,7 +38,15 @@ const app = express();
 const PORT = process.env.PORT || 3050;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    // Capture raw body for webhook signature verification
+    if (req.originalUrl.startsWith('/webhooks')) {
+      req.rawBody = buf;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
@@ -572,3 +580,4 @@ server.on('error', (err) => {
   }
   process.exit(1);
 });
+
