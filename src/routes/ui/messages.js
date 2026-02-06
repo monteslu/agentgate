@@ -204,6 +204,36 @@ router.post('/broadcast', async (req, res) => {
 
 // Render function
 function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
+  // Combine messages and broadcasts into a unified timeline
+  const messageItems = messages.map(m => ({ ...m, _type: 'message' }));
+  const broadcastItems = broadcasts.map(b => ({ ...b, _type: 'broadcast' }));
+  const timeline = [...messageItems, ...broadcastItems].sort((a, b) => 
+    new Date(b.created_at) - new Date(a.created_at)
+  );
+
+  const renderBroadcast = (b) => `
+    <div class="card message-entry broadcast-entry" style="margin-bottom: 20px; border-left: 4px solid #6366f1;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div class="entry-header">
+          <span style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">📢 BROADCAST</span>
+          <span class="agent-with-avatar">${renderAvatar(b.from_agent, { size: 24 })}<strong>${escapeHtml(b.from_agent)}</strong></span>
+          <span class="help" style="margin-left: 8px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
+        </div>
+        <span class="help utc-date" data-utc="${b.created_at}">${b.created_at}</span>
+      </div>
+      <div class="message-content">
+        <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(b.message)}</pre>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+        ${(b.recipients || []).map(r => `
+          <span style="padding: 4px 10px; border-radius: 16px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; background: ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${r.status === 'delivered' ? '#34d399' : '#f87171'}; border: 1px solid ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
+            ${renderAvatar(r.to_agent, { size: 18 })}${escapeHtml(r.to_agent)} ${r.status === 'delivered' ? '✓' : '✗'}
+          </span>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
   const renderMessage = (msg) => {
     let actions = '';
     if (msg.status === 'pending') {
@@ -308,7 +338,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     </form>
   </div>
 
-  <h3>Message Queue</h3>
+  <h3>Timeline</h3>
 
   <div class="filter-bar" id="filter-bar">
     ${filterLinks}
@@ -316,42 +346,17 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       ${filter === 'delivered' && counts.delivered > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'delivered\')">Clear Delivered</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      <a href="/ui/messages/export?format=json" class="btn-sm" style="text-decoration: none;">Export JSON</a>
+      <a href="/ui/messages/export?format=csv" class="btn-sm" style="text-decoration: none;">Export CSV</a>
     </div>
   </div>
 
   <div id="messages-container">
-  ${messages.length === 0 ? `
+  ${timeline.length === 0 ? `
     <div class="card empty-state">
       <p>No ${filter === 'all' ? '' : filter + ' '}messages</p>
     </div>
-  ` : messages.map(renderMessage).join('')}
-  </div>
-
-  <h3 style="margin-top: 32px;">📢 Broadcast History</h3>
-  <div id="broadcasts-container">
-  ${broadcasts.length === 0 ? `
-    <div class="card empty-state">
-      <p>No broadcasts yet</p>
-    </div>
-  ` : broadcasts.map(b => `
-    <div class="card" style="margin-bottom: 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-        <div>
-          <strong style="color: #f3f4f6;">From:</strong> ${escapeHtml(b.from_agent)}
-          <span class="help" style="margin-left: 12px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
-        </div>
-        <span class="help utc-date" data-utc="${b.created_at}">${b.created_at}</span>
-      </div>
-      <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0 0 12px 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(b.message)}</pre>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-        ${(b.recipients || []).map(r => `
-          <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${r.status === 'delivered' ? '#34d399' : '#f87171'}; border: 1px solid ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
-            ${escapeHtml(r.to_agent)} ${r.status === 'delivered' ? '✓' : '✗'}
-          </span>
-        `).join('')}
-      </div>
-    </div>
-  `).join('')}
+  ` : timeline.map(item => item._type === 'broadcast' ? renderBroadcast(item) : renderMessage(item)).join('')}
   </div>
 
   <script>
