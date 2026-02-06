@@ -258,12 +258,15 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         description: 'Withdraw your own pending submission (requires agent_withdraw_enabled setting)',
         method: 'DELETE',
         path: '/api/queue/{service}/{accountName}/status/{id}',
+        body: {
+          reason: 'Optional: Explain why you are withdrawing this request'
+        },
         constraints: [
           'Only the submitting agent can withdraw their own items',
           'Only works for "pending" status - cannot withdraw approved/completed/etc',
           'Requires admin to enable agent_withdraw_enabled setting'
         ],
-        response: '{ success: true, message: "Queue entry withdrawn", id }'
+        response: '{ success: true, message: "Queue entry withdrawn", id, reason }'
       },
       statuses: {
         pending: 'Waiting for human approval',
@@ -391,10 +394,17 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
             body: { message: 'Your broadcast message' },
             response: '{ delivered: ["Agent1", "Agent2"], failed: [{ name: "Agent3", error: "HTTP 500" }], total: 3 }',
             notes: [
-              'Broadcasts go directly to agent webhooks - not stored in messages table',
+              'Broadcasts are stored in the database and appear in message history',
               'Sender is automatically excluded from recipients',
-              'Requires messaging mode to be "supervised" or "open" (not "off")'
+              'Requires messaging mode to be "supervised" or "open" (not "off")',
+              'View broadcast history in Admin UI under Messages → Broadcast'
             ]
+          },
+          getBroadcasts: {
+            method: 'GET',
+            path: '/api/agents/messages',
+            description: 'Broadcasts appear in your regular message history with from="[BROADCAST]"',
+            note: 'No separate endpoint - broadcasts are included with regular messages'
           }
         },
         modes: {
@@ -510,6 +520,34 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         'Default mode is "all" (backwards compatible)',
         'Agent names are case-insensitive',
         'Admin UI shows visual indicators for restricted services'
+      ]
+    },
+    bypassAuth: {
+      description: 'Trusted agents can bypass the write queue entirely, executing write operations immediately without human approval.',
+      warning: 'Use with extreme caution. Only enable for agents you completely trust with unsupervised write access.',
+      setup: {
+        description: 'Configure in Admin UI under API Keys → Configure → Auth Bypass',
+        note: 'This is a per-agent setting managed by the admin'
+      },
+      behavior: {
+        enabled: [
+          'All write operations (POST/PUT/DELETE) execute immediately',
+          'No queue entries are created',
+          'The agent is effectively operating unsupervised',
+          'Reads work the same as before'
+        ],
+        disabled: 'Default behavior - writes are queued for human approval'
+      },
+      checkStatus: {
+        method: 'GET',
+        path: '/api/agents/status',
+        description: 'Check if your agent has bypass_auth enabled',
+        response: '{ mode, enabled, unread_count, bypass_auth: true|false }'
+      },
+      notes: [
+        'Bypass applies to all services the agent has access to',
+        'Useful for automation agents that need to perform routine operations',
+        'Admin can revoke bypass at any time'
       ]
     }
   });
