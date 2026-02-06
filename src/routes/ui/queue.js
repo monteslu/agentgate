@@ -7,7 +7,7 @@ import {
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript } from './shared.js';
+import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -217,7 +217,7 @@ function renderQueuePage(entries, filter, counts = {}) {
 
         ${entry.comment ? `<p class="agent-comment"><strong>Agent says:</strong> ${renderMarkdownLinks(entry.comment)}</p>` : ''}
 
-        <div class="help" style="margin-bottom: 8px;">Submitted by: <code>${escapeHtml(entry.submitted_by || 'unknown')}</code></div>
+        <div class="help" style="margin-bottom: 8px;">Submitted by: <span class="agent-with-avatar">${renderAvatar(entry.submitted_by, { size: 20 })}<code>${escapeHtml(entry.submitted_by || 'unknown')}</code></span></div>
 
         <div class="requests-list">
           ${requestsSummary}

@@ -2,13 +2,68 @@ import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
 import { homedir } from 'os';
-import { mkdirSync } from 'fs';
+import { mkdirSync, existsSync, unlinkSync, readdirSync } from 'fs';
 import bcrypt from 'bcrypt';
 
 // Data directory: AGENTGATE_DATA_DIR env var, or ~/.agentgate/
 const dataDir = process.env.AGENTGATE_DATA_DIR || join(homedir(), '.agentgate');
 mkdirSync(dataDir, { recursive: true });
 const dbPath = join(dataDir, 'data.db');
+
+// Avatars directory
+const avatarsDir = join(dataDir, 'avatars');
+mkdirSync(avatarsDir, { recursive: true });
+
+// Supported avatar image extensions
+const AVATAR_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+
+// Get the avatars directory path
+export function getAvatarsDir() {
+  return avatarsDir;
+}
+
+// Check if an avatar exists for an agent and return the filename if found
+export function getAvatarFilename(agentName) {
+  if (!agentName) return null;
+  const safeName = agentName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  for (const ext of AVATAR_EXTENSIONS) {
+    const filename = `${safeName}${ext}`;
+    if (existsSync(join(avatarsDir, filename))) {
+      return filename;
+    }
+  }
+  return null;
+}
+
+// Delete avatar for an agent (removes any matching avatar file)
+export function deleteAgentAvatar(agentName) {
+  if (!agentName) return false;
+  const safeName = agentName.toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  let deleted = false;
+  for (const ext of AVATAR_EXTENSIONS) {
+    const filepath = join(avatarsDir, `${safeName}${ext}`);
+    if (existsSync(filepath)) {
+      try {
+        unlinkSync(filepath);
+        deleted = true;
+        console.log(`Deleted avatar: ${filepath}`);
+      } catch (err) {
+        console.error(`Failed to delete avatar ${filepath}:`, err.message);
+      }
+    }
+  }
+  return deleted;
+}
+
+// List all avatar files
+export function listAvatars() {
+  try {
+    const files = readdirSync(avatarsDir);
+    return files.filter(f => AVATAR_EXTENSIONS.some(ext => f.toLowerCase().endsWith(ext)));
+  } catch {
+    return [];
+  }
+}
 
 const db = new Database(dbPath);
 
@@ -181,6 +236,11 @@ export function getApiKeyById(id) {
 }
 
 export function deleteApiKey(id) {
+  // Get the agent name before deleting so we can clean up the avatar
+  const agent = getApiKeyById(id);
+  if (agent?.name) {
+    deleteAgentAvatar(agent.name);
+  }
   return db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
 }
 
