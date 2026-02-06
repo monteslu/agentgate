@@ -1013,7 +1013,8 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       executing: 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);',
       completed: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);',
       failed: 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);',
-      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);'
+      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);',
+      withdrawn: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);'
     };
     return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
   };
@@ -1367,7 +1368,8 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       executing: 'background: #dbeafe; color: #1e40af;',
       completed: 'background: #d1fae5; color: #065f46;',
       failed: 'background: #fee2e2; color: #991b1b;',
-      rejected: 'background: #f3f4f6; color: #374151;'
+      rejected: 'background: #f3f4f6; color: #374151;',
+      withdrawn: 'background: #f3f4f6; color: #374151;'
     };
 
     function updateCounts(counts) {
@@ -1717,7 +1719,8 @@ function renderMessagesPage(messages, filter, counts, mode, pendingQueueCount = 
     const colors = {
       pending: 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);',
       delivered: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);',
-      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);'
+      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);',
+      withdrawn: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);'
     };
     return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
   };
@@ -2551,3 +2554,4 @@ function renderKeysPage(keys, error = null, newKey = null, pendingQueueCount = 0
 }
 
 export default router;
+
