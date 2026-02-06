@@ -507,7 +507,7 @@ router.post('/queue/clear', (req, res) => {
   const { status } = req.body;
 
   // Only allow clearing non-pending statuses
-  const allowedStatuses = ['completed', 'failed', 'rejected', 'all'];
+  const allowedStatuses = ['completed', 'failed', 'rejected', 'withdrawn', 'all'];
   if (status && !allowedStatuses.includes(status)) {
     return wantsJson
       ? res.status(400).json({ error: 'Invalid status' })
@@ -1346,7 +1346,7 @@ function renderQueuePage(entries, filter, counts = 0, pendingQueueCount = 0, pen
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'withdrawn' && counts.withdrawn > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'withdrawn\')">Clear Withdrawn</button>' : ''}
-      ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0 || counts.withdrawn > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
     </div>
     <div class="export-section">
       <a href="/ui/queue/export?format=json" class="btn-sm btn-secondary">Export JSON</a>
