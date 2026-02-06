@@ -420,28 +420,33 @@ ${localizeScript()}
 
 // Export queue data
 router.get('/export', (req, res) => {
-  const format = req.query.format || 'json';
-  const entries = listQueueEntries();
-  
-  if (format === 'csv') {
-    const headers = ['id', 'service', 'account_name', 'status', 'comment', 'submitted_by', 'rejection_reason', 'submitted_at', 'reviewed_at', 'completed_at'];
-    const csvRows = [headers.join(',')];
-    for (const entry of entries) {
-      const row = headers.map(h => {
-        const val = entry[h] ?? '';
-        const str = String(val).replace(/"/g, '""');
-        return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
-      });
-      csvRows.push(row.join(','));
+  try {
+    const format = req.query.format || 'json';
+    const entries = listQueueEntries();
+    
+    if (format === 'csv') {
+      const headers = ['id', 'service', 'account_name', 'status', 'comment', 'submitted_by', 'rejection_reason', 'submitted_at', 'reviewed_at', 'completed_at'];
+      const csvRows = [headers.join(',')];
+      for (const entry of entries) {
+        const row = headers.map(h => {
+          const val = entry[h] ?? '';
+          const str = String(val).replace(/"/g, '""');
+          return str.includes(',') || str.includes('"') || str.includes('\n') ? `"${str}"` : str;
+        });
+        csvRows.push(row.join(','));
+      }
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="queue-export.csv"');
+      return res.send(csvRows.join('\n'));
     }
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename="queue-export.csv"');
-    return res.send(csvRows.join('\n'));
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="queue-export.json"');
+    res.json(entries);
+  } catch (err) {
+    console.error('Queue export error:', err);
+    res.status(500).json({ error: 'Export failed', message: err.message });
   }
-  
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('Content-Disposition', 'attachment; filename="queue-export.json"');
-  res.json(entries);
 });
 
 export default router;
