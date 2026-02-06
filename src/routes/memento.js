@@ -10,7 +10,7 @@ import {
 const router = Router();
 
 // POST /api/agents/memento - Store a memento
-router.post('/', async (req, res) => {
+router.post('/', (req, res) => {
   const { content, keywords, model, role } = req.body;
   const agentId = req.apiKeyName;
 
@@ -31,7 +31,7 @@ router.post('/', async (req, res) => {
 });
 
 // GET /api/agents/memento/keywords - List all keywords for the agent
-router.get('/keywords', async (req, res) => {
+router.get('/keywords', (req, res) => {
   const agentId = req.apiKeyName;
 
   const keywords = getMementoKeywords(agentId);
@@ -39,7 +39,7 @@ router.get('/keywords', async (req, res) => {
 });
 
 // GET /api/agents/memento/search - Search mementos by keyword
-router.get('/search', async (req, res) => {
+router.get('/search', (req, res) => {
   const agentId = req.apiKeyName;
   const { keywords, limit } = req.query;
 
@@ -67,7 +67,7 @@ router.get('/search', async (req, res) => {
 });
 
 // GET /api/agents/memento/recent - Get recent mementos
-router.get('/recent', async (req, res) => {
+router.get('/recent', (req, res) => {
   const agentId = req.apiKeyName;
   const { limit } = req.query;
 
@@ -84,7 +84,7 @@ router.get('/recent', async (req, res) => {
 });
 
 // GET /api/agents/memento/:ids - Fetch full content by IDs
-router.get('/:ids', async (req, res) => {
+router.get('/:ids', (req, res) => {
   const agentId = req.apiKeyName;
   const { ids } = req.params;
 
