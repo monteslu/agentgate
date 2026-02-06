@@ -8,7 +8,7 @@ import {
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, statusBadge, formatDate, simpleNavHeader, socketScript } from './shared.js';
+import { escapeHtml, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript } from './shared.js';
 
 const router = Router();
 
@@ -444,6 +444,7 @@ function renderMessagesPage(messages, filter, counts, mode) {
     }
   </script>
 ${socketScript()}
+${localizeScript()}
 </body>
 </html>`;
 }

@@ -1,7 +1,7 @@
 // Agents routes
 import { Router } from 'express';
 import { listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById } from '../../lib/db.js';
-import { escapeHtml, formatDate, simpleNavHeader, socketScript } from './shared.js';
+import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript } from './shared.js';
 
 const router = Router();
 
@@ -296,6 +296,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
     }
   </script>
 ${socketScript()}
+${localizeScript()}
 </body>
 </html>`;
 }
