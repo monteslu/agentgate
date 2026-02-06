@@ -17,6 +17,7 @@ import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import uiRoutes from './routes/ui.js';
+import webhooksRoutes from './routes/webhooks.js';
 
 // Aggregate service metadata from all routes
 const SERVICE_REGISTRY = {
@@ -88,6 +89,10 @@ app.use('/api/agents', apiKeyAuth, (req, res, next) => {
   req.apiKeyName = req.apiKeyInfo.name;
   next();
 }, agentsRoutes);
+
+
+// Webhook ingestion - NO auth required (external services)
+app.use('/webhooks', webhooksRoutes);
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
