@@ -1,10 +1,11 @@
 // Messages routes - agent messaging management
 import { Router } from 'express';
+import { nanoid } from 'nanoid';
 import {
   getMessagingMode, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage,
   clearAgentMessagesByStatus, getMessageCounts, getAgentMessage,
-  listApiKeys
+  listApiKeys, createBroadcast, addBroadcastRecipient, listBroadcastsWithRecipients
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
@@ -23,7 +24,8 @@ router.get('/', (req, res) => {
   }
   const counts = getMessageCounts();
   const mode = getMessagingMode();
-  res.send(renderMessagesPage(messages, filter, counts, mode));
+  const broadcasts = listBroadcastsWithRecipients(10); // Last 10 broadcasts
+  res.send(renderMessagesPage(messages, filter, counts, mode, broadcasts));
 });
 
 router.post('/:id/approve', async (req, res) => {
@@ -143,10 +145,14 @@ router.post('/broadcast', async (req, res) => {
 
   if (recipients.length === 0) {
     if (wantsJson) {
-      return res.json({ delivered: [], failed: [], total: 0 });
+      return res.json({ broadcast_id: null, delivered: [], failed: [], total: 0 });
     }
     return res.redirect('/ui/messages?broadcast_result=No+agents+with+webhooks');
   }
+
+  // Create broadcast record in database
+  const broadcastId = nanoid();
+  createBroadcast(broadcastId, 'admin', message, recipients.length);
 
   const delivered = [];
   const failed = [];
@@ -156,6 +162,7 @@ router.post('/broadcast', async (req, res) => {
       type: 'broadcast',
       from: 'admin',
       message: message,
+      broadcast_id: broadcastId,
       timestamp: new Date().toISOString(),
       text: `📢 [agentgate] Broadcast from admin:\n${message.substring(0, 500)}`,
       mode: 'now'
@@ -175,16 +182,20 @@ router.post('/broadcast', async (req, res) => {
 
       if (response.ok) {
         delivered.push(agent.name);
+        addBroadcastRecipient(broadcastId, agent.name, 'delivered');
       } else {
-        failed.push({ name: agent.name, error: `HTTP ${response.status}` });
+        const errorMsg = `HTTP ${response.status}`;
+        failed.push({ name: agent.name, error: errorMsg });
+        addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
       }
     } catch (err) {
       failed.push({ name: agent.name, error: err.message });
+      addBroadcastRecipient(broadcastId, agent.name, 'failed', err.message);
     }
   }));
 
   if (wantsJson) {
-    return res.json({ delivered, failed, total: recipients.length });
+    return res.json({ broadcast_id: broadcastId, delivered, failed, total: recipients.length });
   }
 
   const resultMsg = `Delivered: ${delivered.length}, Failed: ${failed.length}`;
@@ -192,7 +203,7 @@ router.post('/broadcast', async (req, res) => {
 });
 
 // Render function
-function renderMessagesPage(messages, filter, counts, mode) {
+function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
   const renderMessage = (msg) => {
     let actions = '';
     if (msg.status === 'pending') {
@@ -314,6 +325,33 @@ function renderMessagesPage(messages, filter, counts, mode) {
       <p>No ${filter === 'all' ? '' : filter + ' '}messages</p>
     </div>
   ` : messages.map(renderMessage).join('')}
+  </div>
+
+  <h3 style="margin-top: 32px;">📢 Broadcast History</h3>
+  <div id="broadcasts-container">
+  ${broadcasts.length === 0 ? `
+    <div class="card empty-state">
+      <p>No broadcasts yet</p>
+    </div>
+  ` : broadcasts.map(b => `
+    <div class="card" style="margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div>
+          <strong style="color: #f3f4f6;">From:</strong> ${escapeHtml(b.from_agent)}
+          <span class="help" style="margin-left: 12px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
+        </div>
+        <span class="help utc-date" data-utc="${b.created_at}">${b.created_at}</span>
+      </div>
+      <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0 0 12px 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(b.message)}</pre>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        ${(b.recipients || []).map(r => `
+          <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${r.status === 'delivered' ? '#34d399' : '#f87171'}; border: 1px solid ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
+            ${escapeHtml(r.to_agent)} ${r.status === 'delivered' ? '✓' : '✗'}
+          </span>
+        `).join('')}
+      </div>
+    </div>
+  `).join('')}
   </div>
 
   <script>
