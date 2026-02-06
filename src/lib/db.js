@@ -129,18 +129,6 @@ db.exec(`
     content TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
-
-  -- Keywords junction table (normalized, stemmed)
-  CREATE TABLE IF NOT EXISTS memento_keywords (
-    memento_id INTEGER REFERENCES mementos(id) ON DELETE CASCADE,
-    keyword TEXT NOT NULL,
-    PRIMARY KEY (memento_id, keyword)
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_memento_keyword ON memento_keywords(keyword);
-  CREATE INDEX IF NOT EXISTS idx_memento_agent ON mementos(agent_id);
-  CREATE INDEX IF NOT EXISTS idx_memento_created ON mementos(created_at);
-
   -- Service-level access control
   CREATE TABLE IF NOT EXISTS service_access (
     service TEXT NOT NULL,
@@ -157,6 +145,17 @@ db.exec(`
     allowed BOOLEAN DEFAULT 1,
     PRIMARY KEY (service, account_name, agent_name)
   );
+
+  -- Keywords junction table (normalized, stemmed)
+  CREATE TABLE IF NOT EXISTS memento_keywords (
+    memento_id INTEGER REFERENCES mementos(id) ON DELETE CASCADE,
+    keyword TEXT NOT NULL,
+    PRIMARY KEY (memento_id, keyword)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_memento_keyword ON memento_keywords(keyword);
+  CREATE INDEX IF NOT EXISTS idx_memento_agent ON mementos(agent_id);
+  CREATE INDEX IF NOT EXISTS idx_memento_created ON mementos(created_at);
 `);
 
 // Migrate write_queue table to add notification columns
@@ -721,6 +720,32 @@ export function getAgentWithdrawEnabled() {
 
 export function setAgentWithdrawEnabled(enabled) {
   setSetting('agent_withdraw_enabled', enabled);
+}
+
+// ============================================
+// Webhook Secrets (for signature verification)
+// ============================================
+
+export function getWebhookSecret(service) {
+  const setting = getSetting(`webhook_secret_${service}`);
+  return setting || null;
+}
+
+export function setWebhookSecret(service, secret) {
+  setSetting(`webhook_secret_${service}`, secret);
+}
+
+export function deleteWebhookSecret(service) {
+  return deleteSetting(`webhook_secret_${service}`);
+}
+
+export function listWebhookSecrets() {
+  // Get all settings that start with webhook_secret_
+  const rows = db.prepare("SELECT key, updated_at FROM settings WHERE key LIKE 'webhook_secret_%'").all();
+  return rows.map(row => ({
+    service: row.key.replace('webhook_secret_', ''),
+    updated_at: row.updated_at
+  }));
 }
 
 // Memento helpers
