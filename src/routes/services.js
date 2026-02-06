@@ -5,7 +5,9 @@ import {
   setServiceAgents,
   listServicesWithAccess,
   listApiKeys,
-  checkServiceAccess
+  checkServiceAccess,
+  setBypassAuth,
+  checkBypassAuth
 } from '../lib/db.js';
 
 const router = Router();
@@ -81,14 +83,53 @@ router.post('/:service/:account/access/agents', (req, res) => {
     });
   }
 
-  // Normalize agent format
+  // Normalize agent format (include bypass_auth)
   const normalizedAgents = agents.map(a => ({
     name: a.name,
-    allowed: a.allowed !== false // default to true if not specified
+    allowed: a.allowed !== false, // default to true if not specified
+    bypass_auth: !!a.bypass_auth  // default to false
   }));
 
   setServiceAgents(service, account, normalizedAgents);
   res.json({ success: true, agents: normalizedAgents });
+});
+
+// PUT /api/services/:service/:account/access/agents/:agentName/bypass - Toggle bypass_auth
+router.put('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
+  const { service, account, agentName } = req.params;
+  const { enabled } = req.body;
+
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled must be a boolean' });
+  }
+
+  // Validate agent exists
+  const validAgents = listApiKeys().map(k => k.name.toLowerCase());
+  if (!validAgents.includes(agentName.toLowerCase())) {
+    return res.status(404).json({ error: `Agent '${agentName}' not found` });
+  }
+
+  setBypassAuth(service, account, agentName, enabled);
+  res.json({ 
+    success: true, 
+    service,
+    account,
+    agent: agentName,
+    bypass_auth: enabled
+  });
+});
+
+// GET /api/services/:service/:account/access/agents/:agentName/bypass - Check bypass_auth
+router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
+  const { service, account, agentName } = req.params;
+  
+  const hasBypass = checkBypassAuth(service, account, agentName);
+  res.json({ 
+    service,
+    account,
+    agent: agentName,
+    bypass_auth: hasBypass
+  });
 });
 
 export default router;
