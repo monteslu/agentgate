@@ -144,29 +144,44 @@ app.use('/webhooks', webhooksRoutes);
 // Agent readme endpoint - requires auth
 app.get('/api/readme', apiKeyAuth, (req, res) => {
   const accountsByService = getAccountsByService();
+  const agentName = req.apiKeyInfo?.name;
 
-  // Build services object from registry
+  // Build services object from registry, filtering by agent access
   const services = {};
   for (const [key, info] of Object.entries(SERVICE_REGISTRY)) {
     const dbKey = info.dbKey || key;
-    services[key] = {
-      accounts: accountsByService[dbKey] || [],
-      authType: info.authType,
-      description: info.description
-    };
+    const allAccounts = accountsByService[dbKey] || [];
+    
+    // Filter accounts based on agent access
+    const accessibleAccounts = allAccounts.filter(accountName => {
+      const access = checkServiceAccess(key, accountName, agentName);
+      return access.allowed;
+    });
+    
+    // Only include service if agent has access to at least one account
+    if (accessibleAccounts.length > 0) {
+      services[key] = {
+        accounts: accessibleAccounts,
+        authType: info.authType,
+        description: info.description
+      };
+    }
   }
 
-  // Build endpoints object from registry
+  // Build endpoints object from registry (only for accessible services)
   const endpoints = {};
   for (const [key, info] of Object.entries(SERVICE_REGISTRY)) {
-    endpoints[key] = {
-      base: `/api/${key}/{accountName}`,
-      description: info.description,
-      docs: info.docs,
-      examples: info.examples
-    };
-    if (info.writeGuidelines) {
-      endpoints[key].writeGuidelines = info.writeGuidelines;
+    // Only include endpoint if agent has access to this service
+    if (services[key]) {
+      endpoints[key] = {
+        base: `/api/${key}/{accountName}`,
+        description: info.description,
+        docs: info.docs,
+        examples: info.examples
+      };
+      if (info.writeGuidelines) {
+        endpoints[key].writeGuidelines = info.writeGuidelines;
+      }
     }
   }
 
