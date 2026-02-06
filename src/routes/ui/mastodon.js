@@ -2,13 +2,16 @@ import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../
 import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
+  const DEFAULT_SCOPES = 'read write:statuses';
+
   router.post('/mastodon/setup', async (req, res) => {
-    const { accountName, instance } = req.body;
+    const { accountName, instance, scopes } = req.body;
     if (!accountName || !instance) {
       return res.status(400).send('Account name and instance required');
     }
 
     const cleanInstance = instance.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    const scopeList = scopes || DEFAULT_SCOPES;
 
     try {
       const response = await fetch(`https://${cleanInstance}/api/v1/apps`, {
@@ -17,7 +20,7 @@ export function registerRoutes(router, baseUrl) {
         body: JSON.stringify({
           client_name: 'agentgate',
           redirect_uris: `${baseUrl}/ui/mastodon/callback`,
-          scopes: 'read',
+          scopes: scopeList,
           website: baseUrl
         })
       });
@@ -31,13 +34,14 @@ export function registerRoutes(router, baseUrl) {
       setAccountCredentials('mastodon', accountName, {
         instance: cleanInstance,
         clientId: app.client_id,
-        clientSecret: app.client_secret
+        clientSecret: app.client_secret,
+        scopes: scopeList
       });
 
       const authUrl = `https://${cleanInstance}/oauth/authorize?` +
         `client_id=${app.client_id}&response_type=code&` +
         `redirect_uri=${encodeURIComponent(`${baseUrl}/ui/mastodon/callback`)}&` +
-        `scope=read&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
+        `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
 
       res.redirect(authUrl);
     } catch (err) {
@@ -63,6 +67,8 @@ export function registerRoutes(router, baseUrl) {
     }
 
     try {
+      const scopeList = creds.scopes || DEFAULT_SCOPES;
+      
       const response = await fetch(`https://${creds.instance}/oauth/token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,7 +78,7 @@ export function registerRoutes(router, baseUrl) {
           redirect_uri: `${baseUrl}/ui/mastodon/callback`,
           grant_type: 'authorization_code',
           code,
-          scope: 'read'
+          scope: scopeList
         })
       });
 
@@ -108,10 +114,12 @@ export function registerRoutes(router, baseUrl) {
       return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
     }
 
+    const scopeList = creds.scopes || DEFAULT_SCOPES;
+
     const authUrl = `https://${creds.instance}/oauth/authorize?` +
       `client_id=${creds.clientId}&response_type=code&` +
       `redirect_uri=${encodeURIComponent(`${baseUrl}/ui/mastodon/callback`)}&` +
-      `scope=read&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
+      `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
 
     res.redirect(authUrl);
   });
@@ -171,6 +179,8 @@ export function renderCard(accounts, _baseUrl) {
           <input type="text" name="accountName" placeholder="main, tech, etc." required>
           <label>Instance</label>
           <input type="text" name="instance" placeholder="fosstodon.org" required>
+          <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(space separated)</span></label>
+          <input type="text" name="scopes" placeholder="read write:statuses" value="read write:statuses">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
