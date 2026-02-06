@@ -7,7 +7,7 @@ import {
 } from '../../lib/db.js';
 import { getHsyncUrl, isHsyncConnected } from '../../lib/hsyncManager.js';
 import { registerAllRoutes, renderAllCards } from './services.js';
-import { escapeHtml, PORT, BASE_URL, socketScript, localizeScript } from './shared.js';
+import { PORT, BASE_URL } from './shared.js';
 
 const router = Router();
 
