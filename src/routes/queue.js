@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth } from '../lib/db.js';
 import { emitCountUpdate } from '../lib/socketManager.js';
+import { executeQueueEntry } from '../lib/queueExecutor.js';
 
 const router = Router();
 
@@ -12,7 +13,7 @@ const VALID_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 // Submit a batch of write requests for approval
 // POST /api/queue/:service/:accountName/submit
-router.post('/:service/:accountName/submit', (req, res) => {
+router.post('/:service/:accountName/submit', async (req, res) => {
   try {
     const { service, accountName } = req.params;
     const { requests, comment } = req.body;
@@ -80,8 +81,41 @@ router.post('/:service/:accountName/submit', (req, res) => {
     // Get the API key name for audit trail
     const submittedBy = req.apiKeyInfo?.name || 'unknown';
 
+    // Check if agent has bypass_auth enabled for this service
+    const hasBypass = agentName && checkBypassAuth(service, accountName, agentName);
+
     // Create the queue entry
     const entry = createQueueEntry(service, accountName, requests, comment, submittedBy);
+
+    // If bypass enabled, execute immediately
+    if (hasBypass) {
+      try {
+        updateQueueStatus(entry.id, 'approved');
+        await executeQueueEntry({ ...entry, status: 'approved' });
+        const updatedEntry = getQueueEntry(entry.id);
+        
+        emitCountUpdate();
+        
+        return res.status(200).json({
+          id: entry.id,
+          status: updatedEntry.status,
+          message: 'Request executed immediately (bypass_auth enabled)',
+          bypassed: true,
+          results: updatedEntry.results
+        });
+      } catch (err) {
+        updateQueueStatus(entry.id, 'failed', { results: [{ error: err.message }] });
+        emitCountUpdate();
+        
+        return res.status(500).json({
+          id: entry.id,
+          status: 'failed',
+          message: 'Bypass execution failed',
+          bypassed: true,
+          error: err.message
+        });
+      }
+    }
 
     // Emit real-time update
     emitCountUpdate();
