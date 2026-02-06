@@ -29,10 +29,15 @@ router.get('/', (req, res) => {
 // Register all OAuth service routes (github, bluesky, reddit, etc.)
 registerAllRoutes(router, BASE_URL);
 
-function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQueueCount, messagingMode, pendingMessagesCount, sharedQueueVisibility, agentWithdrawEnabled }) {
-  return `<!DOCTYPE html>
-<html>
-<head>
+// ============================================================================
+// Render Functions - Each handles a specific section of the page
+// ============================================================================
+
+/**
+ * Render the <head> section with title, styles, and scripts
+ */
+function renderHead() {
+  return `
   <title>agentgate - Admin</title>
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
@@ -99,9 +104,14 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
         }
       });
     });
-  </script>
-</head>
-<body>
+  </script>`;
+}
+
+/**
+ * Render the header with logo, title, and navigation
+ */
+function renderHeader({ pendingQueueCount, messagingMode, pendingMessagesCount }) {
+  return `
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
     <div style="display: flex; align-items: center; gap: 12px;">
       <img src="/public/favicon.svg" alt="agentgate" style="height: 64px;">
@@ -125,12 +135,24 @@ function renderPage(accounts, { hsyncConfig, hsyncUrl, hsyncConnected, pendingQu
     </div>
   </div>
   <p>API gateway for agents with human-in-the-loop write approval.</p>
-  <p class="help">API pattern: <code>/api/{service}/{accountName}/...</code></p>
+  <p class="help">API pattern: <code>/api/{service}/{accountName}/...</code></p>`;
+}
 
+/**
+ * Render the services section with all service cards
+ */
+function renderServices(accounts) {
+  return `
   <h2>Services</h2>
 
-  ${renderAllCards(accounts, BASE_URL)}
+  ${renderAllCards(accounts, BASE_URL)}`;
+}
 
+/**
+ * Render the usage documentation section
+ */
+function renderUsage() {
+  return `
   <h2>Usage</h2>
   <div class="card">
     <p>Make requests with your API key in the Authorization header:</p>
@@ -145,9 +167,14 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
   -H "Content-Type: application/json" \\
   -d '{"requests":[{"method":"POST","path":"/repos/owner/repo/issues","body":{"title":"Bug"}}],"comment":"Creating issue"}'
     </pre>
-  </div>
+  </div>`;
+}
 
-  <h2>Advanced</h2>
+/**
+ * Render the messaging configuration section
+ */
+function renderMessagingSection({ messagingMode, pendingMessagesCount }) {
+  return `
   <div class="card">
     <details ${messagingMode !== 'off' ? 'open' : ''}>
       <summary>Agent Messaging ${messagingMode !== 'off' ? `<span class="status configured">${messagingMode}</span>` : ''}</summary>
@@ -173,19 +200,21 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
         ` : ''}
       </div>
     </details>
-  </div>
+  </div>`;
+}
 
-  <div class="card">
-    <details ${hsyncConfig?.enabled ? 'open' : ''}>
-      <summary>hsync (Remote Access) ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</summary>
-      <div style="margin-top: 16px;">
-        ${hsyncConfig?.enabled ? `
-          <p>URL: <strong>${hsyncConfig.url}</strong></p>
+/**
+ * Render the hsync remote access configuration section
+ */
+function renderHsyncSection({ hsyncConfig, hsyncUrl, hsyncConnected }) {
+  const enabledContent = `
+          <p>URL: <strong>${hsyncConfig?.url}</strong></p>
           ${hsyncUrl ? `<p>Public URL: <span class="copyable">${hsyncUrl} <button type="button" class="copy-btn" onclick="copyText('${hsyncUrl}', this)">Copy</button></span></p>` : '<p class="help">Connecting... (refresh page to see URL)</p>'}
           <form method="POST" action="/ui/hsync/delete">
             <button type="submit" class="btn-danger">Disable</button>
-          </form>
-        ` : `
+          </form>`;
+
+  const disabledContent = `
           <p class="help">Optional: Use <a href="https://hsync.tech" target="_blank">hsync</a> to expose this gateway to remote agents without opening ports.</p>
           <form method="POST" action="/ui/hsync/setup">
             <label>URL</label>
@@ -193,12 +222,30 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
             <label>Token (optional)</label>
             <input type="password" name="token" placeholder="Token if required">
             <button type="submit" class="btn-primary">Enable hsync</button>
-          </form>
-        `}
+          </form>`;
+
+  const statusBadge = hsyncConnected
+    ? '<span class="status configured">Connected</span>'
+    : hsyncConfig?.enabled
+      ? '<span class="status not-configured">Disconnected</span>'
+      : '';
+
+  return `
+  <div class="card">
+    <details ${hsyncConfig?.enabled ? 'open' : ''}>
+      <summary>hsync (Remote Access) ${statusBadge}</summary>
+      <div style="margin-top: 16px;">
+        ${hsyncConfig?.enabled ? enabledContent : disabledContent}
       </div>
     </details>
-  </div>
+  </div>`;
+}
 
+/**
+ * Render the queue settings configuration section
+ */
+function renderQueueSettingsSection({ sharedQueueVisibility, agentWithdrawEnabled }) {
+  return `
   <div class="card">
     <details ${sharedQueueVisibility || agentWithdrawEnabled ? 'open' : ''}>
       <summary>Queue Settings ${sharedQueueVisibility || agentWithdrawEnabled ? '<span class="status configured">Configured</span>' : ''}</summary>
@@ -232,7 +279,32 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
         </div>
       </div>
     </details>
-  </div>
+  </div>`;
+}
+
+/**
+ * Render the advanced section containing all configuration options
+ */
+function renderAdvanced(options) {
+  return `
+  <h2>Advanced</h2>
+  ${renderMessagingSection(options)}
+  ${renderHsyncSection(options)}
+  ${renderQueueSettingsSection(options)}`;
+}
+
+/**
+ * Render the complete page by composing all sections
+ */
+function renderPage(accounts, options) {
+  return `<!DOCTYPE html>
+<html>
+<head>${renderHead()}</head>
+<body>
+  ${renderHeader(options)}
+  ${renderServices(accounts)}
+  ${renderUsage()}
+  ${renderAdvanced(options)}
 </body>
 </html>`;
 }
