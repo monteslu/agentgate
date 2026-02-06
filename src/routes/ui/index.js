@@ -9,6 +9,7 @@ import queueRouter from './queue.js';
 import messagesRouter from './messages.js';
 import settingsRouter from './settings.js';
 import homeRouter from './home.js';
+import accessRouter from './access.js';
 
 // Create the main UI router
 const router = Router();
@@ -30,6 +31,9 @@ router.use('/queue', queueRouter);
 
 // Agent messages: /messages, /messages/:id/approve, /messages/:id/reject, etc.
 router.use('/messages', messagesRouter);
+
+// Service access control: /access, /access/:service/:account/*
+router.use('/access', accessRouter);
 
 // Settings routes: /hsync/*, /messaging/*, /queue/settings/* (mounted at root)
 router.use('/', settingsRouter);

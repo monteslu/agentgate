@@ -1,30 +1,36 @@
 import { Router } from 'express';
 import {
   getServiceAccess,
-  setServiceAccessMode,
-  setServiceAgents,
   listServicesWithAccess,
-  listApiKeys,
-  checkServiceAccess
+  checkServiceAccess,
+  checkBypassAuth
 } from '../lib/db.js';
 
 const router = Router();
 
 // GET /api/services - List services with access info (filtered by agent access)
+// Includes bypass_auth status for the calling agent
 router.get('/', (req, res) => {
   const agentName = req.apiKeyInfo?.name;
   const allServices = listServicesWithAccess();
   
   // Filter to only show services the agent has access to
-  const accessibleServices = allServices.filter(svc => {
-    const access = checkServiceAccess(svc.service, svc.account_name, agentName);
-    return access.allowed;
-  });
+  // And include bypass_auth status for this agent
+  const accessibleServices = allServices
+    .filter(svc => {
+      const access = checkServiceAccess(svc.service, svc.account_name, agentName);
+      return access.allowed;
+    })
+    .map(svc => ({
+      ...svc,
+      bypass_auth: agentName ? checkBypassAuth(svc.service, svc.account_name, agentName) : false
+    }));
   
   res.json({ services: accessibleServices });
 });
 
 // GET /api/services/:service/:account/access - Get access config for a service/account
+// Returns the agent's own access info (read-only)
 router.get('/:service/:account/access', (req, res) => {
   const { service, account } = req.params;
   const agentName = req.apiKeyInfo?.name;
@@ -38,57 +44,41 @@ router.get('/:service/:account/access', (req, res) => {
     });
   }
   
+  // Return access info including this agent's bypass status
   const access = getServiceAccess(service, account);
-  res.json(access);
+  const agentBypass = agentName ? checkBypassAuth(service, account, agentName) : false;
+  
+  res.json({
+    ...access,
+    your_bypass_auth: agentBypass
+  });
 });
 
-// PUT /api/services/:service/:account/access - Update access mode
-router.put('/:service/:account/access', (req, res) => {
-  const { service, account } = req.params;
-  const { access_mode } = req.body;
+// NOTE: Configuration endpoints (PUT access mode, POST agents, PUT bypass) 
+// have been REMOVED from the API for security.
+// All access configuration must be done through the Admin UI at /ui/access
+// which requires admin authentication.
 
-  if (!access_mode) {
-    return res.status(400).json({ error: 'access_mode is required' });
-  }
-
-  try {
-    setServiceAccessMode(service, account, access_mode);
-    res.json({ success: true, access_mode });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-// POST /api/services/:service/:account/access/agents - Set agent access list
-router.post('/:service/:account/access/agents', (req, res) => {
-  const { service, account } = req.params;
-  const { agents } = req.body;
-
-  if (!Array.isArray(agents)) {
-    return res.status(400).json({ error: 'agents must be an array' });
-  }
-
-  // Validate agent names exist
-  const validAgents = listApiKeys().map(k => k.name.toLowerCase());
-  const invalidAgents = agents.filter(
-    a => !validAgents.includes(a.name?.toLowerCase())
-  );
-
-  if (invalidAgents.length > 0) {
-    return res.status(400).json({
-      error: 'Invalid agent names',
-      invalid: invalidAgents.map(a => a.name)
+// GET /api/services/:service/:account/access/agents/:agentName/bypass - Check bypass_auth (read-only)
+// Agents can check their own bypass status
+router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
+  const { service, account, agentName } = req.params;
+  const callingAgent = req.apiKeyInfo?.name;
+  
+  // Agents can only check their own bypass status
+  if (callingAgent && callingAgent.toLowerCase() !== agentName.toLowerCase()) {
+    return res.status(403).json({ 
+      error: 'You can only check your own bypass status'
     });
   }
-
-  // Normalize agent format
-  const normalizedAgents = agents.map(a => ({
-    name: a.name,
-    allowed: a.allowed !== false // default to true if not specified
-  }));
-
-  setServiceAgents(service, account, normalizedAgents);
-  res.json({ success: true, agents: normalizedAgents });
+  
+  const hasBypass = checkBypassAuth(service, account, agentName);
+  res.json({ 
+    service,
+    account,
+    agent: agentName,
+    bypass_auth: hasBypass
+  });
 });
 
 export default router;

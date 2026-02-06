@@ -143,6 +143,7 @@ db.exec(`
     account_name TEXT NOT NULL,
     agent_name TEXT NOT NULL,
     allowed BOOLEAN DEFAULT 1,
+    bypass_auth BOOLEAN DEFAULT 0,
     PRIMARY KEY (service, account_name, agent_name)
   );
 
@@ -1077,7 +1078,7 @@ export function getServiceAccess(service, accountName) {
   `).get(service, accountName);
 
   const agents = db.prepare(`
-    SELECT agent_name, allowed FROM service_agent_access
+    SELECT agent_name, allowed, bypass_auth FROM service_agent_access
     WHERE service = ? AND account_name = ?
   `).all(service, accountName);
 
@@ -1086,7 +1087,7 @@ export function getServiceAccess(service, accountName) {
     account_name: accountName,
     access_mode: row?.access_mode || 'all',
     updated_at: row?.updated_at || null,
-    agents: agents.map(a => ({ name: a.agent_name, allowed: !!a.allowed }))
+    agents: agents.map(a => ({ name: a.agent_name, allowed: !!a.allowed, bypass_auth: !!a.bypass_auth }))
   };
 }
 
@@ -1105,13 +1106,14 @@ export function setServiceAccessMode(service, accountName, mode) {
 }
 
 // Add or update agent access for a service/account
-export function setServiceAgentAccess(service, accountName, agentName, allowed) {
+export function setServiceAgentAccess(service, accountName, agentName, allowed, bypassAuth = false) {
   db.prepare(`
-    INSERT INTO service_agent_access (service, account_name, agent_name, allowed)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO service_agent_access (service, account_name, agent_name, allowed, bypass_auth)
+    VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(service, account_name, agent_name) DO UPDATE SET
-      allowed = excluded.allowed
-  `).run(service, accountName, agentName, allowed ? 1 : 0);
+      allowed = excluded.allowed,
+      bypass_auth = excluded.bypass_auth
+  `).run(service, accountName, agentName, allowed ? 1 : 0, bypassAuth ? 1 : 0);
 }
 
 // Remove agent from service access list
@@ -1128,14 +1130,14 @@ export function setServiceAgents(service, accountName, agents) {
     DELETE FROM service_agent_access WHERE service = ? AND account_name = ?
   `);
   const insertStmt = db.prepare(`
-    INSERT INTO service_agent_access (service, account_name, agent_name, allowed)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO service_agent_access (service, account_name, agent_name, allowed, bypass_auth)
+    VALUES (?, ?, ?, ?, ?)
   `);
 
   db.transaction(() => {
     deleteStmt.run(service, accountName);
     for (const agent of agents) {
-      insertStmt.run(service, accountName, agent.name, agent.allowed ? 1 : 0);
+      insertStmt.run(service, accountName, agent.name, agent.allowed ? 1 : 0, agent.bypass_auth ? 1 : 0);
     }
   })();
 }
@@ -1172,6 +1174,40 @@ export function checkServiceAccess(service, accountName, agentName) {
 
   // Fallback (shouldn't happen)
   return { allowed: true, reason: 'default' };
+}
+
+// Check if an agent has bypass_auth enabled for a service/account
+export function checkBypassAuth(service, accountName, agentName) {
+  const row = db.prepare(`
+    SELECT bypass_auth FROM service_agent_access
+    WHERE service = ? AND account_name = ? AND LOWER(agent_name) = LOWER(?)
+  `).get(service, accountName, agentName);
+  
+  return row?.bypass_auth === 1;
+}
+
+// Set bypass_auth for an agent on a service/account
+export function setBypassAuth(service, accountName, agentName, enabled) {
+  // First check if the agent entry exists
+  const existing = db.prepare(`
+    SELECT 1 FROM service_agent_access
+    WHERE service = ? AND account_name = ? AND LOWER(agent_name) = LOWER(?)
+  `).get(service, accountName, agentName);
+  
+  if (existing) {
+    // Update existing entry
+    db.prepare(`
+      UPDATE service_agent_access
+      SET bypass_auth = ?
+      WHERE service = ? AND account_name = ? AND LOWER(agent_name) = LOWER(?)
+    `).run(enabled ? 1 : 0, service, accountName, agentName);
+  } else {
+    // Create new entry with default allowed=true
+    db.prepare(`
+      INSERT INTO service_agent_access (service, account_name, agent_name, allowed, bypass_auth)
+      VALUES (?, ?, ?, 1, ?)
+    `).run(service, accountName, agentName, enabled ? 1 : 0);
+  }
 }
 
 // Get all services with their access config (for admin UI)
