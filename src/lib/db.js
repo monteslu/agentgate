@@ -683,3 +683,29 @@ export function getAgentWithdrawEnabled() {
 export function setAgentWithdrawEnabled(enabled) {
   setSetting('agent_withdraw_enabled', enabled);
 }
+
+// ============================================
+// Webhook Secrets (for signature verification)
+// ============================================
+
+export function getWebhookSecret(service) {
+  const setting = getSetting(`webhook_secret_${service}`);
+  return setting || null;
+}
+
+export function setWebhookSecret(service, secret) {
+  setSetting(`webhook_secret_${service}`, secret);
+}
+
+export function deleteWebhookSecret(service) {
+  return deleteSetting(`webhook_secret_${service}`);
+}
+
+export function listWebhookSecrets() {
+  // Get all settings that start with webhook_secret_
+  const rows = db.prepare("SELECT key, updated_at FROM settings WHERE key LIKE 'webhook_secret_%'").all();
+  return rows.map(row => ({
+    service: row.key.replace('webhook_secret_', ''),
+    updated_at: row.updated_at
+  }));
+}
