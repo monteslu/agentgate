@@ -109,6 +109,7 @@ router.get('/:accountName/*', async (req, res) => {
     const response = await fetch(url, {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
+        'LinkedIn-Version': '202401',
         'X-Restli-Protocol-Version': '2.0.0',
         'Accept': 'application/json'
       }
