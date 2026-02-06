@@ -375,8 +375,8 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         listKeywords: {
           method: 'GET',
           path: '/api/agents/memento/keywords',
-          description: 'List all keywords you have used',
-          response: '{ keywords: ["keyword1", "keyword2", ...] }'
+          description: 'List all keywords you have used (returned in stemmed form, e.g., "games" → "game")',
+          response: '{ keywords: [{ keyword, count }, ...] }'
         },
         search: {
           method: 'GET',
