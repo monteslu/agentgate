@@ -21,6 +21,30 @@ export function renderMarkdownLinks(str) {
   return escaped;
 }
 
+// Generate a consistent color from a string (for avatar fallback)
+export function stringToColor(str) {
+  if (!str) return '#6b7280';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 60%, 45%)`;
+}
+
+// Render agent avatar with fallback to initials
+export function renderAvatar(agentName, { size = 32, className = '' } = {}) {
+  if (!agentName) return '';
+  const safeName = escapeHtml(agentName);
+  const initial = agentName.charAt(0).toUpperCase();
+  const color = stringToColor(agentName);
+  
+  return `<span class="avatar ${className}" style="width: ${size}px; height: ${size}px; background-color: ${color};" data-agent="${safeName}">
+    <img src="/ui/keys/avatar/${encodeURIComponent(agentName)}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+    <span class="avatar-initials" style="display: none;">${initial}</span>
+  </span>`;
+}
+
 // Status badge HTML
 export function statusBadge(status) {
   const colors = {
