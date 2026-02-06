@@ -141,6 +141,58 @@ export function copyScript() {
   </script>`;
 }
 
+// Styled error page for OAuth callbacks and other errors
+export function renderErrorPage(title, message, { backUrl = '/ui', backText = 'Back to Settings' } = {}) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>agentgate - ${escapeHtml(title)}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+  <link rel="stylesheet" href="/public/style.css">
+  <style>
+    .error-container {
+      max-width: 500px;
+      margin: 80px auto;
+      padding: 32px;
+      text-align: center;
+    }
+    .error-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+    .error-title {
+      color: #f87171;
+      margin-bottom: 16px;
+    }
+    .error-message {
+      color: #9ca3af;
+      margin-bottom: 24px;
+      line-height: 1.6;
+      word-break: break-word;
+    }
+    .error-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="error-container">
+      <div class="error-icon">⚠️</div>
+      <h1 class="error-title">${escapeHtml(title)}</h1>
+      <p class="error-message">${escapeHtml(message)}</p>
+      <div class="error-actions">
+        <a href="${escapeHtml(backUrl)}" class="btn btn-primary">${escapeHtml(backText)}</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // Simple navigation header for sub-pages (includes badge elements for socket.io updates)
 export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off' } = {}) {
   return `

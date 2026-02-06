@@ -1,4 +1,5 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
   router.post('/fitbit/setup', (req, res) => {
@@ -22,14 +23,19 @@ export function registerRoutes(router, baseUrl) {
 
   router.get('/fitbit/callback', async (req, res) => {
     const { code, error, state } = req.query;
+    const accountName = state?.replace('agentgate_fitbit_', '') || 'default';
+    
     if (error) {
-      return res.status(400).send(`Fitbit OAuth error: ${error}`);
+      const creds = getAccountCredentials('fitbit', accountName);
+      if (creds) {
+        setAccountCredentials('fitbit', accountName, { ...creds, authStatus: 'failed', authError: error });
+      }
+      return res.status(400).send(renderErrorPage('Fitbit OAuth Error', `Fitbit returned an error: ${error}`));
     }
 
-    const accountName = state?.replace('agentgate_fitbit_', '') || 'default';
     const creds = getAccountCredentials('fitbit', accountName);
     if (!creds) {
-      return res.status(400).send('Fitbit account not found. Please try setup again.');
+      return res.status(400).send(renderErrorPage('Setup Error', 'Fitbit account not found. Please try setup again.'));
     }
 
     try {
@@ -52,7 +58,8 @@ export function registerRoutes(router, baseUrl) {
 
       const tokens = await response.json();
       if (tokens.errors) {
-        return res.status(400).send(`Fitbit token error: ${tokens.errors[0]?.message || 'Unknown error'}`);
+        setAccountCredentials('fitbit', accountName, { ...creds, authStatus: 'failed', authError: tokens.errors[0]?.message || 'Unknown error' });
+        return res.status(400).send(renderErrorPage('Token Error', `Fitbit token exchange failed: ${tokens.errors[0]?.message || 'Unknown error'}`));
       }
 
       setAccountCredentials('fitbit', accountName, {
@@ -60,12 +67,14 @@ export function registerRoutes(router, baseUrl) {
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
         userId: tokens.user_id,
-        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000
+        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000,
+        authStatus: 'success'
       });
 
       res.redirect('/ui');
     } catch (err) {
-      res.status(500).send(`Fitbit OAuth failed: ${err.message}`);
+      setAccountCredentials('fitbit', accountName, { ...creds, authStatus: 'failed', authError: err.message });
+      res.status(500).send(renderErrorPage('Connection Error', `Fitbit OAuth failed: ${err.message}`));
     }
   });
 
@@ -74,6 +83,25 @@ export function registerRoutes(router, baseUrl) {
     deleteAccount('fitbit', accountName);
     res.redirect('/ui');
   });
+
+  router.post('/fitbit/retry', (req, res) => {
+    const { accountName } = req.body;
+    const creds = getAccountCredentials('fitbit', accountName);
+    if (!creds || !creds.clientId || !creds.clientSecret) {
+      return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
+    }
+
+    const redirectUri = `${baseUrl}/ui/fitbit/callback`;
+    const scope = 'activity heartrate location nutrition oxygen_saturation profile respiratory_rate settings sleep social temperature weight';
+    const state = `agentgate_fitbit_${accountName}`;
+
+    const authUrl = 'https://www.fitbit.com/oauth2/authorize?' +
+      `client_id=${creds.clientId}&response_type=code&` +
+      `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scope)}`;
+
+    res.redirect(authUrl);
+  });
 }
 
 export function renderCard(accounts, baseUrl) {
@@ -81,15 +109,36 @@ export function renderCard(accounts, baseUrl) {
 
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
-    return serviceAccounts.map(acc => `
-      <div class="account-item">
-        <span><strong>${acc.name}</strong></span>
-        <form method="POST" action="/ui/fitbit/delete" style="margin:0;">
+    return serviceAccounts.map(acc => {
+      const { hasToken, hasCredentials, authStatus } = acc.status || {};
+      
+      let statusBadge = '';
+      if (hasToken) {
+        statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
+      } else if (authStatus === 'failed') {
+        statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
+      } else if (hasCredentials) {
+        statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
+      }
+      
+      const retryBtn = (!hasToken && hasCredentials) ? `
+        <form method="POST" action="/ui/fitbit/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}">
-          <button type="submit" class="btn-sm btn-danger">Remove</button>
-        </form>
-      </div>
-    `).join('');
+          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+        </form>` : '';
+      
+      return `
+      <div class="account-item">
+        <span><strong>${acc.name}</strong>${statusBadge}</span>
+        <div style="display: flex; gap: 8px;">
+          ${retryBtn}
+          <form method="POST" action="/ui/fitbit/delete" style="margin:0;">
+            <input type="hidden" name="accountName" value="${acc.name}">
+            <button type="submit" class="btn-sm btn-danger">Remove</button>
+          </form>
+        </div>
+      </div>`;
+    }).join('');
   };
 
   return `

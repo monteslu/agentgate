@@ -1,4 +1,5 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
   router.post('/youtube/setup', (req, res) => {
@@ -22,14 +23,19 @@ export function registerRoutes(router, baseUrl) {
 
   router.get('/youtube/callback', async (req, res) => {
     const { code, error, state } = req.query;
+    const accountName = state?.replace('agentgate_youtube_', '') || 'default';
+    
     if (error) {
-      return res.status(400).send(`YouTube OAuth error: ${error}`);
+      const creds = getAccountCredentials('youtube', accountName);
+      if (creds) {
+        setAccountCredentials('youtube', accountName, { ...creds, authStatus: 'failed', authError: error });
+      }
+      return res.status(400).send(renderErrorPage('YouTube OAuth Error', `YouTube returned an error: ${error}`));
     }
 
-    const accountName = state?.replace('agentgate_youtube_', '') || 'default';
     const creds = getAccountCredentials('youtube', accountName);
     if (!creds) {
-      return res.status(400).send('YouTube account not found. Please try setup again.');
+      return res.status(400).send(renderErrorPage('Setup Error', 'YouTube account not found. Please try setup again.'));
     }
 
     try {
@@ -51,19 +57,22 @@ export function registerRoutes(router, baseUrl) {
 
       const tokens = await response.json();
       if (tokens.error) {
-        return res.status(400).send(`YouTube token error: ${tokens.error}`);
+        setAccountCredentials('youtube', accountName, { ...creds, authStatus: 'failed', authError: tokens.error });
+        return res.status(400).send(renderErrorPage('Token Error', `YouTube token exchange failed: ${tokens.error}`));
       }
 
       setAccountCredentials('youtube', accountName, {
         ...creds,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000
+        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000,
+        authStatus: 'success'
       });
 
       res.redirect('/ui');
     } catch (err) {
-      res.status(500).send(`YouTube OAuth failed: ${err.message}`);
+      setAccountCredentials('youtube', accountName, { ...creds, authStatus: 'failed', authError: err.message });
+      res.status(500).send(renderErrorPage('Connection Error', `YouTube OAuth failed: ${err.message}`));
     }
   });
 
@@ -72,6 +81,25 @@ export function registerRoutes(router, baseUrl) {
     deleteAccount('youtube', accountName);
     res.redirect('/ui');
   });
+
+  router.post('/youtube/retry', (req, res) => {
+    const { accountName } = req.body;
+    const creds = getAccountCredentials('youtube', accountName);
+    if (!creds || !creds.clientId || !creds.clientSecret) {
+      return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
+    }
+
+    const redirectUri = `${baseUrl}/ui/youtube/callback`;
+    const scope = 'https://www.googleapis.com/auth/youtube.readonly';
+    const state = `agentgate_youtube_${accountName}`;
+
+    const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' +
+      `client_id=${creds.clientId}&response_type=code&` +
+      `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scope)}&access_type=offline&prompt=consent`;
+
+    res.redirect(authUrl);
+  });
 }
 
 export function renderCard(accounts, baseUrl) {
@@ -79,15 +107,36 @@ export function renderCard(accounts, baseUrl) {
 
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
-    return serviceAccounts.map(acc => `
-      <div class="account-item">
-        <span><strong>${acc.name}</strong></span>
-        <form method="POST" action="/ui/youtube/delete" style="margin:0;">
+    return serviceAccounts.map(acc => {
+      const { hasToken, hasCredentials, authStatus } = acc.status || {};
+      
+      let statusBadge = '';
+      if (hasToken) {
+        statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
+      } else if (authStatus === 'failed') {
+        statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
+      } else if (hasCredentials) {
+        statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
+      }
+      
+      const retryBtn = (!hasToken && hasCredentials) ? `
+        <form method="POST" action="/ui/youtube/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}">
-          <button type="submit" class="btn-sm btn-danger">Remove</button>
-        </form>
-      </div>
-    `).join('');
+          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+        </form>` : '';
+      
+      return `
+      <div class="account-item">
+        <span><strong>${acc.name}</strong>${statusBadge}</span>
+        <div style="display: flex; gap: 8px;">
+          ${retryBtn}
+          <form method="POST" action="/ui/youtube/delete" style="margin:0;">
+            <input type="hidden" name="accountName" value="${acc.name}">
+            <button type="submit" class="btn-sm btn-danger">Remove</button>
+          </form>
+        </div>
+      </div>`;
+    }).join('');
   };
 
   return `

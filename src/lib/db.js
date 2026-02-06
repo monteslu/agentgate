@@ -219,10 +219,31 @@ export function getAccountCredentials(service, name) {
 }
 
 export function listAccounts(service) {
+  let rows;
   if (service) {
-    return db.prepare('SELECT id, service, name, created_at, updated_at FROM service_accounts WHERE service = ?').all(service);
+    rows = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts WHERE service = ?').all(service);
+  } else {
+    rows = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts ORDER BY service, name').all();
   }
-  return db.prepare('SELECT id, service, name, created_at, updated_at FROM service_accounts ORDER BY service, name').all();
+  // Parse credentials and extract ONLY safe display fields (no secrets!)
+  return rows.map(row => {
+    const creds = row.credentials ? JSON.parse(row.credentials) : null;
+    return {
+      id: row.id,
+      service: row.service,
+      name: row.name,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      // Safe display-only fields (no clientSecret, accessToken, refreshToken!)
+      status: {
+        hasCredentials: !!(creds?.clientId || creds?.clientSecret),
+        hasToken: !!creds?.accessToken,
+        authStatus: creds?.authStatus || null,
+        authError: creds?.authError || null,
+        instance: creds?.instance || null  // For mastodon display
+      }
+    };
+  });
 }
 
 export function deleteAccount(service, name) {

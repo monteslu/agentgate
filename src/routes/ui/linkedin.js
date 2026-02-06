@@ -1,35 +1,46 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
+  const DEFAULT_SCOPES = 'profile email w_member_social';
+
   router.post('/linkedin/setup', (req, res) => {
-    const { accountName, clientId, clientSecret } = req.body;
+    const { accountName, clientId, clientSecret, scopes } = req.body;
     if (!accountName || !clientId || !clientSecret) {
       return res.status(400).send('Account name, client ID, and secret required');
     }
-    setAccountCredentials('linkedin', accountName, { clientId, clientSecret });
+    
+    // Use provided scopes or default, normalize comma/space separated to space separated
+    const scopeList = (scopes || DEFAULT_SCOPES).split(/[,\s]+/).filter(s => s).join(' ');
+    
+    setAccountCredentials('linkedin', accountName, { clientId, clientSecret, scopes: scopeList });
 
     const redirectUri = `${baseUrl}/ui/linkedin/callback`;
-    const scope = 'openid profile email r_liteprofile w_member_social';
     const state = `agentgate_linkedin_${accountName}`;
 
     const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
       `response_type=code&client_id=${clientId}&` +
       `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-      `scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
+      `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(state)}`;
 
     res.redirect(authUrl);
   });
 
   router.get('/linkedin/callback', async (req, res) => {
     const { code, error, error_description, state } = req.query;
+    const accountName = state?.replace('agentgate_linkedin_', '') || 'default';
+    
     if (error) {
-      return res.status(400).send(`LinkedIn OAuth error: ${error} - ${error_description}`);
+      const creds = getAccountCredentials('linkedin', accountName);
+      if (creds) {
+        setAccountCredentials('linkedin', accountName, { ...creds, authStatus: 'failed', authError: `${error}${error_description ? ` - ${error_description}` : ''}` });
+      }
+      return res.status(400).send(renderErrorPage('LinkedIn OAuth Error', `LinkedIn returned an error: ${error}${error_description ? ` - ${error_description}` : ''}`));
     }
 
-    const accountName = state?.replace('agentgate_linkedin_', '') || 'default';
     const creds = getAccountCredentials('linkedin', accountName);
     if (!creds) {
-      return res.status(400).send('LinkedIn account not found. Please try setup again.');
+      return res.status(400).send(renderErrorPage('Setup Error', 'LinkedIn account not found. Please try setup again.'));
     }
 
     try {
@@ -51,19 +62,22 @@ export function registerRoutes(router, baseUrl) {
 
       const tokens = await response.json();
       if (tokens.error) {
-        return res.status(400).send(`LinkedIn token error: ${tokens.error} - ${tokens.error_description}`);
+        setAccountCredentials('linkedin', accountName, { ...creds, authStatus: 'failed', authError: `${tokens.error}${tokens.error_description ? ` - ${tokens.error_description}` : ''}` });
+        return res.status(400).send(renderErrorPage('Token Error', `LinkedIn token exchange failed: ${tokens.error}${tokens.error_description ? ` - ${tokens.error_description}` : ''}`));
       }
 
       setAccountCredentials('linkedin', accountName, {
         ...creds,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000
+        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000,
+        authStatus: 'success'
       });
 
       res.redirect('/ui');
     } catch (err) {
-      res.status(500).send(`LinkedIn OAuth failed: ${err.message}`);
+      setAccountCredentials('linkedin', accountName, { ...creds, authStatus: 'failed', authError: err.message });
+      res.status(500).send(renderErrorPage('Connection Error', `LinkedIn OAuth failed: ${err.message}`));
     }
   });
 
@@ -72,6 +86,25 @@ export function registerRoutes(router, baseUrl) {
     deleteAccount('linkedin', accountName);
     res.redirect('/ui');
   });
+
+  router.post('/linkedin/retry', (req, res) => {
+    const { accountName } = req.body;
+    const creds = getAccountCredentials('linkedin', accountName);
+    if (!creds || !creds.clientId || !creds.clientSecret) {
+      return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
+    }
+
+    const redirectUri = `${baseUrl}/ui/linkedin/callback`;
+    const scopeList = creds.scopes || 'profile email w_member_social';
+    const state = `agentgate_linkedin_${accountName}`;
+
+    const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
+      `response_type=code&client_id=${creds.clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(state)}`;
+
+    res.redirect(authUrl);
+  });
 }
 
 export function renderCard(accounts, baseUrl) {
@@ -79,15 +112,36 @@ export function renderCard(accounts, baseUrl) {
 
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
-    return serviceAccounts.map(acc => `
-      <div class="account-item">
-        <span><strong>${acc.name}</strong></span>
-        <form method="POST" action="/ui/linkedin/delete" style="margin:0;">
+    return serviceAccounts.map(acc => {
+      const { hasToken, hasCredentials, authStatus } = acc.status || {};
+      
+      let statusBadge = '';
+      if (hasToken) {
+        statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
+      } else if (authStatus === 'failed') {
+        statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
+      } else if (hasCredentials) {
+        statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
+      }
+      
+      const retryBtn = (!hasToken && hasCredentials) ? `
+        <form method="POST" action="/ui/linkedin/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}">
-          <button type="submit" class="btn-sm btn-danger">Remove</button>
-        </form>
-      </div>
-    `).join('');
+          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+        </form>` : '';
+      
+      return `
+      <div class="account-item">
+        <span><strong>${acc.name}</strong>${statusBadge}</span>
+        <div style="display: flex; gap: 8px;">
+          ${retryBtn}
+          <form method="POST" action="/ui/linkedin/delete" style="margin:0;">
+            <input type="hidden" name="accountName" value="${acc.name}">
+            <button type="submit" class="btn-sm btn-danger">Remove</button>
+          </form>
+        </div>
+      </div>`;
+    }).join('');
   };
 
   return `
@@ -109,6 +163,8 @@ export function renderCard(accounts, baseUrl) {
           <input type="text" name="clientId" placeholder="LinkedIn client ID" required>
           <label>Client Secret</label>
           <input type="password" name="clientSecret" placeholder="LinkedIn client secret" required>
+          <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(comma or space separated)</span></label>
+          <input type="text" name="scopes" placeholder="profile email w_member_social" value="profile email w_member_social">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

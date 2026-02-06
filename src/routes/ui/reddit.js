@@ -1,4 +1,5 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
+import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
   router.post('/reddit/setup', (req, res) => {
@@ -22,14 +23,19 @@ export function registerRoutes(router, baseUrl) {
 
   router.get('/reddit/callback', async (req, res) => {
     const { code, error, state } = req.query;
+    const accountName = state?.replace('agentgate_reddit_', '') || 'default';
+    
     if (error) {
-      return res.status(400).send(`Reddit OAuth error: ${error}`);
+      const creds = getAccountCredentials('reddit', accountName);
+      if (creds) {
+        setAccountCredentials('reddit', accountName, { ...creds, authStatus: 'failed', authError: error });
+      }
+      return res.status(400).send(renderErrorPage('Reddit OAuth Error', `Reddit returned an error: ${error}`));
     }
 
-    const accountName = state?.replace('agentgate_reddit_', '') || 'default';
     const creds = getAccountCredentials('reddit', accountName);
     if (!creds) {
-      return res.status(400).send('Reddit account not found. Please try setup again.');
+      return res.status(400).send(renderErrorPage('Setup Error', 'Reddit account not found. Please try setup again.'));
     }
 
     try {
@@ -51,19 +57,22 @@ export function registerRoutes(router, baseUrl) {
 
       const tokens = await response.json();
       if (tokens.error) {
-        return res.status(400).send(`Reddit token error: ${tokens.error}`);
+        setAccountCredentials('reddit', accountName, { ...creds, authStatus: 'failed', authError: tokens.error });
+        return res.status(400).send(renderErrorPage('Token Error', `Reddit token exchange failed: ${tokens.error}`));
       }
 
       setAccountCredentials('reddit', accountName, {
         ...creds,
         accessToken: tokens.access_token,
         refreshToken: tokens.refresh_token,
-        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000
+        expiresAt: Date.now() + (tokens.expires_in * 1000) - 60000,
+        authStatus: 'success'
       });
 
       res.redirect('/ui');
     } catch (err) {
-      res.status(500).send(`Reddit OAuth failed: ${err.message}`);
+      setAccountCredentials('reddit', accountName, { ...creds, authStatus: 'failed', authError: err.message });
+      res.status(500).send(renderErrorPage('Connection Error', `Reddit OAuth failed: ${err.message}`));
     }
   });
 
@@ -72,6 +81,25 @@ export function registerRoutes(router, baseUrl) {
     deleteAccount('reddit', accountName);
     res.redirect('/ui');
   });
+
+  router.post('/reddit/retry', (req, res) => {
+    const { accountName } = req.body;
+    const creds = getAccountCredentials('reddit', accountName);
+    if (!creds || !creds.clientId || !creds.clientSecret) {
+      return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
+    }
+
+    const redirectUri = `${baseUrl}/ui/reddit/callback`;
+    const scope = 'read identity';
+    const state = `agentgate_reddit_${accountName}`;
+
+    const authUrl = 'https://www.reddit.com/api/v1/authorize?' +
+      `client_id=${creds.clientId}&response_type=code&` +
+      `state=${encodeURIComponent(state)}&redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `duration=permanent&scope=${encodeURIComponent(scope)}`;
+
+    res.redirect(authUrl);
+  });
 }
 
 export function renderCard(accounts, baseUrl) {
@@ -79,15 +107,36 @@ export function renderCard(accounts, baseUrl) {
 
   const renderAccounts = () => {
     if (serviceAccounts.length === 0) return '';
-    return serviceAccounts.map(acc => `
-      <div class="account-item">
-        <span><strong>${acc.name}</strong></span>
-        <form method="POST" action="/ui/reddit/delete" style="margin:0;">
+    return serviceAccounts.map(acc => {
+      const { hasToken, hasCredentials, authStatus } = acc.status || {};
+      
+      let statusBadge = '';
+      if (hasToken) {
+        statusBadge = '<span class="badge-success" style="margin-left: 8px;">✓ Connected</span>';
+      } else if (authStatus === 'failed') {
+        statusBadge = '<span class="badge-error" style="margin-left: 8px;">✗ Auth Failed</span>';
+      } else if (hasCredentials) {
+        statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
+      }
+      
+      const retryBtn = (!hasToken && hasCredentials) ? `
+        <form method="POST" action="/ui/reddit/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}">
-          <button type="submit" class="btn-sm btn-danger">Remove</button>
-        </form>
-      </div>
-    `).join('');
+          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+        </form>` : '';
+      
+      return `
+      <div class="account-item">
+        <span><strong>${acc.name}</strong>${statusBadge}</span>
+        <div style="display: flex; gap: 8px;">
+          ${retryBtn}
+          <form method="POST" action="/ui/reddit/delete" style="margin:0;">
+            <input type="hidden" name="accountName" value="${acc.name}">
+            <button type="submit" class="btn-sm btn-danger">Remove</button>
+          </form>
+        </div>
+      </div>`;
+    }).join('');
   };
 
   return `
