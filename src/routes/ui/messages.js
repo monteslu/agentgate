@@ -226,8 +226,8 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       </div>
       <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
         ${(b.recipients || []).map(r => `
-          <span style="padding: 4px 10px; border-radius: 12px; font-size: 12px; background: ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${r.status === 'delivered' ? '#34d399' : '#f87171'}; border: 1px solid ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
-            ${escapeHtml(r.to_agent)} ${r.status === 'delivered' ? '✓' : '✗'}
+          <span style="padding: 4px 10px; border-radius: 16px; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; background: ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)'}; color: ${r.status === 'delivered' ? '#34d399' : '#f87171'}; border: 1px solid ${r.status === 'delivered' ? 'rgba(52, 211, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'};">
+            ${renderAvatar(r.to_agent, { size: 18 })}${escapeHtml(r.to_agent)} ${r.status === 'delivered' ? '✓' : '✗'}
           </span>
         `).join('')}
       </div>
@@ -346,6 +346,8 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       ${filter === 'delivered' && counts.delivered > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'delivered\')">Clear Delivered</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      <a href="/ui/messages/export?format=json" class="btn-sm" style="text-decoration: none;">Export JSON</a>
+      <a href="/ui/messages/export?format=csv" class="btn-sm" style="text-decoration: none;">Export CSV</a>
     </div>
   </div>
 
