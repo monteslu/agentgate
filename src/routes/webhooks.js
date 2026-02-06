@@ -205,9 +205,12 @@ router.post('/github', async (req, res) => {
 
   // Verify signature if secret is configured
   if (secret) {
-    // Note: We need raw body for signature verification
-    // express.json() parses the body, so we reconstruct it
-    const rawBody = JSON.stringify(req.body);
+    // Use raw body captured by express.json verify callback
+    const rawBody = req.rawBody;
+    if (!rawBody) {
+      console.error('GitHub webhook missing raw body - cannot verify signature');
+      return res.status(500).json({ error: 'Internal error: raw body not captured' });
+    }
     if (!verifyGitHubSignature(rawBody, signature, secret)) {
       console.error('GitHub webhook signature verification failed');
       return res.status(401).json({ error: 'Invalid signature' });
@@ -241,3 +244,4 @@ router.post('/github', async (req, res) => {
 });
 
 export default router;
+
