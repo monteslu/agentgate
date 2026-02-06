@@ -239,12 +239,11 @@ function renderKeysPage(keys, error = null, newKey = null) {
     <tr id="key-${k.id}">
       <td>
         <div class="agent-with-avatar">
-          ${renderAvatar(k.name, { size: 32 })}
+          <span class="avatar-clickable" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Click to change avatar">
+            ${renderAvatar(k.name, { size: 32 })}
+          </span>
           <div>
             <strong>${escapeHtml(k.name)}</strong>
-            <div style="margin-top: 4px;">
-              <button type="button" class="btn-xs avatar-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}">Change Avatar</button>
-            </div>
           </div>
         </div>
       </td>
@@ -297,6 +296,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .modal input:focus { border-color: #6366f1; outline: none; }
     .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
     .modal .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
+    .avatar-clickable { cursor: pointer; display: inline-block; border-radius: 50%; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .avatar-clickable:hover { transform: scale(1.1); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); }
   </style>
 </head>
 <body>
@@ -522,8 +523,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
       document.getElementById('avatar-modal').classList.remove('active');
     }
 
-    document.querySelectorAll('.avatar-btn').forEach(btn => {
-      btn.addEventListener('click', () => showAvatarModal(btn));
+    document.querySelectorAll('.avatar-clickable').forEach(el => {
+      el.addEventListener('click', () => showAvatarModal(el));
     });
 
     document.getElementById('avatar-file').addEventListener('change', function(e) {
