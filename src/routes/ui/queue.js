@@ -7,7 +7,7 @@ import {
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript } from './shared.js';
+import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript } from './shared.js';
 
 const router = Router();
 
@@ -413,6 +413,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     }
   </script>
 ${socketScript()}
+${localizeScript()}
 </body>
 </html>`;
 }
