@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import {
-  getServiceAccess,
   listServicesWithAccess,
   checkServiceAccess,
   checkBypassAuth
@@ -29,8 +28,8 @@ router.get('/', (req, res) => {
   res.json({ services: accessibleServices });
 });
 
-// GET /api/services/:service/:account/access - Get access config for a service/account
-// Returns the agent's own access info (read-only)
+// GET /api/services/:service/:account/access - Get YOUR access info for a service/account
+// SECURITY: Only returns the calling agent's own access info, NOT other agents
 router.get('/:service/:account/access', (req, res) => {
   const { service, account } = req.params;
   const agentName = req.apiKeyInfo?.name;
@@ -44,13 +43,17 @@ router.get('/:service/:account/access', (req, res) => {
     });
   }
   
-  // Return access info including this agent's bypass status
-  const access = getServiceAccess(service, account);
+  // SECURITY FIX: Only return the calling agent's own access info
+  // Do NOT return the full agent list (that would leak other agents' info)
   const agentBypass = agentName ? checkBypassAuth(service, account, agentName) : false;
   
   res.json({
-    ...access,
-    your_bypass_auth: agentBypass
+    service,
+    account_name: account,
+    your_access: {
+      allowed: true,
+      bypass_auth: agentBypass
+    }
   });
 });
 
