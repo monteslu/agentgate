@@ -466,7 +466,7 @@ export function updateQueueStatus(id, status, extra = {}) {
 
 export function clearQueueByStatus(status) {
   if (status === 'all') {
-    return db.prepare("DELETE FROM write_queue WHERE status IN ('completed', 'failed', 'rejected')").run();
+    return db.prepare("DELETE FROM write_queue WHERE status IN ('completed', 'failed', 'rejected', 'withdrawn')").run();
   }
   return db.prepare('DELETE FROM write_queue WHERE status = ?').run(status);
 }
