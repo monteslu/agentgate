@@ -131,7 +131,7 @@ router.get('/:accountName/*', async (req, res) => {
     const data = await response.json();
     console.log(`[LinkedIn] Response status: ${response.status}`);
     if (response.status !== 200) {
-      console.log(`[LinkedIn] Error response:`, JSON.stringify(data));
+      console.log('[LinkedIn] Error response:', JSON.stringify(data));
     }
     
     res.status(response.status).json(data);
