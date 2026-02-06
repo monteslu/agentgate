@@ -2,7 +2,7 @@ import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../
 import { renderErrorPage } from './shared.js';
 
 export function registerRoutes(router, baseUrl) {
-  const DEFAULT_SCOPES = 'profile email w_member_social';
+  const DEFAULT_SCOPES = 'openid profile email w_member_social';
 
   router.post('/linkedin/setup', (req, res) => {
     const { accountName, clientId, clientSecret, scopes } = req.body;
@@ -95,7 +95,7 @@ export function registerRoutes(router, baseUrl) {
     }
 
     const redirectUri = `${baseUrl}/ui/linkedin/callback`;
-    const scopeList = creds.scopes || 'profile email w_member_social';
+    const scopeList = creds.scopes || 'openid profile email w_member_social';
     const state = `agentgate_linkedin_${accountName}`;
 
     const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
@@ -154,7 +154,7 @@ export function renderCard(accounts, baseUrl) {
     <details>
       <summary>Add LinkedIn Account</summary>
       <div style="margin-top: 15px;">
-        <p class="help">Create an app at <a href="https://www.linkedin.com/developers/apps" target="_blank">LinkedIn Developers</a>. Request "Sign In with LinkedIn using OpenID Connect" product.</p>
+        <p class="help">Create an app at <a href="https://www.linkedin.com/developers/apps" target="_blank">LinkedIn Developers</a>. Request both "Share on LinkedIn" AND "Sign In with LinkedIn using OpenID Connect" products.</p>
         <p class="help">Redirect URL: <span class="copyable">${baseUrl}/ui/linkedin/callback <button type="button" class="copy-btn" onclick="copyText('${baseUrl}/ui/linkedin/callback', this)">Copy</button></span></p>
         <form method="POST" action="/ui/linkedin/setup">
           <label>Account Name</label>
@@ -164,7 +164,7 @@ export function renderCard(accounts, baseUrl) {
           <label>Client Secret</label>
           <input type="password" name="clientSecret" placeholder="LinkedIn client secret" required>
           <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(comma or space separated)</span></label>
-          <input type="text" name="scopes" placeholder="profile email w_member_social" value="profile email w_member_social">
+          <input type="text" name="scopes" placeholder="openid profile email w_member_social" value="openid profile email w_member_social">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
