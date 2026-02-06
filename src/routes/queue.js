@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess } from '../lib/db.js';
 import { emitCountUpdate } from '../lib/socketManager.js';
 
 const router = Router();
@@ -33,6 +33,19 @@ router.post('/:service/:accountName/submit', (req, res) => {
         message: `No ${service} account named "${accountName}" is configured`
       });
     }
+
+    // Check service access
+    const agentName = req.apiKeyInfo?.name;
+    if (agentName) {
+      const access = checkServiceAccess(service, accountName, agentName);
+      if (!access.allowed) {
+        return res.status(403).json({
+          error: `Agent '${agentName}' does not have access to service '${service}/${accountName}'`,
+          reason: access.reason
+        });
+      }
+    }
+
 
     // Validate requests array
     if (!Array.isArray(requests) || requests.length === 0) {

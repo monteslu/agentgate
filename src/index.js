@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { validateApiKey, getAccountsByService, getCookieSecret, getMessagingMode } from './lib/db.js';
+import { validateApiKey, getAccountsByService, getCookieSecret, getMessagingMode, checkServiceAccess } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { initSocket } from './lib/socketManager.js';
 import githubRoutes, { serviceInfo as githubInfo } from './routes/github.js';
@@ -19,6 +19,7 @@ import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
 import uiRoutes from './routes/ui/index.js';
 import webhooksRoutes from './routes/webhooks.js';
+import servicesRoutes from './routes/services.js';
 
 // Aggregate service metadata from all routes
 const SERVICE_REGISTRY = {
@@ -76,17 +77,46 @@ function readOnlyEnforce(req, res, next) {
   next();
 }
 
-// API routes - require auth and read-only
+
+// Service access control middleware factory
+// Checks if the agent has access to the requested service/account
+function serviceAccessCheck(serviceName) {
+  return (req, res, next) => {
+    const accountName = req.params.accountName || req.params[0]?.split('/')[0];
+    if (!accountName) {
+      return next(); // No account specified, let the route handle it
+    }
+
+    const agentName = req.apiKeyInfo?.name;
+    if (!agentName) {
+      return next(); // No agent info, let other middleware handle auth
+    }
+
+    const access = checkServiceAccess(serviceName, accountName, agentName);
+    if (!access.allowed) {
+      return res.status(403).json({
+        error: `Agent '${agentName}' does not have access to service '${serviceName}/${accountName}'`,
+        reason: access.reason
+      });
+    }
+    next();
+  };
+}
+
+// API routes - require auth, read-only, and service access check
 // Pattern: /api/{service}/{accountName}/...
-app.use('/api/github', apiKeyAuth, readOnlyEnforce, githubRoutes);
-app.use('/api/bluesky', apiKeyAuth, readOnlyEnforce, blueskyRoutes);
-app.use('/api/reddit', apiKeyAuth, readOnlyEnforce, redditRoutes);
-app.use('/api/calendar', apiKeyAuth, readOnlyEnforce, calendarRoutes);
-app.use('/api/mastodon', apiKeyAuth, readOnlyEnforce, mastodonRoutes);
-app.use('/api/linkedin', apiKeyAuth, readOnlyEnforce, linkedinRoutes);
-app.use('/api/youtube', apiKeyAuth, readOnlyEnforce, youtubeRoutes);
-app.use('/api/jira', apiKeyAuth, readOnlyEnforce, jiraRoutes);
-app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, fitbitRoutes);
+app.use('/api/github', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('github'), githubRoutes);
+app.use('/api/bluesky', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('bluesky'), blueskyRoutes);
+app.use('/api/reddit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('reddit'), redditRoutes);
+app.use('/api/calendar', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('calendar'), calendarRoutes);
+app.use('/api/mastodon', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('mastodon'), mastodonRoutes);
+app.use('/api/linkedin', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('linkedin'), linkedinRoutes);
+app.use('/api/youtube', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('youtube'), youtubeRoutes);
+app.use('/api/jira', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('jira'), jiraRoutes);
+app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('fitbit'), fitbitRoutes);
+
+// Service access management - admin API (requires auth)
+app.use('/api/services', apiKeyAuth, servicesRoutes);
 
 // Queue routes - require auth but allow POST for submitting write requests
 // Pattern: /api/queue/{service}/{accountName}/submit
@@ -419,6 +449,52 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         'Keywords are stemmed: "games" matches "game", "running" matches "run"',
         'Maximum 10 keywords per memento',
         'Maximum 12KB content per memento'
+      ]
+    },
+    serviceAccess: {
+      description: 'Service-level access control. Restrict which agents can access specific services.',
+      accessModes: {
+        all: 'All agents can access (default)',
+        allowlist: 'Only listed agents can access',
+        denylist: 'All agents EXCEPT listed ones can access'
+      },
+      endpoints: {
+        list: {
+          method: 'GET',
+          path: '/api/services',
+          description: 'List all services with their access configuration',
+          response: '{ services: [{ service, account_name, access_mode, agent_count }, ...] }'
+        },
+        getAccess: {
+          method: 'GET',
+          path: '/api/services/:service/:account/access',
+          description: 'Get access config for a specific service/account',
+          response: '{ service, account_name, access_mode, agents: [{ name, allowed }, ...] }'
+        },
+        setMode: {
+          method: 'PUT',
+          path: '/api/services/:service/:account/access',
+          body: { access_mode: 'all | allowlist | denylist' },
+          description: 'Set access mode for a service/account',
+          response: '{ success: true, access_mode }'
+        },
+        setAgents: {
+          method: 'POST',
+          path: '/api/services/:service/:account/access/agents',
+          body: { agents: [{ name: 'AgentName', allowed: true }, '...'] },
+          description: 'Set which agents are in the allow/deny list',
+          response: '{ success: true, agents: [...] }'
+        }
+      },
+      errorResponse: {
+        status: 403,
+        body: '{ error: "Agent \'X\' does not have access to service \'Y/Z\'", reason: "not_in_allowlist" }'
+      },
+      notes: [
+        'Access checks apply to all service API calls',
+        'Default mode is "all" (backwards compatible)',
+        'Agent names are case-insensitive',
+        'Admin UI shows visual indicators for restricted services'
       ]
     }
   });
