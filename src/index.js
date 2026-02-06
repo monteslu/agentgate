@@ -17,7 +17,8 @@ import fitbitRoutes, { serviceInfo as fitbitInfo } from './routes/fitbit.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
-import uiRoutes from './routes/ui.js';
+import uiRoutes from './routes/ui/index.js';
+import webhooksRoutes from './routes/webhooks.js';
 import servicesRoutes from './routes/services.js';
 
 // Aggregate service metadata from all routes
@@ -38,7 +39,15 @@ const app = express();
 const PORT = process.env.PORT || 3050;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    // Capture raw body for webhook signature verification
+    if (req.originalUrl.startsWith('/webhooks')) {
+      req.rawBody = buf;
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
@@ -67,6 +76,7 @@ function readOnlyEnforce(req, res, next) {
   }
   next();
 }
+
 
 // Service access control middleware factory
 // Checks if the agent has access to the requested service/account
@@ -127,6 +137,9 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
+
+// Webhook routes - no API key needed (uses signature verification instead)
+app.use('/webhooks', webhooksRoutes);
 
 // Agent readme endpoint - requires auth
 app.get('/api/readme', apiKeyAuth, (req, res) => {
