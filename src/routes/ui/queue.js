@@ -295,6 +295,8 @@ function renderQueuePage(entries, filter, counts = {}) {
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      <a href="/ui/queue/export?format=json" class="btn-sm" style="text-decoration: none;">Export JSON</a>
+      <a href="/ui/queue/export?format=csv" class="btn-sm" style="text-decoration: none;">Export CSV</a>
     </div>
   </div>
 
