@@ -24,11 +24,18 @@ router.get('/', (req, res) => {
 router.post('/:service/:account/mode', (req, res) => {
   const { service, account } = req.params;
   const { mode } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
   
   try {
     setServiceAccessMode(service, account, mode);
+    if (wantsJson) {
+      return res.json({ success: true, mode });
+    }
     res.redirect('/ui/access');
   } catch (err) {
+    if (wantsJson) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(400).send(err.message);
   }
 });
@@ -191,17 +198,20 @@ function renderAccessPage(services, agents) {
         const service = this.dataset.service;
         const account = this.dataset.account;
         const mode = this.value;
+        const originalValue = this.dataset.originalMode || this.value;
         
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/ui/access/' + encodeURIComponent(service) + '/' + encodeURIComponent(account) + '/mode';
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = 'mode';
-        input.value = mode;
-        form.appendChild(input);
-        document.body.appendChild(form);
-        form.submit();
+        try {
+          const res = await fetch('/ui/access/' + encodeURIComponent(service) + '/' + encodeURIComponent(account) + '/mode', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ mode: mode })
+          });
+          if (!res.ok) throw new Error('Failed to update mode');
+          this.dataset.originalMode = mode;
+        } catch (err) {
+          console.error('Failed to update mode:', err);
+          this.value = originalValue; // Revert on error
+        }
       });
     });
     
