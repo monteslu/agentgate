@@ -30,16 +30,34 @@ export function statusBadge(status) {
     completed: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);',
     failed: 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);',
     rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);',
+    withdrawn: 'background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);',
     delivered: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);'
   };
   return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
 }
 
-// Format date for display
+// Format date for display - outputs span with data-utc for client-side localization
 export function formatDate(dateStr) {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleString();
+  // Return span with UTC timestamp - client JS will localize
+  return `<span class="local-time" data-utc="${dateStr}"></span>`;
+}
+
+// Client-side script to localize all dates to browser timezone
+export function localizeScript() {
+  return `
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.local-time[data-utc]').forEach(function(el) {
+        const utc = el.getAttribute('data-utc');
+        if (utc) {
+          const d = new Date(utc);
+          el.textContent = d.toLocaleString();
+          el.title = utc + ' UTC';
+        }
+      });
+    });
+  </script>`;
 }
 
 // Shared HTML head with common styles/scripts
