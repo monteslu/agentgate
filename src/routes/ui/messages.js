@@ -8,7 +8,7 @@ import {
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript } from './shared.js';
+import { escapeHtml, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -218,7 +218,9 @@ function renderMessagesPage(messages, filter, counts, mode) {
       <div class="card message-entry" id="message-${msg.id}" data-status="${msg.status}">
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
-            <strong>${escapeHtml(msg.from_agent)}</strong> → <strong>${escapeHtml(msg.to_agent)}</strong>
+            <span class="agent-with-avatar">${renderAvatar(msg.from_agent, { size: 24 })}<strong>${escapeHtml(msg.from_agent)}</strong></span>
+            → 
+            <span class="agent-with-avatar">${renderAvatar(msg.to_agent, { size: 24 })}<strong>${escapeHtml(msg.to_agent)}</strong></span>
             <span class="status-badge">${statusBadge(msg.status)}</span>
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
