@@ -98,7 +98,7 @@ router.post('/clear', (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
   const { status } = req.body;
 
-  const allowedStatuses = ['completed', 'failed', 'rejected', 'all'];
+  const allowedStatuses = ['completed', 'failed', 'rejected', 'withdrawn', 'all'];
   if (status && !allowedStatuses.includes(status)) {
     return wantsJson
       ? res.status(400).json({ error: 'Invalid status' })
@@ -184,7 +184,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     }
 
     let notificationSection = '';
-    if (['completed', 'failed', 'rejected'].includes(entry.status)) {
+    if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) {
       const notifyStatus = entry.notified
         ? `<span class="notify-status notify-sent" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
         : entry.notify_error
@@ -235,7 +235,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     `;
   };
 
-  const filters = ['all', 'pending', 'completed', 'failed', 'rejected'];
+  const filters = ['all', 'pending', 'completed', 'failed', 'rejected', 'withdrawn'];
   const filterLinks = filters.map(f =>
     `<a href="/ui/queue?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');
