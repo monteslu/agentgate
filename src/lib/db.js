@@ -834,7 +834,7 @@ export function searchMementos(agentId, keywords, options = {}) {
     role: row.role,
     keywords: getKeywords.all(row.id).map(k => k.keyword),
     created_at: row.created_at,
-    preview: row.preview + (row.preview.length >= 200 ? '...' : ''),
+    preview: row.preview + (row.preview.length > 200 ? '...' : ''),
     match_count: row.match_count
   }));
 }
@@ -860,7 +860,7 @@ export function getRecentMementos(agentId, limit = 5) {
     role: row.role,
     keywords: getKeywords.all(row.id).map(k => k.keyword),
     created_at: row.created_at,
-    preview: row.preview + (row.preview.length >= 200 ? '...' : '')
+    preview: row.preview + (row.preview.length > 200 ? '...' : '')
   }));
 }
 
@@ -946,7 +946,7 @@ export function listMementos(options = {}) {
     role: row.role,
     keywords: getKeywords.all(row.id).map(k => k.keyword),
     created_at: row.created_at,
-    preview: row.preview + (row.preview.length >= 200 ? '...' : '')
+    preview: row.preview + (row.preview.length > 200 ? '...' : '')
   }));
 }
 
