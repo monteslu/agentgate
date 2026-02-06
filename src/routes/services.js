@@ -4,20 +4,40 @@ import {
   setServiceAccessMode,
   setServiceAgents,
   listServicesWithAccess,
-  listApiKeys
+  listApiKeys,
+  checkServiceAccess
 } from '../lib/db.js';
 
 const router = Router();
 
-// GET /api/services - List all services with access info
+// GET /api/services - List services with access info (filtered by agent access)
 router.get('/', (req, res) => {
-  const services = listServicesWithAccess();
-  res.json({ services });
+  const agentName = req.apiKeyInfo?.name;
+  const allServices = listServicesWithAccess();
+  
+  // Filter to only show services the agent has access to
+  const accessibleServices = allServices.filter(svc => {
+    const access = checkServiceAccess(svc.service, svc.account_name, agentName);
+    return access.allowed;
+  });
+  
+  res.json({ services: accessibleServices });
 });
 
 // GET /api/services/:service/:account/access - Get access config for a service/account
 router.get('/:service/:account/access', (req, res) => {
   const { service, account } = req.params;
+  const agentName = req.apiKeyInfo?.name;
+  
+  // Check if agent has access to this service
+  const accessCheck = checkServiceAccess(service, account, agentName);
+  if (!accessCheck.allowed) {
+    return res.status(403).json({
+      error: `You do not have access to ${service}/${account}`,
+      reason: accessCheck.reason
+    });
+  }
+  
   const access = getServiceAccess(service, account);
   res.json(access);
 });
