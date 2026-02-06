@@ -129,6 +129,22 @@ db.exec(`
     content TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
+  -- Service-level access control
+  CREATE TABLE IF NOT EXISTS service_access (
+    service TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    access_mode TEXT DEFAULT 'all',  -- 'all' | 'allowlist' | 'denylist'
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (service, account_name)
+  );
+
+  CREATE TABLE IF NOT EXISTS service_agent_access (
+    service TEXT NOT NULL,
+    account_name TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    allowed BOOLEAN DEFAULT 1,
+    PRIMARY KEY (service, account_name, agent_name)
+  );
 
   -- Keywords junction table (normalized, stemmed)
   CREATE TABLE IF NOT EXISTS memento_keywords (
@@ -1024,3 +1040,155 @@ export function getMementoAgents() {
     SELECT DISTINCT agent_id FROM mementos ORDER BY agent_id
   `).all().map(r => r.agent_id);
 }
+
+// ============================================
+// Service Access Control
+// ============================================
+
+// Get access config for a service/account
+export function getServiceAccess(service, accountName) {
+  const row = db.prepare(`
+    SELECT access_mode, updated_at FROM service_access
+    WHERE service = ? AND account_name = ?
+  `).get(service, accountName);
+
+  const agents = db.prepare(`
+    SELECT agent_name, allowed FROM service_agent_access
+    WHERE service = ? AND account_name = ?
+  `).all(service, accountName);
+
+  return {
+    service,
+    account_name: accountName,
+    access_mode: row?.access_mode || 'all',
+    updated_at: row?.updated_at || null,
+    agents: agents.map(a => ({ name: a.agent_name, allowed: !!a.allowed }))
+  };
+}
+
+// Set access mode for a service/account
+export function setServiceAccessMode(service, accountName, mode) {
+  if (!['all', 'allowlist', 'denylist'].includes(mode)) {
+    throw new Error('Invalid access mode. Must be: all, allowlist, or denylist');
+  }
+  db.prepare(`
+    INSERT INTO service_access (service, account_name, access_mode, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(service, account_name) DO UPDATE SET
+      access_mode = excluded.access_mode,
+      updated_at = CURRENT_TIMESTAMP
+  `).run(service, accountName, mode);
+}
+
+// Add or update agent access for a service/account
+export function setServiceAgentAccess(service, accountName, agentName, allowed) {
+  db.prepare(`
+    INSERT INTO service_agent_access (service, account_name, agent_name, allowed)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(service, account_name, agent_name) DO UPDATE SET
+      allowed = excluded.allowed
+  `).run(service, accountName, agentName, allowed ? 1 : 0);
+}
+
+// Remove agent from service access list
+export function removeServiceAgentAccess(service, accountName, agentName) {
+  return db.prepare(`
+    DELETE FROM service_agent_access
+    WHERE service = ? AND account_name = ? AND agent_name = ?
+  `).run(service, accountName, agentName);
+}
+
+// Bulk set agents for a service/account (replaces existing list)
+export function setServiceAgents(service, accountName, agents) {
+  const deleteStmt = db.prepare(`
+    DELETE FROM service_agent_access WHERE service = ? AND account_name = ?
+  `);
+  const insertStmt = db.prepare(`
+    INSERT INTO service_agent_access (service, account_name, agent_name, allowed)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  db.transaction(() => {
+    deleteStmt.run(service, accountName);
+    for (const agent of agents) {
+      insertStmt.run(service, accountName, agent.name, agent.allowed ? 1 : 0);
+    }
+  })();
+}
+
+// Check if an agent has access to a service/account
+export function checkServiceAccess(service, accountName, agentName) {
+  const access = getServiceAccess(service, accountName);
+
+  // Default mode: all agents have access
+  if (access.access_mode === 'all') {
+    return { allowed: true, reason: 'all' };
+  }
+
+  // Find agent in the list
+  const agentEntry = access.agents.find(
+    a => a.name.toLowerCase() === agentName.toLowerCase()
+  );
+
+  if (access.access_mode === 'allowlist') {
+    // Only listed agents (with allowed=true) can access
+    if (agentEntry && agentEntry.allowed) {
+      return { allowed: true, reason: 'allowlist' };
+    }
+    return { allowed: false, reason: 'not_in_allowlist' };
+  }
+
+  if (access.access_mode === 'denylist') {
+    // All agents EXCEPT those in list (with allowed=false) can access
+    if (agentEntry && !agentEntry.allowed) {
+      return { allowed: false, reason: 'in_denylist' };
+    }
+    return { allowed: true, reason: 'not_in_denylist' };
+  }
+
+  // Fallback (shouldn't happen)
+  return { allowed: true, reason: 'default' };
+}
+
+// Get all services with their access config (for admin UI)
+export function listServicesWithAccess() {
+  // Get all configured service accounts
+  const accounts = db.prepare(`
+    SELECT DISTINCT service, name as account_name FROM service_accounts ORDER BY service, name
+  `).all();
+
+  // Get all access configs
+  const accessConfigs = db.prepare(`
+    SELECT service, account_name, access_mode FROM service_access
+  `).all();
+
+  // Get agent counts per service/account
+  const agentCounts = db.prepare(`
+    SELECT service, account_name, COUNT(*) as count
+    FROM service_agent_access
+    GROUP BY service, account_name
+  `).all();
+
+  const accessMap = new Map();
+  for (const cfg of accessConfigs) {
+    accessMap.set(`${cfg.service}:${cfg.account_name}`, cfg.access_mode);
+  }
+
+  const countMap = new Map();
+  for (const cnt of agentCounts) {
+    countMap.set(`${cnt.service}:${cnt.account_name}`, cnt.count);
+  }
+
+  return accounts.map(acc => {
+    const key = `${acc.service}:${acc.account_name}`;
+    const mode = accessMap.get(key) || 'all';
+    const agentCount = countMap.get(key) || 0;
+    return {
+      service: acc.service,
+      account_name: acc.account_name,
+      access_mode: mode,
+      agent_count: agentCount
+    };
+  });
+}
+
