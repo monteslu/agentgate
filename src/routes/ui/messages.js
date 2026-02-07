@@ -5,7 +5,8 @@ import {
   getMessagingMode, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage,
   clearAgentMessagesByStatus, getMessageCounts, getAgentMessage,
-  listApiKeys, createBroadcast, addBroadcastRecipient, listBroadcastsWithRecipients
+  listApiKeys, createBroadcast, addBroadcastRecipient, listBroadcastsWithRecipients,
+  deleteBroadcast, clearBroadcasts
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
@@ -202,6 +203,31 @@ router.post('/broadcast', async (req, res) => {
   res.redirect(`/ui/messages?broadcast_result=${encodeURIComponent(resultMsg)}`);
 });
 
+// Delete a single broadcast
+router.post('/broadcast/:id/delete', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  deleteBroadcast(id);
+
+  if (wantsJson) {
+    return res.json({ success: true });
+  }
+  res.redirect('/ui/messages');
+});
+
+// Clear all broadcasts
+router.post('/broadcasts/clear', (req, res) => {
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  clearBroadcasts();
+
+  if (wantsJson) {
+    return res.json({ success: true });
+  }
+  res.redirect('/ui/messages');
+});
+
 // Render function
 function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
   // Combine messages and broadcasts into a unified timeline
@@ -219,7 +245,10 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
           <span class="agent-with-avatar">${renderAvatar(b.from_agent, { size: 24 })}<strong>${escapeHtml(b.from_agent)}</strong></span>
           <span class="help" style="margin-left: 8px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
         </div>
-        <span class="help">${formatDate(b.created_at)}</span>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span class="help" style="margin: 0;">${formatDate(b.created_at)}</span>
+          <button type="button" class="delete-btn" onclick="deleteBroadcast('${b.id}')" title="Delete">×</button>
+        </div>
       </div>
       <div class="message-content">
         <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(b.message)}</pre>
@@ -346,6 +375,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       ${filter === 'delivered' && counts.delivered > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'delivered\')">Clear Delivered</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
+      ${broadcasts.length > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearBroadcasts()">Clear Broadcasts</button>' : ''}
       <a href="/ui/messages/export?format=json" class="btn-sm" style="text-decoration: none;">Export JSON</a>
       <a href="/ui/messages/export?format=csv" class="btn-sm" style="text-decoration: none;">Export CSV</a>
     </div>
@@ -462,6 +492,36 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
           }
         } else {
           alert(data.error || 'Failed to delete');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function deleteBroadcast(id) {
+      if (!confirm('Delete this broadcast?')) return;
+      try {
+        const res = await fetch('/ui/messages/broadcast/' + id + '/delete', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to delete broadcast');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    async function clearBroadcasts() {
+      if (!confirm('Clear all broadcasts?')) return;
+      try {
+        const res = await fetch('/ui/messages/broadcasts/clear', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to clear broadcasts');
         }
       } catch (err) {
         alert('Error: ' + err.message);
