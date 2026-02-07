@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listMementos, getMementoById, getApiKeys, getPendingQueueCount, getPendingMessagesCount, getConfig } from '../../lib/db.js';
+import { listMementos, getMementoById, deleteMemento, getMementoCounts, getApiKeys, getPendingQueueCount, getPendingMessagesCount, getConfig } from '../../lib/db.js';
 import {
   htmlHead,
   simpleNavHeader,
@@ -27,6 +27,9 @@ router.get('/', (req, res) => {
 
   // Get all agents for filter dropdown
   const agents = getApiKeys().map(k => k.name).sort();
+  
+  // Get stats for dashboard
+  const counts = getMementoCounts();
 
   // Get nav counts
   const pendingQueueCount = getPendingQueueCount();
@@ -39,6 +42,27 @@ router.get('/', (req, res) => {
     ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode: config.messagingMode })}
 
     <h2 style="margin-bottom: 16px;">🧠 Agent Mementos</h2>
+
+    <!-- Stats Bar -->
+    <div style="display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+      <div class="stat-card">
+        <div class="stat-value">${counts.total || 0}</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${counts.byAgent?.length || agents.length}</div>
+        <div class="stat-label">Agents</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">${counts.last24h || 0}</div>
+        <div class="stat-label">Last 24h</div>
+      </div>
+      <div style="margin-left: auto;">
+        <a href="/ui/mementos/export${agent || keyword ? `?agent=${encodeURIComponent(agent || '')}&keyword=${encodeURIComponent(keyword || '')}` : ''}" class="btn btn-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
+          📥 Export JSON
+        </a>
+      </div>
+    </div>
 
     <!-- Filters -->
     <form method="GET" action="/ui/mementos" style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;">
@@ -92,8 +116,9 @@ router.get('/', (req, res) => {
                   ${escapeHtml(m.preview)}
                 </td>
                 <td style="font-size: 12px;">${formatDate(m.created_at)}</td>
-                <td>
+                <td style="white-space: nowrap;">
                   <a href="/ui/mementos/${m.id}" class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;">View</a>
+                  <button onclick="deleteMemento(${m.id})" class="btn btn-danger" style="padding: 4px 8px; font-size: 12px; margin-left: 4px;">×</button>
                 </td>
               </tr>
             `).join('')}
@@ -127,11 +152,90 @@ router.get('/', (req, res) => {
       border-radius: 4px;
       font-size: 11px;
     }
+    .stat-card {
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      border-radius: 8px;
+      padding: 12px 20px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #818cf8;
+    }
+    .stat-label {
+      font-size: 11px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
   </style>
+  <script>
+    async function deleteMemento(id) {
+      if (!confirm('Delete this memento? This cannot be undone.')) return;
+      try {
+        const res = await fetch('/ui/mementos/' + id + '/delete', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to delete');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+  </script>
 </body>
 </html>`;
 
   res.send(html);
+});
+
+// GET /ui/mementos/export - Export mementos as JSON
+router.get('/export', (req, res) => {
+  const { agent, keyword } = req.query;
+  const mementos = listMementos({
+    agentId: agent || undefined,
+    keyword: keyword || undefined,
+    limit: 10000
+  });
+  
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="mementos-export.json"');
+  res.json(mementos);
+});
+
+// POST /ui/mementos/:id/delete - Delete a memento
+router.post('/:id/delete', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+  
+  const memento = getMementoById(parseInt(id, 10));
+  if (!memento) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Memento not found' })
+      : res.status(404).send('Memento not found');
+  }
+  
+  deleteMemento(parseInt(id, 10));
+  
+  if (wantsJson) {
+    return res.json({ success: true });
+  }
+  res.redirect('/ui/mementos');
 });
 
 // GET /ui/mementos/:id - View single memento
@@ -163,7 +267,8 @@ router.get('/:id', (req, res) => {
 
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
       <a href="/ui/mementos" class="btn btn-secondary">← Back</a>
-      <h2 style="margin: 0;">Memento #${memento.id}</h2>
+      <h2 style="margin: 0; flex: 1;">Memento #${memento.id}</h2>
+      <button onclick="deleteMemento(${memento.id})" class="btn btn-danger">Delete</button>
     </div>
 
     <div class="card" style="margin-bottom: 16px;">
@@ -221,7 +326,34 @@ router.get('/:id', (req, res) => {
     .tag:hover {
       background: rgba(99, 102, 241, 0.3);
     }
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #f87171;
+    }
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
   </style>
+  <script>
+    async function deleteMemento(id) {
+      if (!confirm('Delete this memento? This cannot be undone.')) return;
+      try {
+        const res = await fetch('/ui/mementos/' + id + '/delete', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.href = '/ui/mementos';
+        } else {
+          alert(data.error || 'Failed to delete');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+  </script>
 </body>
 </html>`;
 
