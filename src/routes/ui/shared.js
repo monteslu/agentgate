@@ -114,6 +114,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
       <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+      <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
         Messages
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
@@ -254,6 +255,7 @@ export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
       <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
+      <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
         Messages
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
