@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listMementos, getMementoById, deleteMemento, getMementoCounts, listApiKeys, getPendingQueueCount, getPendingMessagesCount, getConfig } from '../../lib/db.js';
+import { listMementos, getMementoById, deleteMemento, getMementoCounts, listApiKeys, getPendingQueueCount, listPendingMessages, getMessagingMode } from '../../lib/db.js';
 import {
   htmlHead,
   simpleNavHeader,
@@ -33,13 +33,13 @@ router.get('/', (req, res) => {
 
   // Get nav counts
   const pendingQueueCount = getPendingQueueCount();
-  const config = getConfig();
-  const pendingMessagesCount = config.messagingMode !== 'off' ? getPendingMessagesCount() : 0;
+  const messagingMode = getMessagingMode();
+  const pendingMessagesCount = messagingMode !== 'off' ? listPendingMessages().length : 0;
 
   const html = `${htmlHead('Mementos', { includeSocket: true })}
 <body>
   <div class="container">
-    ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode: config.messagingMode })}
+    ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
 
     <h2 style="margin-bottom: 16px;">🧠 Agent Mementos</h2>
 
@@ -257,13 +257,13 @@ router.get('/:id', (req, res) => {
 
   // Get nav counts
   const pendingQueueCount = getPendingQueueCount();
-  const config = getConfig();
-  const pendingMessagesCount = config.messagingMode !== 'off' ? getPendingMessagesCount() : 0;
+  const messagingMode = getMessagingMode();
+  const pendingMessagesCount = messagingMode !== 'off' ? listPendingMessages().length : 0;
 
   const html = `${htmlHead(`Memento #${memento.id}`, { includeSocket: true })}
 <body>
   <div class="container">
-    ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode: config.messagingMode })}
+    ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
 
     <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
       <a href="/ui/mementos" class="btn btn-secondary">← Back</a>
