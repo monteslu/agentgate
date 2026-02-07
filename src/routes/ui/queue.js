@@ -424,20 +424,14 @@ function renderQueuePage(entries, filter, counts = {}) {
           }
         } else {
           // Show error and re-enable retry button
+          if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
           const errorMsg = data.error || 'Unknown error';
-          if (statusContainer) {
-            statusContainer.innerHTML = '<span class="notify-status notify-failed" title="' + escapeHtmlJs(errorMsg) + '">⚠ Retry failed</span> ' +
-              '<button type="button" class="btn-sm btn-link" onclick="retryNotify(\\''+id+'\\')\" id="retry-'+id+'">Retry</button>';
-          }
+          alert('Notification failed: ' + errorMsg);
         }
       } catch (err) {
         alert('Error: ' + err.message);
         if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
       }
-    }
-
-    function escapeHtmlJs(str) {
-      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
   </script>
 ${socketScript()}
