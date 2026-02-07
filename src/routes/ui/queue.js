@@ -139,10 +139,19 @@ router.delete('/:id', (req, res) => {
 router.post('/:id/notify', async (req, res) => {
   const { id } = req.params;
   const wantsJson = req.headers.accept?.includes('application/json');
-  const updated = getQueueEntry(id);
+  const entry = getQueueEntry(id);
+
+  if (!entry) {
+    return wantsJson
+      ? res.status(404).json({ success: false, error: 'Entry not found' })
+      : res.status(404).send('Entry not found');
+  }
+
+  // Actually send the notification (this was missing!)
+  const result = await notifyAgentQueueStatus(entry);
 
   if (wantsJson) {
-    return res.json({ success: true, entry: updated });
+    return res.json({ success: result.success, error: result.error });
   }
   res.redirect('/ui/queue');
 });
@@ -403,11 +412,22 @@ function renderQueuePage(entries, filter, counts = {}) {
 
     async function retryNotify(id) {
       const btn = document.getElementById('retry-' + id);
+      const statusContainer = document.getElementById('notify-status-' + id);
       if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
       try {
         const res = await fetch('/ui/queue/' + id + '/notify', { method: 'POST', headers: { 'Accept': 'application/json' } });
         const data = await res.json();
-        if (data.success) window.location.reload();
+        if (data.success) {
+          // Update inline instead of page refresh
+          if (statusContainer) {
+            statusContainer.innerHTML = '<span class="notify-status notify-sent">✓ Notified</span>';
+          }
+        } else {
+          // Show error and re-enable retry button
+          if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+          const errorMsg = data.error || 'Unknown error';
+          alert('Notification failed: ' + errorMsg);
+        }
       } catch (err) {
         alert('Error: ' + err.message);
         if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
