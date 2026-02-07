@@ -64,6 +64,24 @@ describe('Database Functions', () => {
         reviewed_at TEXT,
         completed_at TEXT
       );
+
+      CREATE TABLE IF NOT EXISTS service_access (
+        service TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        access_mode TEXT NOT NULL DEFAULT 'all',
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (service, account_name)
+      );
+
+      CREATE TABLE IF NOT EXISTS service_agent_access (
+        service TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        agent_name TEXT NOT NULL,
+        allowed INTEGER NOT NULL DEFAULT 1,
+        bypass_auth INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (service, account_name, agent_name)
+      );
     `);
   });
 
@@ -171,6 +189,39 @@ describe('Database Functions', () => {
       expect(counts.pending).toBe(1);
       expect(counts.approved).toBe(1);
       expect(counts.completed).toBe(1);
+    });
+  });
+
+  describe('Service Access Control', () => {
+    it('should deny explicitly disabled agent even in "all" mode', async () => {
+      const { 
+        checkServiceAccess, 
+        setServiceAccessMode, 
+        setServiceAgentAccess 
+      } = await import('../src/lib/db.js');
+      
+      // Set up access_mode = 'all' (default)
+      setServiceAccessMode('github', 'testaccount_deny', 'all');
+
+      // Explicitly deny an agent
+      setServiceAgentAccess('github', 'testaccount_deny', 'blocked_agent', false);
+      
+      const result = checkServiceAccess('github', 'testaccount_deny', 'blocked_agent');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('explicitly_denied');
+    });
+
+    it('should allow non-denied agents in "all" mode', async () => {
+      const { 
+        checkServiceAccess, 
+        setServiceAccessMode 
+      } = await import('../src/lib/db.js');
+      
+      setServiceAccessMode('github', 'testaccount_allow', 'all');
+      
+      const result = checkServiceAccess('github', 'testaccount_allow', 'allowed_agent');
+      expect(result.allowed).toBe(true);
+      expect(result.reason).toBe('all');
     });
   });
 });
