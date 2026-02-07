@@ -263,6 +263,22 @@ try {
   console.error('Error initializing api_keys table:', err.message);
 }
 
+// Migrate service_agent_access to add bypass_auth column if missing
+try {
+  const agentAccessInfo = db.prepare('PRAGMA table_info(service_agent_access)').all();
+  const hasBypassAuth = agentAccessInfo.some(col => col.name === 'bypass_auth');
+
+  if (agentAccessInfo.length > 0 && !hasBypassAuth) {
+    console.log('Migrating service_agent_access table to add bypass_auth column...');
+    db.exec('ALTER TABLE service_agent_access ADD COLUMN bypass_auth BOOLEAN DEFAULT 0;');
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating service_agent_access:', err.message);
+  }
+}
+
 // API Keys
 
 // Check if an agent name already exists (case-insensitive)
