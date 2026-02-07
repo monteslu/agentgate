@@ -7,6 +7,7 @@ import authRouter, { requireAuth, isAuthenticated } from './auth.js';
 import keysRouter from './keys.js';
 import queueRouter from './queue.js';
 import messagesRouter from './messages.js';
+import mementosRouter from './mementos.js';
 import settingsRouter from './settings.js';
 import homeRouter from './home.js';
 import accessRouter from './access.js';
@@ -31,6 +32,9 @@ router.use('/queue', queueRouter);
 
 // Agent messages: /messages, /messages/:id/approve, /messages/:id/reject, etc.
 router.use('/messages', messagesRouter);
+
+// Agent mementos: /mementos, /mementos/:id
+router.use('/mementos', mementosRouter);
 
 // Service access control: /access, /access/:service/:account/*
 router.use('/access', accessRouter);
