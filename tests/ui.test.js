@@ -93,8 +93,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listMementos: jest.fn(() => []),
   getMementoById: jest.fn(),
   deleteMemento: jest.fn(),
-  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 })),
-  
+  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 }))
 }));
 
 // Mock hsyncManager
