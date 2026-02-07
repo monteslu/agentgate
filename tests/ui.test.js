@@ -104,6 +104,12 @@ jest.unstable_mockModule('socket.io', () => ({
   }))
 }));
 
+// Mock agentNotifier
+jest.unstable_mockModule('../src/lib/agentNotifier.js', () => ({
+  notifyAgent: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentQueueStatus: jest.fn(() => Promise.resolve({ success: true }))
+}));
+
 describe('UI Routes Integration', () => {
   let app;
   let request;
