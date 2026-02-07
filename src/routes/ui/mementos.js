@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { listMementos, getMementoById, deleteMemento, getMementoCounts, getApiKeys, getPendingQueueCount, getPendingMessagesCount, getConfig } from '../../lib/db.js';
+import { listMementos, getMementoById, deleteMemento, getMementoCounts, listApiKeys, getPendingQueueCount, getPendingMessagesCount, getConfig } from '../../lib/db.js';
 import {
   htmlHead,
   simpleNavHeader,
@@ -26,7 +26,7 @@ router.get('/', (req, res) => {
   });
 
   // Get all agents for filter dropdown
-  const agents = getApiKeys().map(k => k.name).sort();
+  const agents = listApiKeys().map(k => k.name).sort();
   
   // Get stats for dashboard
   const counts = getMementoCounts();
