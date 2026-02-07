@@ -287,6 +287,9 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .webhook-none { background: #374151; color: #9ca3af; }
     .btn-sm { font-size: 12px; padding: 4px 8px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; }
     .btn-sm:hover { background: #4338ca; }
+    .btn-test { padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; }
+    .btn-test:hover { background: #047857; }
+    .btn-test:disabled { background: #6b7280; cursor: not-allowed; }
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
     .modal-overlay.active { display: flex; }
     .modal { background: #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
@@ -368,9 +371,11 @@ function renderKeysPage(keys, error = null, newKey = null) {
 
         <div class="modal-buttons">
           <button type="button" class="btn-secondary" onclick="closeWebhookModal()">Cancel</button>
+          <button type="button" id="webhook-test-btn" class="btn-test" onclick="testWebhook()" style="display: none;">Test</button>
           <button type="submit" class="btn-primary">Save Webhook</button>
         </div>
       </form>
+      <div id="webhook-test-result" style="margin-top: 12px; display: none;"></div>
     </div>
   </div>
 
@@ -415,11 +420,47 @@ function renderKeysPage(keys, error = null, newKey = null) {
       document.getElementById('modal-agent-name').textContent = btn.dataset.name;
       document.getElementById('webhook-url').value = btn.dataset.url;
       document.getElementById('webhook-token').value = btn.dataset.token;
+      // Show test button if webhook URL is already configured
+      const testBtn = document.getElementById('webhook-test-btn');
+      const testResult = document.getElementById('webhook-test-result');
+      testBtn.style.display = btn.dataset.url ? 'inline-block' : 'none';
+      testResult.style.display = 'none';
+      testResult.innerHTML = '';
       document.getElementById('webhook-modal').classList.add('active');
     }
 
     function closeWebhookModal() {
       document.getElementById('webhook-modal').classList.remove('active');
+    }
+
+    async function testWebhook() {
+      const id = document.getElementById('webhook-agent-id').value;
+      const testBtn = document.getElementById('webhook-test-btn');
+      const testResult = document.getElementById('webhook-test-result');
+      
+      testBtn.disabled = true;
+      testBtn.textContent = 'Testing...';
+      testResult.style.display = 'block';
+      testResult.innerHTML = '<span style="color: #9ca3af;">Sending test webhook...</span>';
+      
+      try {
+        const res = await fetch('/ui/keys/' + id + '/test-webhook', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          testResult.innerHTML = '<span style="color: #34d399;">✓ ' + data.message + '</span>';
+        } else {
+          testResult.innerHTML = '<span style="color: #f87171;">✗ ' + data.message + '</span>';
+        }
+      } catch (err) {
+        testResult.innerHTML = '<span style="color: #f87171;">✗ Error: ' + err.message + '</span>';
+      } finally {
+        testBtn.disabled = false;
+        testBtn.textContent = 'Test';
+      }
     }
 
     document.querySelectorAll('.webhook-btn').forEach(btn => {
