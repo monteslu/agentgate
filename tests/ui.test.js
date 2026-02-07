@@ -87,7 +87,13 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getSharedQueueVisibility: jest.fn(() => false),
   setSharedQueueVisibility: jest.fn(),
   getAgentWithdrawEnabled: jest.fn(() => false),
-  setAgentWithdrawEnabled: jest.fn()
+  setAgentWithdrawEnabled: jest.fn(),
+  
+  // Memento functions
+  listMementos: jest.fn(() => []),
+  getMementoById: jest.fn(),
+  deleteMemento: jest.fn(),
+  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 }))
 }));
 
 // Mock hsyncManager
