@@ -78,6 +78,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listBroadcastsWithRecipients: jest.fn(() => []),
   createBroadcast: jest.fn(),
   addBroadcastRecipient: jest.fn(),
+  clearBroadcasts: jest.fn(),
   
   // Queue visibility
   getSharedQueueVisibility: jest.fn(() => false),
@@ -425,3 +426,4 @@ describe('UI Routes Integration', () => {
     });
   });
 });
+
