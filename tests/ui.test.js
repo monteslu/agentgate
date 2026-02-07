@@ -76,9 +76,12 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   
   // Broadcast functions
   listBroadcastsWithRecipients: jest.fn(() => []),
+  listBroadcasts: jest.fn(() => []),
   createBroadcast: jest.fn(),
   addBroadcastRecipient: jest.fn(),
   clearBroadcasts: jest.fn(),
+  deleteBroadcast: jest.fn(),
+  getBroadcast: jest.fn(),
   
   // Queue visibility
   getSharedQueueVisibility: jest.fn(() => false),
@@ -107,7 +110,20 @@ jest.unstable_mockModule('socket.io', () => ({
 // Mock agentNotifier
 jest.unstable_mockModule('../src/lib/agentNotifier.js', () => ({
   notifyAgent: jest.fn(() => Promise.resolve({ success: true })),
-  notifyAgentQueueStatus: jest.fn(() => Promise.resolve({ success: true }))
+  notifyAgentQueueStatus: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentMessage: jest.fn(() => Promise.resolve({ success: true })),
+  notifyMessageRejected: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentMessagesBatch: jest.fn(() => Promise.resolve({ success: true }))
+}));
+
+// Mock socketManager
+jest.unstable_mockModule('../src/lib/socketManager.js', () => ({
+  emitCountUpdate: jest.fn()
+}));
+
+// Mock queueExecutor
+jest.unstable_mockModule('../src/lib/queueExecutor.js', () => ({
+  executeQueueEntry: jest.fn(() => Promise.resolve({ success: true }))
 }));
 
 describe('UI Routes Integration', () => {
@@ -432,4 +448,5 @@ describe('UI Routes Integration', () => {
     });
   });
 });
+
 
