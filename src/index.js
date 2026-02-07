@@ -82,7 +82,10 @@ function readOnlyEnforce(req, res, next) {
 // Checks if the agent has access to the requested service/account
 function serviceAccessCheck(serviceName) {
   return (req, res, next) => {
-    const accountName = req.params.accountName || req.params[0]?.split('/')[0];
+    // Extract accountName from the URL path (first segment after the service mount point)
+    // e.g., /api/github/monteslu/repos -> req.path = /monteslu/repos -> accountName = monteslu
+    const pathSegments = req.path.split('/').filter(Boolean);
+    const accountName = pathSegments[0];
     if (!accountName) {
       return next(); // No account specified, let the route handle it
     }
