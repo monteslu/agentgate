@@ -95,9 +95,6 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteMemento: jest.fn(),
   getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 })),
   
-  // Config functions
-  getPendingMessagesCount: jest.fn(() => 0),
-  getConfig: jest.fn(() => ({ messagingMode: 'open' }))
 }));
 
 // Mock hsyncManager
