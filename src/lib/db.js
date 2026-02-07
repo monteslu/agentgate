@@ -1337,3 +1337,14 @@ export function listBroadcastsWithRecipients(limit = 50) {
     return { ...b, recipients };
   });
 }
+
+export function deleteBroadcast(id) {
+  // Delete recipients first (foreign key constraint)
+  db.prepare('DELETE FROM broadcast_recipients WHERE broadcast_id = ?').run(id);
+  return db.prepare('DELETE FROM broadcasts WHERE id = ?').run(id);
+}
+
+export function clearBroadcasts() {
+  db.prepare('DELETE FROM broadcast_recipients').run();
+  return db.prepare('DELETE FROM broadcasts').run();
+}
