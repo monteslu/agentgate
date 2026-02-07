@@ -1146,15 +1146,18 @@ export function setServiceAgents(service, accountName, agents) {
 export function checkServiceAccess(service, accountName, agentName) {
   const access = getServiceAccess(service, accountName);
 
-  // Default mode: all agents have access
-  if (access.access_mode === 'all') {
-    return { allowed: true, reason: 'all' };
-  }
-
   // Find agent in the list
   const agentEntry = access.agents.find(
     a => a.name.toLowerCase() === agentName.toLowerCase()
   );
+
+  // Default mode: all agents have access UNLESS explicitly denied
+  if (access.access_mode === 'all') {
+    if (agentEntry && !agentEntry.allowed) {
+      return { allowed: false, reason: 'explicitly_denied' };
+    }
+    return { allowed: true, reason: 'all' };
+  }
 
   if (access.access_mode === 'allowlist') {
     // Only listed agents (with allowed=true) can access
