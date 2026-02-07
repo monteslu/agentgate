@@ -78,12 +78,24 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listBroadcastsWithRecipients: jest.fn(() => []),
   createBroadcast: jest.fn(),
   addBroadcastRecipient: jest.fn(),
+  deleteBroadcast: jest.fn(),
+  clearBroadcasts: jest.fn(),
   
   // Queue visibility
   getSharedQueueVisibility: jest.fn(() => false),
   setSharedQueueVisibility: jest.fn(),
   getAgentWithdrawEnabled: jest.fn(() => false),
-  setAgentWithdrawEnabled: jest.fn()
+  setAgentWithdrawEnabled: jest.fn(),
+  
+  // Memento functions
+  listMementos: jest.fn(() => []),
+  getMementoById: jest.fn(),
+  deleteMemento: jest.fn(),
+  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 })),
+  
+  // Config functions
+  getPendingMessagesCount: jest.fn(() => 0),
+  getConfig: jest.fn(() => ({ messagingMode: 'open' }))
 }));
 
 // Mock hsyncManager
@@ -101,6 +113,14 @@ jest.unstable_mockModule('socket.io', () => ({
     emit: jest.fn(),
     engine: { on: jest.fn() }
   }))
+}));
+
+// Mock agentNotifier
+jest.unstable_mockModule('../src/lib/agentNotifier.js', () => ({
+  notifyAgent: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentQueueStatus: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentMessage: jest.fn(() => Promise.resolve({ success: true })),
+  notifyMessageRejected: jest.fn(() => Promise.resolve({ success: true }))
 }));
 
 describe('UI Routes Integration', () => {
@@ -425,3 +445,4 @@ describe('UI Routes Integration', () => {
     });
   });
 });
+
