@@ -219,7 +219,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
           <span class="agent-with-avatar">${renderAvatar(b.from_agent, { size: 24 })}<strong>${escapeHtml(b.from_agent)}</strong></span>
           <span class="help" style="margin-left: 8px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
         </div>
-        <span class="help utc-date" data-utc="${b.created_at}">${b.created_at}</span>
+        <span class="help local-time" data-utc="${b.created_at}">${b.created_at}</span>
       </div>
       <div class="message-content">
         <pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; background: rgba(0,0,0,0.2); padding: 12px; border-radius: 8px;">${escapeHtml(b.message)}</pre>
