@@ -142,7 +142,7 @@ router.post('/broadcast', async (req, res) => {
   }
 
   const apiKeys = listApiKeys();
-  const recipients = apiKeys.filter(k => k.webhook_url && k.enabled !== 0);
+  const recipients = apiKeys.filter(k => k.webhook_url && k.enabled);
 
   if (recipients.length === 0) {
     if (wantsJson) {
