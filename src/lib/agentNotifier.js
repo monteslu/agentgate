@@ -1,5 +1,5 @@
 // Agent notification delivery - sends webhooks to agent gateways
-import { getApiKeyByName, updateQueueNotification } from './db.js';
+import { getApiKeyByName, updateQueueNotification, getQueueWarnings } from './db.js';
 
 // Send a notification to an agent's webhook
 export async function notifyAgent(agentName, payload) {
@@ -83,7 +83,56 @@ export async function notifyAgentQueueStatus(entry) {
     updateQueueNotification(entry.id, false, result.error);
   }
 
+  // Also notify any agents who warned on this item
+  await notifyWarningAgentsOnResolution(entry);
+
   return result;
+}
+
+// Notify all agents who warned on a queue item when it's resolved
+async function notifyWarningAgentsOnResolution(entry) {
+  const warnings = getQueueWarnings(entry.id);
+  if (!warnings || warnings.length === 0) {
+    return;
+  }
+
+  // Get unique warning agent IDs (excluding the submitter - they already get notified)
+  const warningAgents = [...new Set(warnings.map(w => w.agent_id))]
+    .filter(agentId => agentId !== entry.submitted_by);
+
+  if (warningAgents.length === 0) {
+    return;
+  }
+
+  const statusEmoji = {
+    completed: '✅',
+    failed: '❌',
+    rejected: '🚫',
+    approved: '✅'
+  };
+
+  for (const agentId of warningAgents) {
+    const payload = {
+      type: 'queue_warning_resolved',
+      entry: {
+        id: entry.id,
+        service: entry.service,
+        account_name: entry.account_name,
+        status: entry.status,
+        comment: entry.comment,
+        rejection_reason: entry.rejection_reason,
+        submitted_by: entry.submitted_by
+      },
+      // Human-readable for Clawdbot-style gateways
+      text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id.substring(0, 8)} you warned on was ${entry.status}\n→ ${entry.service}/${entry.account_name}\nSubmitted by: ${entry.submitted_by}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}`,
+      mode: 'now'
+    };
+
+    // Fire and forget - don't block on warning agent notifications
+    notifyAgent(agentId, payload).catch(err => {
+      console.error(`[agentNotifier] Failed to notify warning agent ${agentId}:`, err.message);
+    });
+  }
 }
 
 // Notify agent about a warning on their queue submission
