@@ -7,7 +7,7 @@ import {
 } from '../../lib/db.js';
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
-import { emitCountUpdate } from '../../lib/socketManager.js';
+import { emitCountUpdate, emitEvent } from '../../lib/socketManager.js';
 import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -54,6 +54,12 @@ router.post('/:id/approve', async (req, res) => {
   const counts = getQueueCounts();
 
   emitCountUpdate();
+  emitEvent('queueItemUpdate', {
+    id,
+    type: 'status_changed',
+    status: updated.status,
+    entry: updated
+  });
 
   if (wantsJson) {
     return res.json({ success: true, entry: updated, counts });
@@ -88,6 +94,12 @@ router.post('/:id/reject', async (req, res) => {
 
   const counts = getQueueCounts();
   emitCountUpdate();
+  emitEvent('queueItemUpdate', {
+    id,
+    type: 'status_changed',
+    status: updated.status,
+    entry: updated
+  });
 
   if (wantsJson) {
     return res.json({ success: true, entry: updated, counts });
@@ -473,6 +485,79 @@ function renderQueuePage(entries, filter, counts = {}) {
         if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
       }
     }
+
+    // Real-time queue item updates via socket.io
+    document.addEventListener('DOMContentLoaded', function() {
+      const socket = io();
+
+      socket.on('queueItemUpdate', function(data) {
+        const entryEl = document.getElementById('entry-' + data.id);
+        if (!entryEl) return;
+
+        if (data.type === 'warning_added') {
+          // Update warning badge
+          const headerEl = entryEl.querySelector('.entry-header');
+          if (headerEl) {
+            let badgeEl = headerEl.querySelector('.warning-badge');
+            if (badgeEl) {
+              badgeEl.textContent = '⚠️ ' + data.warningCount;
+              badgeEl.title = data.warningCount + ' warning' + (data.warningCount > 1 ? 's' : '');
+            } else {
+              const badge = document.createElement('span');
+              badge.className = 'warning-badge';
+              badge.textContent = '⚠️ ' + data.warningCount;
+              badge.title = data.warningCount + ' warning' + (data.warningCount > 1 ? 's' : '');
+              headerEl.appendChild(badge);
+            }
+          }
+
+          // Update or add warnings section
+          let warningsSection = entryEl.querySelector('.warnings-section');
+          if (!warningsSection) {
+            warningsSection = document.createElement('div');
+            warningsSection.className = 'warnings-section';
+            // Insert after the entry header area
+            const actionsEl = entryEl.querySelector('.queue-actions');
+            if (actionsEl) {
+              actionsEl.parentNode.insertBefore(warningsSection, actionsEl);
+            } else {
+              entryEl.appendChild(warningsSection);
+            }
+          }
+
+          // Rebuild warnings content
+          const warningItems = data.warnings.map(w => 
+            '<div class="warning-item">' +
+              '<div class="warning-header">' +
+                '<strong>' + escapeHtml(w.agent_id) + '</strong>' +
+                '<span class="warning-time">' + new Date(w.created_at).toLocaleString() + '</span>' +
+              '</div>' +
+              '<div class="warning-message">' + escapeHtml(w.message) + '</div>' +
+            '</div>'
+          ).join('');
+          
+          warningsSection.innerHTML = 
+            '<div class="warnings-header">⚠️ Warnings (' + data.warningCount + ')</div>' +
+            warningItems;
+        }
+
+        if (data.type === 'status_changed') {
+          // Update status badge
+          const statusBadge = entryEl.querySelector('.status-badge .status');
+          if (statusBadge) {
+            statusBadge.textContent = data.status;
+            statusBadge.className = 'status ' + data.status;
+          }
+          entryEl.dataset.status = data.status;
+
+          // Remove action buttons if no longer pending
+          if (data.status !== 'pending') {
+            const actionsEl = entryEl.querySelector('.queue-actions');
+            if (actionsEl) actionsEl.remove();
+          }
+        }
+      });
+    });
   </script>
 ${socketScript()}
 ${localizeScript()}
