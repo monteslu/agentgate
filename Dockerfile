@@ -3,6 +3,9 @@ FROM node:22-bookworm-slim AS base
 # Install security updates
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
+# Cloudflare Tunnel client (for optional CF tunnel support)
+COPY --from=cloudflare/cloudflared /usr/local/bin/cloudflared /usr/local/bin/
+
 # Create non-root user
 RUN groupadd -r agentgate && useradd -r -g agentgate -m agentgate
 
@@ -32,6 +35,6 @@ EXPOSE 3050
 USER agentgate
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3050) + '/api/readme').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3050) + '/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
 
 CMD ["node", "src/index.js"]
