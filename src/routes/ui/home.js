@@ -6,7 +6,7 @@ import {
   getSharedQueueVisibility, getAgentWithdrawEnabled
 } from '../../lib/db.js';
 import { getHsyncUrl, isHsyncConnected } from '../../lib/hsyncManager.js';
-import { registerAllRoutes, renderAllCards } from './services.js';
+import { registerAllRoutes, renderCatalog, renderConfiguredCards, renderUnconfiguredCards } from './services.js';
 import { PORT, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -42,6 +42,70 @@ function renderHead() {
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
   <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* ===== Services Catalog Styles ===== */
+    .catalog-category { margin-bottom: 20px; }
+    .catalog-category-title {
+      margin: 0 0 10px 0;
+      font-size: 0.95em;
+      color: #9ca3af;
+      font-weight: 600;
+    }
+    .catalog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .catalog-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 16px 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      text-decoration: none;
+      color: #f3f4f6;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      cursor: pointer;
+      position: relative;
+    }
+    .catalog-tile:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(129,140,248,0.4);
+      transform: translateY(-2px);
+    }
+    .catalog-tile-disabled {
+      opacity: 0.45;
+      cursor: default;
+      pointer-events: none;
+    }
+    .catalog-tile-icon { font-size: 28px; }
+    .catalog-tile-name { font-size: 0.82em; font-weight: 500; text-align: center; }
+    .catalog-tile-badge {
+      font-size: 0.65em;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .catalog-tile-badge.configured {
+      background: rgba(16,185,129,0.15);
+      color: #34d399;
+    }
+    .catalog-tile-badge.coming-soon {
+      background: rgba(156,163,175,0.15);
+      color: #9ca3af;
+    }
+    .services-section { margin-top: 24px; }
+    .services-section h3 {
+      color: #9ca3af;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+  </style>
   <script>
     function copyText(text, btn) {
       navigator.clipboard.writeText(text).then(() => {
@@ -49,6 +113,15 @@ function renderHead() {
         btn.textContent = 'Copied!';
         setTimeout(() => btn.textContent = orig, 1500);
       });
+    }
+
+    // Open and scroll to a service card's <details> element
+    function openServiceCard(serviceId) {
+      const el = document.getElementById('service-' + serviceId);
+      if (!el) return;
+      const details = el.querySelector('details');
+      if (details) details.open = true;
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
     }
 
     // Real-time updates via Socket.io
@@ -139,13 +212,37 @@ function renderHeader({ pendingQueueCount, messagingMode, pendingMessagesCount }
 }
 
 /**
- * Render the services section with all service cards
+ * Render the services section — catalog picker + configured services
  */
 function renderServices(accounts) {
+  const hasConfigured = accounts.length > 0;
+
   return `
   <h2>Services</h2>
 
-  ${renderAllCards(accounts, BASE_URL)}`;
+  <!-- ===== Add a Service — Catalog Picker ===== -->
+  <div class="card">
+    <details open>
+      <summary style="font-weight: 600; font-size: 1.05em;">➕ Add a Service</summary>
+      <div style="margin-top: 16px;">
+        <p class="help" style="margin-bottom: 14px;">Browse available services. Click one to start setup.</p>
+        ${renderCatalog(accounts)}
+      </div>
+    </details>
+  </div>
+
+  <!-- ===== Your Services — Configured accounts ===== -->
+  ${hasConfigured ? `
+  <div class="services-section">
+    <h3>🔗 Your Services</h3>
+    ${renderConfiguredCards(accounts, BASE_URL)}
+  </div>` : ''}
+
+  <!-- ===== Available to Set Up — Unconfigured implemented services ===== -->
+  <div class="services-section">
+    <h3>⚙️ Set Up</h3>
+    ${renderUnconfiguredCards(accounts, BASE_URL)}
+  </div>`;
 }
 
 /**
