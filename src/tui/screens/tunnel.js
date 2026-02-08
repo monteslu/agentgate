@@ -181,12 +181,20 @@ export async function tunnelScreen() {
     // Quick local health check first
     await testLocal();
 
-    const choice = await selectPrompt('Remote Access', [
-      { name: 'hsync', message: 'Configure hsync (Node-native, no domain needed)' },
-      { name: 'cloudflare', message: 'Configure Cloudflare Tunnel (requires own domain)' },
-      { name: 'disable', message: 'Disable tunnel' },
-      { name: 'back', message: '← Back' }
-    ]);
+    const choices = [
+      { name: 'hsync', message: 'Configure hsync' },
+      { name: 'cloudflare', message: 'Configure Cloudflare Tunnel' }
+    ];
+
+    // Add test option if a tunnel is configured
+    if (config.hsync?.enabled || config.cloudflare?.enabled) {
+      choices.push({ name: 'test', message: 'Test connection' });
+    }
+
+    choices.push({ name: 'disable', message: 'Disable tunnel' });
+    choices.push({ name: 'back', message: 'Back' });
+
+    const choice = await selectPrompt('Remote Access', choices);
 
     if (choice === 'back') return;
 
@@ -194,6 +202,14 @@ export async function tunnelScreen() {
       await hsyncConfigScreen(config.hsync);
     } else if (choice === 'cloudflare') {
       await cloudflareConfigScreen();
+    } else if (choice === 'test') {
+      const url = config.hsync?.enabled ? (getHsyncUrl() || config.hsync.url) : null;
+      if (url) {
+        await testPublicUrl(url);
+      } else {
+        const manualUrl = await inputPrompt('Public URL to test');
+        if (manualUrl) await testPublicUrl(manualUrl);
+      }
     } else if (choice === 'disable') {
       await disableTunnel();
     }
