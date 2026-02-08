@@ -3,7 +3,7 @@ import { getSetting } from './db.js';
 
 let cloudflaredProcess = null;
 
-function hasCloudflared() {
+export function hasCloudflared() {
   try {
     execSync('which cloudflared', { stdio: 'ignore' });
     return true;
@@ -26,10 +26,12 @@ export function startCloudflared() {
   stopCloudflared();
 
   try {
+    // Pass token via env var to avoid exposing it in ps aux
     cloudflaredProcess = spawn('cloudflared', [
-      'tunnel', '--no-autoupdate', 'run', '--token', config.token
+      'tunnel', '--no-autoupdate', 'run'
     ], {
-      stdio: ['ignore', 'pipe', 'pipe']
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, TUNNEL_TOKEN: config.token }
     });
 
     cloudflaredProcess.stdout.on('data', (data) => {
