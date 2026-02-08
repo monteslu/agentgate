@@ -220,7 +220,7 @@ function renderServices(accounts) {
 
   <!-- ===== Add a Service — Catalog Picker ===== -->
   <div class="card">
-    <details open>
+    <details>
       <summary style="font-weight: 600; font-size: 1.05em;">➕ Add a Service</summary>
       <div style="margin-top: 16px;">
         <p class="help" style="margin-bottom: 14px;">Browse available services. Click one to start setup.</p>
