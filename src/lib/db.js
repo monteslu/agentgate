@@ -179,6 +179,17 @@ db.exec(`
     FOREIGN KEY (broadcast_id) REFERENCES broadcasts(id)
   );
 
+  CREATE TABLE IF NOT EXISTS queue_warnings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    queue_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_queue_warnings_queue
+  ON queue_warnings(queue_id);
+
   CREATE INDEX IF NOT EXISTS idx_broadcasts_from
   ON broadcasts(from_agent, created_at DESC);
 `);
@@ -752,6 +763,37 @@ export function listAllQueueEntries(service = null, accountName = null) {
     results: row.results ? JSON.parse(row.results) : null,
     notified: Boolean(row.notified)
   }));
+}
+
+// ============================================
+// Queue Warnings (Peer Review)
+// ============================================
+
+export function addQueueWarning(queueId, agentId, message) {
+  const result = db.prepare(`
+    INSERT INTO queue_warnings (queue_id, agent_id, message)
+    VALUES (?, ?, ?)
+  `).run(queueId, agentId, message);
+  return result.lastInsertRowid;
+}
+
+export function getQueueWarnings(queueId) {
+  return db.prepare(`
+    SELECT * FROM queue_warnings
+    WHERE queue_id = ?
+    ORDER BY created_at ASC
+  `).all(queueId);
+}
+
+export function getQueueWarningCount(queueId) {
+  const row = db.prepare(`
+    SELECT COUNT(*) as count FROM queue_warnings WHERE queue_id = ?
+  `).get(queueId);
+  return row?.count || 0;
+}
+
+export function deleteQueueWarnings(queueId) {
+  return db.prepare('DELETE FROM queue_warnings WHERE queue_id = ?').run(queueId);
 }
 
 // Agent Withdraw helpers

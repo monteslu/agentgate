@@ -93,7 +93,13 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listMementos: jest.fn(() => []),
   getMementoById: jest.fn(),
   deleteMemento: jest.fn(),
-  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 }))
+  getMementoCounts: jest.fn(() => ({ total: 0, byAgent: [], last24h: 0 })),
+  
+  // Queue Warning functions
+  addQueueWarning: jest.fn(() => 1),
+  getQueueWarnings: jest.fn(() => []),
+  getQueueWarningCount: jest.fn(() => 0),
+  deleteQueueWarnings: jest.fn()
 }));
 
 // Mock hsyncManager
@@ -119,7 +125,8 @@ jest.unstable_mockModule('../src/lib/agentNotifier.js', () => ({
   notifyAgentQueueStatus: jest.fn(() => Promise.resolve({ success: true })),
   notifyAgentMessage: jest.fn(() => Promise.resolve({ success: true })),
   notifyMessageRejected: jest.fn(() => Promise.resolve({ success: true })),
-  notifyAgentMessagesBatch: jest.fn(() => Promise.resolve({ success: true }))
+  notifyAgentMessagesBatch: jest.fn(() => Promise.resolve({ success: true })),
+  notifyAgentQueueWarning: jest.fn(() => Promise.resolve({ success: true }))
 }));
 
 // Mock socketManager

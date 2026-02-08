@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth, addQueueWarning, getQueueWarnings } from '../lib/db.js';
+import { notifyAgentQueueWarning } from '../lib/agentNotifier.js';
 import { emitCountUpdate } from '../lib/socketManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
 
@@ -305,6 +306,103 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
   } catch (error) {
     res.status(500).json({
       error: 'Failed to withdraw',
+      message: error.message
+    });
+  }
+});
+
+// Add a warning to a queue item (peer review)
+// POST /api/queue/:service/:accountName/:id/warn
+router.post('/:service/:accountName/:id/warn', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    const agentName = req.apiKeyInfo?.name;
+
+    if (!agentName) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Agent authentication required'
+      });
+    }
+
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({
+        error: 'Invalid request',
+        message: 'Warning message is required'
+      });
+    }
+
+    const entry = getQueueEntry(id);
+
+    if (!entry) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Queue entry not found'
+      });
+    }
+
+    // Only allow warnings on pending items
+    if (entry.status !== 'pending') {
+      return res.status(400).json({
+        error: 'Cannot warn',
+        message: `Cannot add warning to entry with status "${entry.status}". Only pending items can be warned.`
+      });
+    }
+
+    // Cannot warn your own items (should withdraw instead)
+    if (entry.submitted_by === agentName) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Cannot warn your own submission. Use withdraw instead.'
+      });
+    }
+
+    // Add the warning
+    const warningId = addQueueWarning(id, agentName, message.trim());
+
+    // Notify the submitting agent
+    if (entry.submitted_by) {
+      notifyAgentQueueWarning(entry, agentName, message.trim()).catch(err => {
+        console.error('Failed to notify agent of warning:', err.message);
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Warning added',
+      warning_id: warningId,
+      queue_id: id
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to add warning',
+      message: error.message
+    });
+  }
+});
+
+// Get warnings for a queue item
+// GET /api/queue/:service/:accountName/:id/warnings
+router.get('/:service/:accountName/:id/warnings', (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const entry = getQueueEntry(id);
+    if (!entry) {
+      return res.status(404).json({
+        error: 'Not found',
+        message: 'Queue entry not found'
+      });
+    }
+
+    const warnings = getQueueWarnings(id);
+    res.json({ warnings });
+
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get warnings',
       message: error.message
     });
   }
