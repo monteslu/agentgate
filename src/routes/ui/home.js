@@ -44,49 +44,47 @@ function renderHead() {
   <script src="/socket.io/socket.io.js"></script>
   <style>
     /* ===== Services Catalog Styles ===== */
-    .catalog-category { margin-bottom: 20px; }
+    .catalog-category { margin-bottom: 10px; }
     .catalog-category-title {
-      margin: 0 0 10px 0;
-      font-size: 0.95em;
+      margin: 0 0 6px 0;
+      font-size: 0.8em;
       color: #9ca3af;
       font-weight: 600;
     }
     .catalog-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
     }
     .catalog-tile {
-      display: flex;
-      flex-direction: column;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 16px 10px;
+      gap: 5px;
+      padding: 5px 10px;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
+      border-radius: 6px;
       text-decoration: none;
       color: #f3f4f6;
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      transition: background 0.15s, border-color 0.15s;
       cursor: pointer;
-      position: relative;
+      white-space: nowrap;
     }
     .catalog-tile:hover {
       background: rgba(255,255,255,0.08);
       border-color: rgba(129,140,248,0.4);
-      transform: translateY(-2px);
     }
     .catalog-tile-disabled {
       opacity: 0.45;
       cursor: default;
       pointer-events: none;
     }
-    .catalog-tile-icon { font-size: 28px; }
-    .catalog-tile-name { font-size: 0.82em; font-weight: 500; text-align: center; }
+    .catalog-tile-icon { font-size: 16px; }
+    .catalog-tile-name { font-size: 0.8em; font-weight: 500; }
     .catalog-tile-badge {
-      font-size: 0.65em;
-      padding: 2px 6px;
-      border-radius: 4px;
+      font-size: 0.6em;
+      padding: 1px 5px;
+      border-radius: 3px;
       font-weight: 600;
     }
     .catalog-tile-badge.configured {
@@ -97,13 +95,13 @@ function renderHead() {
       background: rgba(156,163,175,0.15);
       color: #9ca3af;
     }
-    .services-section { margin-top: 24px; }
+    .services-section { margin-top: 20px; }
     .services-section h3 {
       color: #9ca3af;
-      font-size: 0.9em;
+      font-size: 0.85em;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
   </style>
   <script>
