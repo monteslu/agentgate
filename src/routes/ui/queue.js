@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import {
   listQueueEntries, getQueueEntry, updateQueueStatus,
-  clearQueueByStatus, deleteQueueEntry, getQueueCounts
+  clearQueueByStatus, deleteQueueEntry, getQueueCounts,
+  getQueueWarnings
 } from '../../lib/db.js';
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
@@ -163,6 +164,34 @@ function renderQueuePage(entries, filter, counts = {}) {
       `<div class="request-item"><code>${r.method}</code> <span>${escapeHtml(r.path)}</span></div>`
     ).join('');
 
+    // Get warnings for this entry
+    const warnings = getQueueWarnings(entry.id);
+    const warningCount = warnings.length;
+    const warningBadge = warningCount > 0
+      ? `<span class="warning-badge" title="${warningCount} warning${warningCount > 1 ? 's' : ''}">⚠️ ${warningCount}</span>`
+      : '';
+
+    let warningsSection = '';
+    if (warningCount > 0) {
+      const warningItems = warnings.map(w => `
+        <div class="warning-item">
+          <div class="warning-header">
+            ${renderAvatar(w.agent_id, { size: 18 })}
+            <strong>${escapeHtml(w.agent_id)}</strong>
+            <span class="warning-time">${formatDate(w.created_at)}</span>
+          </div>
+          <div class="warning-message">${escapeHtml(w.message)}</div>
+        </div>
+      `).join('');
+      
+      warningsSection = `
+        <div class="warnings-section">
+          <div class="warnings-header">⚠️ Warnings (${warningCount})</div>
+          ${warningItems}
+        </div>
+      `;
+    }
+
     let actions = '';
     if (entry.status === 'pending') {
       actions = `
@@ -217,6 +246,7 @@ function renderQueuePage(entries, filter, counts = {}) {
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
             <span class="status-badge">${statusBadge(entry.status)}</span>
+            ${warningBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
             <span class="help" style="margin: 0;">${formatDate(entry.submitted_at)}</span>
@@ -238,6 +268,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         </details>
 
         ${resultSection}
+        ${warningsSection}
         ${notificationSection}
         ${actions}
       </div>
@@ -290,6 +321,15 @@ function renderQueuePage(entries, filter, counts = {}) {
     .notify-pending { background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3); }
     .btn-link { background: none; border: none; color: #818cf8; cursor: pointer; text-decoration: underline; padding: 4px 8px; font-size: 13px; }
     .btn-link:hover { color: #a5b4fc; }
+    .warning-badge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .warnings-section { margin-top: 16px; padding: 16px; background: rgba(245, 158, 11, 0.08); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.2); }
+    .warnings-header { color: #fbbf24; font-weight: 600; margin-bottom: 12px; font-size: 14px; }
+    .warning-item { padding: 12px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #f59e0b; }
+    .warning-item:last-child { margin-bottom: 0; }
+    .warning-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+    .warning-header strong { color: #fbbf24; }
+    .warning-time { color: #6b7280; font-size: 12px; margin-left: auto; }
+    .warning-message { color: #e5e7eb; font-size: 14px; line-height: 1.5; }
   </style>
 </head>
 <body>
