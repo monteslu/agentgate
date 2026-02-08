@@ -1,0 +1,16 @@
+services:
+  agentgate:
+    build:
+      context: https://github.com/monteslu/agentgate.git#main
+      dockerfile: Dockerfile
+    container_name: agentgate
+    restart: unless-stopped
+    ports:
+      - "3050:3050"
+    volumes:
+      - agentgate-data:/data
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  agentgate-data:
