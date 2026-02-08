@@ -43,15 +43,18 @@
     "lint:fix": "eslint . --fix",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
+    "tui": "node src/tui/index.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.0.0",
     "cookie-parser": "^1.4.7",
+    "enquirer": "^2.4.1",
     "express": "^4.18.2",
     "hsync": "^0.33.0",
     "nanoid": "^5.0.0",
+    "ora": "^8.1.1",
     "socket.io": "^4.8.3",
     "stemmer": "^2.0.1"
   },
