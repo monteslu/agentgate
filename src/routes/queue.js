@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth, addQueueWarning, getQueueWarnings } from '../lib/db.js';
 import { notifyAgentQueueWarning } from '../lib/agentNotifier.js';
-import { emitCountUpdate } from '../lib/socketManager.js';
+import { emitCountUpdate, emitEvent } from '../lib/socketManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
 
 const router = Router();
@@ -367,6 +367,15 @@ router.post('/:service/:accountName/:id/warn', async (req, res) => {
         console.error('Failed to notify agent of warning:', err.message);
       });
     }
+
+    // Emit socket event for real-time UI update
+    const warnings = getQueueWarnings(id);
+    emitEvent('queueItemUpdate', {
+      id,
+      type: 'warning_added',
+      warningCount: warnings.length,
+      warnings
+    });
 
     res.json({
       success: true,
