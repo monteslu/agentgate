@@ -42,14 +42,14 @@ export const catalog = [
       { id: 'mastodon', name: 'Mastodon', icon: '🐘', implemented: true },
       { id: 'twitter', name: 'Twitter / X', icon: '🐦', implemented: false },
       { id: 'linkedin', name: 'LinkedIn', icon: '💼', implemented: true },
-      { id: 'reddit', name: 'Reddit', icon: '🤖', implemented: true },
+      { id: 'reddit', name: 'Reddit', icon: '🤖', implemented: true }
     ]
   },
   {
     category: '💻 Dev',
     services: [
       { id: 'github', name: 'GitHub', icon: '🐙', implemented: true },
-      { id: 'jira', name: 'Jira', icon: '📋', implemented: true },
+      { id: 'jira', name: 'Jira', icon: '📋', implemented: true }
     ]
   },
   {
@@ -57,34 +57,34 @@ export const catalog = [
     services: [
       { id: 'calendar', name: 'Calendar', icon: '📅', implemented: true },
       { id: 'notion', name: 'Notion', icon: '📝', implemented: false },
-      { id: 'slack', name: 'Slack', icon: '💬', implemented: false },
+      { id: 'slack', name: 'Slack', icon: '💬', implemented: false }
     ]
   },
   {
     category: '🎵 Media',
     services: [
       { id: 'youtube', name: 'YouTube', icon: '▶️', implemented: true },
-      { id: 'spotify', name: 'Spotify', icon: '🎵', implemented: false },
+      { id: 'spotify', name: 'Spotify', icon: '🎵', implemented: false }
     ]
   },
   {
     category: '💪 Health',
     services: [
-      { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true },
+      { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true }
     ]
   },
   {
     category: '💰 Finance',
     services: [
-      { id: 'stripe', name: 'Stripe', icon: '💳', implemented: false },
+      { id: 'stripe', name: 'Stripe', icon: '💳', implemented: false }
     ]
   },
   {
     category: '📧 Communication',
     services: [
-      { id: 'email', name: 'Email / Gmail', icon: '✉️', implemented: false },
+      { id: 'email', name: 'Email / Gmail', icon: '✉️', implemented: false }
     ]
-  },
+  }
 ];
 
 // Map service id → module for quick lookup
