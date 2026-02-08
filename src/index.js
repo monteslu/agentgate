@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { getCookieSecret } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
+import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
 import { apiKeyAuth, readOnlyEnforce, serviceAccessCheck } from './lib/middleware.js';
 import githubRoutes from './routes/github.js';
@@ -40,6 +41,12 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
+
+// Health endpoint - public, no auth required
+// Used by tunnel test button and Docker healthcheck
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now() });
+});
 
 // API routes - require auth, read-only, and service access check
 // Pattern: /api/{service}/{accountName}/...
@@ -94,11 +101,17 @@ const server = app.listen(PORT, async () => {
   initSocket(server);
   console.log('Socket.io initialized for real-time updates');
 
-  // Start hsync if configured
+  // Start tunnels if configured
   try {
     await connectHsync(PORT);
   } catch (err) {
     console.error('hsync connection error:', err);
+  }
+
+  try {
+    startCloudflared();
+  } catch (err) {
+    console.error('cloudflared error:', err);
   }
 });
 
