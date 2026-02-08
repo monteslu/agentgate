@@ -24,13 +24,14 @@ RUN mkdir -p /data && chown agentgate:agentgate /data
 VOLUME /data
 ENV AGENTGATE_DATA_DIR=/data
 
-# Default port
-EXPOSE 3000
+# Default port (app reads PORT env var, default 3050)
+ENV PORT=3050
+EXPOSE 3050
 
 # Switch to non-root
 USER agentgate
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD node -e "fetch('http://localhost:3000/api/readme').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+  CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3050) + '/api/readme').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
 
 CMD ["node", "src/index.js"]
