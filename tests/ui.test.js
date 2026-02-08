@@ -7,6 +7,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listApiKeys: jest.fn(() => []),
   createApiKey: jest.fn(),
   deleteApiKey: jest.fn(),
+  regenerateApiKey: jest.fn(),
   getApiKeyById: jest.fn(),
   getApiKeyByName: jest.fn(),
   updateAgentWebhook: jest.fn(),
