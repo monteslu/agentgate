@@ -182,7 +182,8 @@ router.get('/messageable', async (req, res) => {
   const agents = apiKeys
     .filter(k => k.name.toLowerCase() !== callerName.toLowerCase())
     .map(k => ({
-      name: k.name
+      name: k.name,
+      enabled: k.enabled !== 0
     }));
 
   return res.json({
@@ -215,7 +216,7 @@ router.post('/broadcast', async (req, res) => {
   // Get all agents with webhooks (excluding sender)
   const apiKeys = listApiKeys();
   const recipients = apiKeys.filter(k => 
-    k.webhook_url && k.name.toLowerCase() !== fromAgent.toLowerCase()
+    k.webhook_url && k.enabled !== 0 && k.name.toLowerCase() !== fromAgent.toLowerCase()
   );
 
   if (recipients.length === 0) {

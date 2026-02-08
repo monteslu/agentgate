@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled } from '../../lib/db.js';
 import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -163,6 +163,29 @@ router.post('/:id/regenerate', async (req, res) => {
   }
 });
 
+
+// Toggle agent enabled status
+router.post('/:id/toggle-enabled', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  const newEnabled = agent.enabled === 0 ? 1 : 0;
+  setAgentEnabled(id, newEnabled);
+
+  const keys = listApiKeys();
+  if (wantsJson) {
+    return res.json({ success: true, enabled: newEnabled === 1, keys });
+  }
+  res.redirect('/ui/agents');
+});
+
 // Avatar routes
 
 // Get avatar for an agent by name
@@ -264,7 +287,7 @@ router.delete('/:id/avatar', (req, res) => {
 // Render function
 function renderKeysPage(keys, error = null, newKey = null) {
   const renderKeyRow = (k) => `
-    <tr id="key-${k.id}">
+    <tr id="key-${k.id}" class="${k.enabled === 0 ? 'agent-disabled' : ''}">
       <td>
         <div class="agent-with-avatar">
           <span class="avatar-clickable" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Click to change avatar">
@@ -272,6 +295,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
           </span>
           <div>
             <strong>${escapeHtml(k.name)}</strong>
+            ${k.enabled === 0 ? '<span class="status-disabled">Disabled</span>' : ''}
           </div>
         </div>
       </td>
@@ -287,6 +311,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
         <button type="button" class="btn-sm btn-regen" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-prefix="${escapeHtml(k.key_prefix)}" title="Regenerate API Key">🔄</button>
+        <button type="button" class="btn-sm btn-toggle ${k.enabled === 0 ? 'btn-enable' : 'btn-disable'}" onclick="toggleEnabled('${k.id}')" title="${k.enabled === 0 ? 'Enable' : 'Disable'}">${k.enabled === 0 ? '✓' : '⏸'}</button>
         <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete">&times;</button>
       </td>
     </tr>
@@ -332,6 +357,14 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .modal .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
     .avatar-clickable { cursor: pointer; display: inline-block; border-radius: 50%; transition: transform 0.15s ease, box-shadow 0.15s ease; }
     .avatar-clickable:hover { transform: scale(1.1); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); }
+
+    .agent-disabled { opacity: 0.5; }
+    .status-disabled { background: #7f1d1d; color: #fca5a5; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+    .btn-toggle { margin-right: 8px; }
+    .btn-enable { background: #065f46; border-color: #10b981; color: #6ee7b7; }
+    .btn-enable:hover { background: #047857; }
+    .btn-disable { background: #7f1d1d; border-color: #ef4444; color: #fca5a5; }
+    .btn-disable:hover { background: #991b1b; }
   </style>
 </head>
 <body>
@@ -639,6 +672,23 @@ function renderKeysPage(keys, error = null, newKey = null) {
         closeWebhookModal();
       }
     });
+
+    async function toggleEnabled(id) {
+      try {
+        const res = await fetch('/ui/keys/' + id + '/toggle-enabled', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to toggle agent status');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
 
     async function deleteKey(id) {
       if (!confirm('Delete this API key? Any agents using it will lose access.')) return;

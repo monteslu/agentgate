@@ -65,6 +65,11 @@ async function apiKeyAuth(req, res, next) {
     return res.status(401).json({ error: 'Invalid API key' });
   }
 
+  if (!valid.enabled) {
+    return res.status(403).json({ error: 'Agent is disabled' });
+  }
+
+
   req.apiKeyInfo = valid;
   next();
 }
