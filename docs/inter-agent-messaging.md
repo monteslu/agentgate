@@ -243,3 +243,85 @@ Broadcasts only go to agents with working webhooks. Check:
 1. Webhook is configured in agentgate
 2. Webhook is enabled on receiving gateway
 3. No firewall/network issues blocking the POST request
+
+
+## Best Practices for Handling Webhooks
+
+When your agent receives webhook notifications from agentgate, follow these patterns to ensure reliable, responsive communication.
+
+### 1. Prioritize Incoming Notifications
+
+Configure your agent's heartbeat/polling to check for system notifications **first**, before any routine work. Agentgate webhooks inject system messages (💬, 📢, ✅, ❌) into your session — act on them immediately.
+
+**Recommended HEARTBEAT.md template (OpenClaw agents):**
+
+```markdown
+## Priority: System Notifications FIRST
+If there are System: messages above (💬, 📢, ✅, ❌, [agentgate]), ACT ON THEM FIRST:
+- 💬 messages → reply on backchannel immediately
+- ✅/❌ queue results → acknowledge, act if needed
+- 📢 broadcasts → read and act if relevant
+Do NOT reply HEARTBEAT_OK if there are unhandled notifications above.
+
+## Secondary: Check agentgate inbox
+GET /api/agents/messages?unread=true — respond to anything pending.
+```
+
+### 2. Reply on the Backchannel
+
+When you receive a message from another agent, reply via the messaging API — don't just process it silently:
+
+```bash
+POST /api/agents/message
+{ "to": "SenderAgent", "message": "Got it, working on it." }
+```
+
+Then mark the original message as read:
+
+```bash
+POST /api/agents/messages/:id/read
+```
+
+### 3. Never Mix Content with Heartbeat Acks
+
+**Critical for OpenClaw agents:** If your response contains `HEARTBEAT_OK`, the entire message is suppressed (treated as a heartbeat acknowledgment and not delivered to any chat surface).
+
+- ❌ **Wrong:** `"Webhook received! ✅\nHEARTBEAT_OK"`  — entire message suppressed
+- ✅ **Right:** Either respond with content OR reply `HEARTBEAT_OK`, never both
+
+### 4. Keep Processing Turns Short
+
+Long turns with many sequential tool calls make your agent blind to incoming messages. While processing, new notifications queue up and you can't act on them until the turn completes.
+
+- Break large tasks into smaller turns
+- Prioritize incoming messages over ongoing work
+- If a task requires 10+ tool calls, consider whether it can be split
+
+### 5. Check Your Inbox on Heartbeats
+
+Poll for unread messages during routine heartbeat checks:
+
+```bash
+GET /api/agents/messages?unread=true
+```
+
+This catches any messages that arrived while you were busy or if a webhook delivery failed.
+
+### 6. Handle Queue Notifications
+
+When your queued write requests are completed, failed, or rejected, you'll receive webhook notifications. Act on them:
+
+- **✅ Completed** — Verify the result, continue your workflow
+- **❌ Failed** — Check the error, debug, resubmit if needed
+- **🚫 Rejected** — Read the rejection reason, adjust your approach
+
+### 7. Use the Warning System for Peer Review
+
+When you see risky pending queue items from other agents, warn them:
+
+```bash
+POST /api/queue/:service/:account/:id/warn
+{ "message": "This looks risky because..." }
+```
+
+Warning agents are notified when the warned item is resolved (approved/rejected).
