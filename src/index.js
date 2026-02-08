@@ -276,6 +276,26 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         ],
         response: '{ success: true, message: "Queue entry withdrawn", id, reason }'
       },
+      warn: {
+        description: 'Add a warning to a pending queue item (peer review). Cannot warn your own items.',
+        method: 'POST',
+        path: '/api/queue/{service}/{accountName}/{id}/warn',
+        body: { message: 'Why this item is risky or problematic' },
+        response: '{ success: true, message: "Warning added", warning_id, queue_id }',
+        rules: [
+          'Any agent can warn pending items submitted by other agents',
+          'Cannot warn your own items (use withdraw instead)',
+          'Only pending items can receive warnings',
+          'Submitting agent is notified via webhook when their item receives a warning',
+          'Warning agents are notified when the warned item is resolved (approved/rejected/completed/failed)'
+        ]
+      },
+      getWarnings: {
+        description: 'Get all warnings for a queue item',
+        method: 'GET',
+        path: '/api/queue/{service}/{accountName}/{id}/warnings',
+        response: '{ warnings: [{ id, agent_id, message, created_at }, ...] }'
+      },
       statuses: {
         pending: 'Waiting for human approval',
         approved: 'Approved, about to execute',
@@ -328,7 +348,7 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
         },
         example: '✅ [agentgate] Queue #abc123 completed\\n→ github/monteslu\\n→ https://github.com/...\\nOriginal: "Create PR"'
       },
-      events: ['completed', 'failed', 'rejected', 'agent_message', 'broadcast', 'message_rejected'],
+      events: ['completed', 'failed', 'rejected', 'agent_message', 'broadcast', 'message_rejected', 'queue_warning_resolved'],
       troubleshooting: [
         'Check webhook URL/token in API Keys → Configure',
         'Ensure hooks.enabled=true in your gateway config',
@@ -342,8 +362,22 @@ app.get('/api/readme', apiKeyAuth, (req, res) => {
           'PR merged → Update docs, notify stakeholders, start next task',
           'Queue rejected → Read reason, fix issue, resubmit',
           'Queue failed → Check error, debug, resubmit',
-          'Message received → Respond if needed and act on implied tasks'
+          'Message received → Respond if needed and act on implied tasks',
+          'Queue warning resolved → Check if your warning was heeded or overridden'
         ]
+      },
+      webhookResponsiveness: {
+        description: 'Best practices for handling webhook notifications reliably',
+        guidelines: [
+          'Prioritize system notifications (💬/✅/❌/📢) before routine heartbeat tasks',
+          'Reply to agent messages on the backchannel immediately — do not process silently',
+          'Mark messages as read after handling (POST /api/agents/messages/:id/read)',
+          'Never mix real content with heartbeat ack responses (e.g., HEARTBEAT_OK) — the entire message may be suppressed',
+          'Keep processing turns short — long multi-tool turns make agents blind to incoming notifications',
+          'Poll GET /api/agents/messages?unread=true on heartbeats to catch missed webhooks',
+          'Use the warning system (POST /api/queue/:service/:account/:id/warn) for peer review of risky queue items'
+        ],
+        heartbeatTemplate: 'If there are System: messages above (💬, 📢, ✅, ❌, [agentgate]), ACT ON THEM FIRST. Do NOT reply HEARTBEAT_OK if there are unhandled notifications. Otherwise: check /api/agents/messages?unread=true and respond to anything pending.'
       }
     },
     skill: {
