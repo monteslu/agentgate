@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar } from '../../lib/db.js';
 import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -135,6 +135,34 @@ router.delete('/:id', (req, res) => {
   res.redirect('/ui/keys');
 });
 
+// Regenerate API key
+router.post('/:id/regenerate', async (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  try {
+    const newKey = await regenerateApiKey(id);
+    const keys = listApiKeys();
+
+    if (wantsJson) {
+      return res.json({ success: true, key: newKey.key, keyPrefix: newKey.keyPrefix, name: newKey.name, keys });
+    }
+    res.send(renderKeysPage(keys, null, newKey));
+  } catch (err) {
+    console.error('Key regeneration error:', err);
+    return wantsJson
+      ? res.status(500).json({ error: err.message || 'Failed to regenerate key' })
+      : res.send(renderKeysPage(listApiKeys(), err.message || 'Failed to regenerate key'));
+  }
+});
+
 // Avatar routes
 
 // Get avatar for an agent by name
@@ -257,7 +285,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
         <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
-      <td>
+      <td style="white-space: nowrap;">
+        <button type="button" class="btn-sm btn-regen" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-prefix="${escapeHtml(k.key_prefix)}" title="Regenerate API Key">🔄</button>
         <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete">&times;</button>
       </td>
     </tr>
@@ -279,6 +308,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
     .delete-btn { background: none; border: none; color: #f87171; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; font-weight: bold; }
     .delete-btn:hover { color: #dc2626; }
+    .btn-regen { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; font-size: 14px; padding: 4px 8px; cursor: pointer; border-radius: 4px; margin-right: 8px; }
+    .btn-regen:hover { background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.5); }
     .back-link { color: #a78bfa; text-decoration: none; font-weight: 500; }
     .back-link:hover { text-decoration: underline; }
     .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
@@ -379,6 +410,23 @@ function renderKeysPage(keys, error = null, newKey = null) {
     </div>
   </div>
 
+  <!-- Regenerate Key Modal -->
+  <div id="regen-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>🔄 Regenerate API Key</h3>
+      <p style="color: #fbbf24; font-size: 14px; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">
+        ⚠️ <strong>Warning:</strong> This will immediately invalidate the current API key. Any agents using it will lose access until updated with the new key.
+      </p>
+      <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-agent-name" style="color: #f3f4f6;"></strong></p>
+      <p style="color: #9ca3af; margin-bottom: 16px;">Current key: <code id="regen-key-prefix" style="background: #374151; padding: 2px 6px; border-radius: 4px;"></code></p>
+      <input type="hidden" id="regen-agent-id">
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeRegenModal()">Cancel</button>
+        <button type="button" id="regen-confirm-btn" class="btn-danger" onclick="confirmRegenerate()">Regenerate Key</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Avatar Modal -->
   <div id="avatar-modal" class="modal-overlay">
     <div class="modal">
@@ -432,6 +480,57 @@ function renderKeysPage(keys, error = null, newKey = null) {
     function closeWebhookModal() {
       document.getElementById('webhook-modal').classList.remove('active');
     }
+
+    // Regenerate key modal functions
+    function showRegenModal(btn) {
+      document.getElementById('regen-agent-id').value = btn.dataset.id;
+      document.getElementById('regen-agent-name').textContent = btn.dataset.name;
+      document.getElementById('regen-key-prefix').textContent = btn.dataset.prefix;
+      document.getElementById('regen-modal').classList.add('active');
+    }
+
+    function closeRegenModal() {
+      document.getElementById('regen-modal').classList.remove('active');
+    }
+
+    async function confirmRegenerate() {
+      const id = document.getElementById('regen-agent-id').value;
+      const btn = document.getElementById('regen-confirm-btn');
+      btn.disabled = true;
+      btn.textContent = 'Regenerating...';
+
+      try {
+        const res = await fetch('/ui/keys/' + id + '/regenerate', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          closeRegenModal();
+          // Reload page to show new key banner
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to regenerate key');
+          btn.disabled = false;
+          btn.textContent = 'Regenerate Key';
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Regenerate Key';
+      }
+    }
+
+    document.querySelectorAll('.btn-regen').forEach(btn => {
+      btn.addEventListener('click', () => showRegenModal(btn));
+    });
+
+    document.getElementById('regen-modal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeRegenModal();
+      }
+    });
 
     async function testWebhook() {
       const id = document.getElementById('webhook-agent-id').value;
