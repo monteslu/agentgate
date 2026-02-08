@@ -62,7 +62,7 @@ async function hsyncConfigScreen(current) {
   }
 }
 
-async function cloudflareConfigScreen(current) {
+async function cloudflareConfigScreen() {
   try {
     if (!hasCloudflared()) {
       console.log('\n  ⚠  cloudflared binary not found in PATH');
@@ -115,17 +115,17 @@ async function testConnectionScreen() {
 
   try {
     await asyncAction(`Testing ${publicUrl}/health`, async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      try {
-        const start = Date.now();
-        const res = await fetch(`${publicUrl}/health`, { signal: controller.signal });
-        const latency = Date.now() - start;
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        console.log(`  ✅ Connected — ${latency}ms`);
-      } finally {
-        clearTimeout(timeout);
-      }
+      const start = Date.now();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 10000)
+      );
+      const res = await Promise.race([
+        fetch(`${publicUrl}/health`),
+        timeoutPromise
+      ]);
+      const latency = Date.now() - start;
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      console.log(`  ✅ Connected — ${latency}ms`);
     });
   } catch (err) {
     if (err.name === 'AbortError') {
@@ -167,7 +167,7 @@ export async function tunnelScreen() {
     if (choice === 'hsync') {
       await hsyncConfigScreen(config.hsync);
     } else if (choice === 'cloudflare') {
-      await cloudflareConfigScreen(config.cloudflare);
+      await cloudflareConfigScreen();
     } else if (choice === 'test') {
       await testConnectionScreen();
     } else if (choice === 'disable') {
