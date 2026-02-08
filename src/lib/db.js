@@ -312,6 +312,22 @@ export async function createApiKey(name) {
   return { id, name, key, keyPrefix }; // Return full key only at creation
 }
 
+export async function regenerateApiKey(id) {
+  const existing = getApiKeyById(id);
+  if (!existing) {
+    throw new Error('Agent not found');
+  }
+
+  const key = `rms_${nanoid(32)}`;
+  const keyPrefix = key.substring(0, 8) + '...' + key.substring(key.length - 4);
+  const keyHash = await bcrypt.hash(key, 10);
+
+  db.prepare('UPDATE api_keys SET key_prefix = ?, key_hash = ? WHERE id = ?')
+    .run(keyPrefix, keyHash, id);
+
+  return { id, name: existing.name, key, keyPrefix };
+}
+
 export function listApiKeys() {
   return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys').all();
 }
