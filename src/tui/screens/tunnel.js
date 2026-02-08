@@ -1,18 +1,9 @@
 // Tunnel configuration screen for TUI
 // Supports hsync (Node-native) and Cloudflare Tunnel (cloudflared binary)
 
-import { execSync } from 'child_process';
 import { selectPrompt, inputPrompt, passwordPrompt, confirmPrompt, asyncAction, handleCancel } from '../helpers.js';
 import { getSetting, setSetting } from '../../lib/db.js';
-
-function hasCloudflared() {
-  try {
-    execSync('which cloudflared', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { hasCloudflared } from '../../lib/cloudflareManager.js';
 
 function getCurrentConfig() {
   return {
@@ -128,7 +119,7 @@ async function testConnectionScreen() {
       console.log(`  ✅ Connected — ${latency}ms`);
     });
   } catch (err) {
-    if (err.name === 'AbortError') {
+    if (err.message === 'timeout') {
       console.log('  ❌ Timeout — tunnel may not be running\n');
     } else {
       console.log(`  ❌ Failed: ${err.message}\n`);
