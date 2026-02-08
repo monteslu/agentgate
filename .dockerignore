@@ -1,0 +1,12 @@
+node_modules/
+data.db
+.git/
+.github/
+.claude/
+tests/
+jest.config.js
+eslint.config.js
+*.md
+!docs/**/*.md
+robot_het.jpg
+.git-push-branch
