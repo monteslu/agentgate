@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -266,6 +267,7 @@ try {
           ALTER TABLE api_keys ADD COLUMN webhook_token TEXT;
         `);
         console.log('Webhook columns added.');
+      }
 
       // Check if we need to add enabled column (agent enable/disable feature)
       const hasEnabled = tableInfo.some(col => col.name === 'enabled');
@@ -273,8 +275,6 @@ try {
         console.log('Adding enabled column to api_keys table...');
         db.exec('ALTER TABLE api_keys ADD COLUMN enabled INTEGER DEFAULT 1;');
         console.log('Enabled column added.');
-      }
-
       }
     }
   }
