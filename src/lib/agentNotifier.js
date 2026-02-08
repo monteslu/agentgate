@@ -86,6 +86,38 @@ export async function notifyAgentQueueStatus(entry) {
   return result;
 }
 
+// Notify agent about a warning on their queue submission
+export async function notifyAgentQueueWarning(entry, warningAgent, warningMessage) {
+  const agentName = entry.submitted_by;
+  if (!agentName) {
+    return { success: false, error: 'No submitter on queue entry' };
+  }
+
+  const agent = getApiKeyByName(agentName);
+  if (!agent?.webhook_url) {
+    return { success: false, error: 'No webhook configured' };
+  }
+
+  const payload = {
+    type: 'queue_warning',
+    entry: {
+      id: entry.id,
+      service: entry.service,
+      account_name: entry.account_name,
+      status: entry.status,
+      comment: entry.comment
+    },
+    warning: {
+      from: warningAgent,
+      message: warningMessage
+    },
+    text: `⚠️ [agentgate] Warning on Queue #${entry.id.substring(0, 8)}\n→ ${entry.service}/${entry.account_name}\nFrom: ${warningAgent}\n"${warningMessage.substring(0, 200)}"`,
+    mode: 'now'
+  };
+
+  return await notifyAgent(agentName, payload);
+}
+
 // Notify agent about a new message (delivered to recipient)
 export async function notifyAgentMessage(message) {
   const agentName = message.to_agent;
