@@ -132,7 +132,8 @@ jest.unstable_mockModule('../src/lib/agentNotifier.js', () => ({
 
 // Mock socketManager
 jest.unstable_mockModule('../src/lib/socketManager.js', () => ({
-  emitCountUpdate: jest.fn()
+  emitCountUpdate: jest.fn(),
+  emitEvent: jest.fn()
 }));
 
 // Mock queueExecutor
