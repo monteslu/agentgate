@@ -1,0 +1,11 @@
+services:
+  agentgate:
+    build: .
+    ports:
+      - "3050:3050"
+    volumes:
+      - agentgate-data:/data
+    restart: unless-stopped
+
+volumes:
+  agentgate-data:
