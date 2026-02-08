@@ -110,18 +110,18 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
-        Write Queue
+        Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
-      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
       <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
         Messages
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
       <div class="nav-divider"></div>
-      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
-        <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
+        <button type="submit" class="nav-btn nav-btn-danger">Logout</button>
       </form>
     </div>
   </div>`;
@@ -251,18 +251,18 @@ export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
-        Write Queue
+        Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
-      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
       <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
+      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
         Messages
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
       <div class="nav-divider"></div>
-      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings" style="font-size: 18px;">⚙️</a>
+      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings">⚙️</a>
       <form method="POST" action="/ui/logout" style="margin: 0;">
-        <button type="submit" class="nav-btn nav-btn-default" style="color: #f87171;">Logout</button>
+        <button type="submit" class="nav-btn nav-btn-danger">Logout</button>
       </form>
     </div>
   </div>`;
