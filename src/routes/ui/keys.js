@@ -414,15 +414,32 @@ function renderKeysPage(keys, error = null, newKey = null) {
   <div id="regen-modal" class="modal-overlay">
     <div class="modal">
       <h3>🔄 Regenerate API Key</h3>
-      <p style="color: #fbbf24; font-size: 14px; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">
-        ⚠️ <strong>Warning:</strong> This will immediately invalidate the current API key. Any agents using it will lose access until updated with the new key.
-      </p>
-      <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-agent-name" style="color: #f3f4f6;"></strong></p>
-      <p style="color: #9ca3af; margin-bottom: 16px;">Current key: <code id="regen-key-prefix" style="background: #374151; padding: 2px 6px; border-radius: 4px;"></code></p>
-      <input type="hidden" id="regen-agent-id">
-      <div class="modal-buttons">
-        <button type="button" class="btn-secondary" onclick="closeRegenModal()">Cancel</button>
-        <button type="button" id="regen-confirm-btn" class="btn-danger" onclick="confirmRegenerate()">Regenerate Key</button>
+      <!-- Confirmation view -->
+      <div id="regen-confirm-view">
+        <p style="color: #fbbf24; font-size: 14px; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">
+          ⚠️ <strong>Warning:</strong> This will immediately invalidate the current API key. Any agents using it will lose access until updated with the new key.
+        </p>
+        <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-agent-name" style="color: #f3f4f6;"></strong></p>
+        <p style="color: #9ca3af; margin-bottom: 16px;">Current key: <code id="regen-key-prefix" style="background: #374151; padding: 2px 6px; border-radius: 4px;"></code></p>
+        <input type="hidden" id="regen-agent-id">
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeRegenModal()">Cancel</button>
+          <button type="button" id="regen-confirm-btn" class="btn-danger" onclick="confirmRegenerate()">Regenerate Key</button>
+        </div>
+      </div>
+      <!-- Success view with new key -->
+      <div id="regen-success-view" style="display: none;">
+        <p style="color: #34d399; font-size: 14px; margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
+          ✅ <strong>Key regenerated!</strong> Copy it now - you won't be able to see it again.
+        </p>
+        <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-success-name" style="color: #f3f4f6;"></strong></p>
+        <div style="background: #1f2937; padding: 12px; border-radius: 8px; margin-bottom: 16px; word-break: break-all;">
+          <code id="regen-new-key" style="color: #34d399; font-size: 14px;"></code>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" id="regen-copy-btn" class="btn-primary" onclick="copyRegenKey()">Copy to Clipboard</button>
+          <button type="button" class="btn-secondary" onclick="closeRegenModalAndRefresh()">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -482,15 +499,38 @@ function renderKeysPage(keys, error = null, newKey = null) {
     }
 
     // Regenerate key modal functions
+    let regenNewKey = null;
+
     function showRegenModal(btn) {
       document.getElementById('regen-agent-id').value = btn.dataset.id;
       document.getElementById('regen-agent-name').textContent = btn.dataset.name;
       document.getElementById('regen-key-prefix').textContent = btn.dataset.prefix;
+      // Reset to confirmation view
+      document.getElementById('regen-confirm-view').style.display = '';
+      document.getElementById('regen-success-view').style.display = 'none';
+      document.getElementById('regen-confirm-btn').disabled = false;
+      document.getElementById('regen-confirm-btn').textContent = 'Regenerate Key';
+      regenNewKey = null;
       document.getElementById('regen-modal').classList.add('active');
     }
 
     function closeRegenModal() {
       document.getElementById('regen-modal').classList.remove('active');
+    }
+
+    function closeRegenModalAndRefresh() {
+      closeRegenModal();
+      window.location.reload();
+    }
+
+    function copyRegenKey() {
+      if (!regenNewKey) return;
+      navigator.clipboard.writeText(regenNewKey).then(() => {
+        const btn = document.getElementById('regen-copy-btn');
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
     }
 
     async function confirmRegenerate() {
@@ -507,9 +547,12 @@ function renderKeysPage(keys, error = null, newKey = null) {
         const data = await res.json();
 
         if (data.success) {
-          closeRegenModal();
-          // Reload page to show new key banner
-          window.location.reload();
+          // Show success view with new key
+          regenNewKey = data.key;
+          document.getElementById('regen-success-name').textContent = data.name;
+          document.getElementById('regen-new-key').textContent = data.key;
+          document.getElementById('regen-confirm-view').style.display = 'none';
+          document.getElementById('regen-success-view').style.display = '';
         } else {
           alert(data.error || 'Failed to regenerate key');
           btn.disabled = false;
