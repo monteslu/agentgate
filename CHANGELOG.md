@@ -2,6 +2,23 @@
 
 All notable changes to agentgate will be documented in this file.
 
+## [0.5.0] - 2026-02-08
+
+### Added
+- **Agent Enable/Disable** - Toggle agents on/off without deleting them (#136)
+  - Disabled agents get 403 on API calls
+  - Excluded from broadcasts automatically
+  - Visual indicator in UI with toggle button
+- **Real-time Queue Updates** - Socket.io live updates for queue items (#134)
+- **API Key Regeneration** - Regenerate keys without recreating agents (#130)
+- **Warning Agent Notifications** - Notify warning agents when queue items resolve (#135)
+
+### Fixed
+- Broadcast enabled check uses truthy comparison (#139)
+
+### Docs
+- Webhook handling best practices guide (#143)
+
 ## [0.4.1] - 2026-02-05
 
 ### Added
