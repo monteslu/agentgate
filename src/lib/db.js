@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -267,6 +266,15 @@ try {
           ALTER TABLE api_keys ADD COLUMN webhook_token TEXT;
         `);
         console.log('Webhook columns added.');
+
+      // Check if we need to add enabled column (agent enable/disable feature)
+      const hasEnabled = tableInfo.some(col => col.name === 'enabled');
+      if (!hasEnabled) {
+        console.log('Adding enabled column to api_keys table...');
+        db.exec('ALTER TABLE api_keys ADD COLUMN enabled INTEGER DEFAULT 1;');
+        console.log('Enabled column added.');
+      }
+
       }
     }
   }
@@ -329,16 +337,16 @@ export async function regenerateApiKey(id) {
 }
 
 export function listApiKeys() {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys').all();
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, created_at FROM api_keys').all();
 }
 
 export function getApiKeyByName(name) {
   // Case-insensitive lookup
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
 }
 
 export function getApiKeyById(id) {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, created_at FROM api_keys WHERE id = ?').get(id);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, created_at FROM api_keys WHERE id = ?').get(id);
 }
 
 export function deleteApiKey(id) {
@@ -354,13 +362,18 @@ export function updateAgentWebhook(id, webhookUrl, webhookToken) {
   return db.prepare('UPDATE api_keys SET webhook_url = ?, webhook_token = ? WHERE id = ?').run(webhookUrl || null, webhookToken || null, id);
 }
 
+export function setAgentEnabled(id, enabled) {
+  return db.prepare('UPDATE api_keys SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+}
+
+
 export async function validateApiKey(key) {
   // Must check all keys since we can't look up by hash directly
   const allKeys = db.prepare('SELECT * FROM api_keys').all();
   for (const row of allKeys) {
     const match = await bcrypt.compare(key, row.key_hash);
     if (match) {
-      return { id: row.id, name: row.name, webhookUrl: row.webhook_url, webhookToken: row.webhook_token };
+      return { id: row.id, name: row.name, webhookUrl: row.webhook_url, webhookToken: row.webhook_token, enabled: row.enabled !== 0 };
     }
   }
   return null;
