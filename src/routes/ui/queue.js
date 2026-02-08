@@ -236,7 +236,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     let notificationSection = '';
     if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) {
       const notifyStatus = entry.notified
-        ? `<span class="notify-status notify-sent" title="Notified at ${formatDate(entry.notified_at)}">✓ Notified</span>`
+        ? `<span class="notify-status notify-sent" title="Notified at ${entry.notified_at || ''}">✓ Notified</span>`
         : entry.notify_error
           ? `<span class="notify-status notify-failed" title="${escapeHtml(entry.notify_error)}">⚠ Notify failed</span>`
           : '<span class="notify-status notify-pending">— Not notified</span>';

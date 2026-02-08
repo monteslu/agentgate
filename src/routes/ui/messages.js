@@ -112,6 +112,9 @@ router.post('/clear', (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
 
   clearAgentMessagesByStatus(status || 'all');
+  if (!status || status === 'all') {
+    clearBroadcasts();
+  }
   const counts = getMessageCounts();
   emitCountUpdate();
 
