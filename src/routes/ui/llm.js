@@ -5,7 +5,7 @@ import {
   listAllAgentLlmModels, setAgentLlmModel, removeAgentLlmModel, listApiKeys,
   getPendingQueueCount, listPendingMessages, getMessagingMode
 } from '../../lib/db.js';
-import { htmlHead, simpleNavHeader, socketScript, localizeScript, escapeHtml, formatDate } from './shared.js';
+import { htmlHead, simpleNavHeader, socketScript, localizeScript, escapeHtml } from './shared.js';
 
 const router = Router();
 
@@ -83,7 +83,7 @@ router.get('/', (req, res) => {
     `<option value="${p.id}">${escapeHtml(p.name)} (${p.provider_type})</option>`
   ).join('');
 
-  const agentOptions = [`<option value="*">* (default/wildcard)</option>`]
+  const agentOptions = ['<option value="*">* (default/wildcard)</option>']
     .concat(agents.map(a => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`))
     .join('');
 
