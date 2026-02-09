@@ -103,7 +103,20 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   addQueueWarning: jest.fn(() => 1),
   getQueueWarnings: jest.fn(() => []),
   getQueueWarningCount: jest.fn(() => 0),
-  deleteQueueWarnings: jest.fn()
+  deleteQueueWarnings: jest.fn(),
+
+  // LLM Provider functions
+  createLlmProvider: jest.fn(() => ({ id: 1, name: 'test', provider_type: 'openai' })),
+  getLlmProvider: jest.fn(),
+  getLlmProviderByName: jest.fn(),
+  listLlmProviders: jest.fn(() => []),
+  updateLlmProvider: jest.fn(),
+  deleteLlmProvider: jest.fn(),
+  getAgentLlmConfig: jest.fn(),
+  listAgentModels: jest.fn(() => []),
+  setAgentLlmModel: jest.fn(),
+  removeAgentLlmModel: jest.fn(),
+  listAllAgentLlmModels: jest.fn(() => [])
 }));
 
 // Mock hsyncManager

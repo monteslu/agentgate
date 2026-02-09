@@ -21,6 +21,7 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         AbortController: 'readonly',
+        TextDecoder: 'readonly',
         // Jest globals
         describe: 'readonly',
         it: 'readonly',

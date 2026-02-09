@@ -11,6 +11,7 @@ import mementosRouter from './mementos.js';
 import settingsRouter from './settings.js';
 import homeRouter from './home.js';
 import accessRouter from './access.js';
+import llmRouter from './llm.js';
 
 // Create the main UI router
 const router = Router();
@@ -38,6 +39,9 @@ router.use('/mementos', mementosRouter);
 
 // Service access control: /access, /access/:service/:account/*
 router.use('/access', accessRouter);
+
+// LLM provider management: /llm/providers, /llm/models
+router.use('/llm', llmRouter);
 
 // Settings routes: /hsync/*, /messaging/*, /queue/settings/* (mounted at root)
 router.use('/', settingsRouter);
