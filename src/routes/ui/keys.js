@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, getAgentDataCounts } from '../../lib/db.js';
 import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -30,6 +30,17 @@ router.post('/create', async (req, res) => {
     return res.json({ success: true, key: newKey.key, keyPrefix: newKey.keyPrefix, name: newKey.name, keys });
   }
   res.send(renderKeysPage(keys, null, newKey));
+});
+
+// Get agent data counts for delete warning
+router.get('/:id/counts', (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+  const counts = getAgentDataCounts(agent.name);
+  res.json({ name: agent.name, counts });
 });
 
 router.post('/:id/delete', (req, res) => {
@@ -691,7 +702,42 @@ function renderKeysPage(keys, error = null, newKey = null) {
     }
 
     async function deleteKey(id) {
-      if (!confirm('Delete this API key? Any agents using it will lose access.')) return;
+      // Fetch data counts first
+      try {
+        const countsRes = await fetch('/ui/keys/' + id + '/counts', { headers: { 'Accept': 'application/json' } });
+        const countsData = await countsRes.json();
+        if (countsData.error) {
+          alert(countsData.error);
+          return;
+        }
+
+        const c = countsData.counts;
+        const items = [];
+        if (c.messages > 0) items.push(c.messages + ' message' + (c.messages > 1 ? 's' : ''));
+        if (c.queueEntries > 0) items.push(c.queueEntries + ' queue entr' + (c.queueEntries > 1 ? 'ies' : 'y'));
+        if (c.mementos > 0) items.push(c.mementos + ' memento' + (c.mementos > 1 ? 's' : ''));
+        if (c.broadcasts > 0) items.push(c.broadcasts + ' broadcast' + (c.broadcasts > 1 ? 's' : ''));
+        if (c.warnings > 0) items.push(c.warnings + ' warning' + (c.warnings > 1 ? 's' : ''));
+        if (c.serviceAccess > 0) items.push(c.serviceAccess + ' service access rule' + (c.serviceAccess > 1 ? 's' : ''));
+
+        let warning = '⚠️ DELETE AGENT: ' + countsData.name + '\\n\\n';
+        if (items.length > 0) {
+          warning += 'This will permanently delete:\\n- ' + items.join('\\n- ') + '\\n- API key access\\n\\n';
+        } else {
+          warning += 'This will permanently delete the API key.\\n\\n';
+        }
+        warning += 'Type the agent name to confirm:';
+
+        const confirmation = prompt(warning);
+        if (confirmation === null) return;
+        if (confirmation.toLowerCase() !== countsData.name.toLowerCase()) {
+          alert('Name does not match. Deletion cancelled.');
+          return;
+        }
+      } catch (err) {
+        // Fallback to simple confirm if counts endpoint fails
+        if (!confirm('Delete this API key? Any agents using it will lose access.')) return;
+      }
 
       try {
         const res = await fetch('/ui/keys/' + id, {
