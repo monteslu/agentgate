@@ -2,6 +2,9 @@
 
 import { selectPrompt, passwordPrompt, confirmPrompt, handleCancel } from './helpers.js';
 import { tunnelScreen } from './screens/tunnel.js';
+import { keysScreen } from './screens/keys.js';
+import { servicesScreen } from './screens/services.js';
+import { settingsScreen } from './screens/settings.js';
 import { hasAdminPassword, setAdminPassword } from '../lib/db.js';
 
 const BANNER = `
@@ -50,7 +53,10 @@ async function main() {
     try {
       const choice = await selectPrompt('Setup', [
         { name: 'password', message: 'Admin Password' },
+        { name: 'keys', message: 'API Keys (Agents)' },
+        { name: 'services', message: 'Services' },
         { name: 'tunnel', message: 'Remote Access (Tunnel)' },
+        { name: 'settings', message: 'Settings' },
         { name: 'exit', message: 'Exit' }
       ]);
 
@@ -59,13 +65,11 @@ async function main() {
         process.exit(0);
       }
 
-      if (choice === 'password') {
-        await adminPasswordScreen();
-      }
-
-      if (choice === 'tunnel') {
-        await tunnelScreen();
-      }
+      if (choice === 'password') await adminPasswordScreen();
+      if (choice === 'keys') await keysScreen();
+      if (choice === 'services') await servicesScreen();
+      if (choice === 'tunnel') await tunnelScreen();
+      if (choice === 'settings') await settingsScreen();
     } catch (err) {
       if (handleCancel(err)) {
         console.log('\nGoodbye!\n');
