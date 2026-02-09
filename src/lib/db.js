@@ -101,7 +101,8 @@ db.exec(`
     completed_at TEXT,
     notified INTEGER DEFAULT 0,
     notified_at TEXT,
-    notify_error TEXT
+    notify_error TEXT,
+    auto_approved INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS agent_messages (
@@ -377,6 +378,22 @@ try {
   // Columns might already exist or table doesn't exist yet
   if (!err.message.includes('duplicate column')) {
     console.error('Error migrating write_queue:', err.message);
+  }
+}
+
+// Migrate write_queue table to add auto_approved column
+try {
+  const queueInfo2 = db.prepare('PRAGMA table_info(write_queue)').all();
+  const hasAutoApproved = queueInfo2.some(col => col.name === 'auto_approved');
+
+  if (queueInfo2.length > 0 && !hasAutoApproved) {
+    console.log('Migrating write_queue table to add auto_approved column...');
+    db.exec('ALTER TABLE write_queue ADD COLUMN auto_approved INTEGER DEFAULT 0;');
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating write_queue auto_approved:', err.message);
   }
 }
 
@@ -747,6 +764,10 @@ export function createQueueEntry(service, accountName, requests, comment, submit
   return { id: Number(result.lastInsertRowid), status: 'pending' };
 }
 
+export function markAutoApproved(id) {
+  db.prepare('UPDATE write_queue SET auto_approved = 1 WHERE id = ?').run(id);
+}
+
 export function getQueueEntry(id) {
   const row = db.prepare('SELECT * FROM write_queue WHERE id = ?').get(id);
   if (!row) return null;
@@ -754,7 +775,8 @@ export function getQueueEntry(id) {
     ...row,
     requests: JSON.parse(row.requests),
     results: row.results ? JSON.parse(row.results) : null,
-    notified: Boolean(row.notified)
+    notified: Boolean(row.notified),
+    auto_approved: Boolean(row.auto_approved)
   };
 }
 
@@ -769,8 +791,25 @@ export function listQueueEntries(status) {
     ...row,
     requests: JSON.parse(row.requests),
     results: row.results ? JSON.parse(row.results) : null,
-    notified: Boolean(row.notified)
+    notified: Boolean(row.notified),
+    auto_approved: Boolean(row.auto_approved)
   }));
+}
+
+export function listAutoApprovedEntries() {
+  const rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC').all();
+  return rows.map(row => ({
+    ...row,
+    requests: JSON.parse(row.requests),
+    results: row.results ? JSON.parse(row.results) : null,
+    notified: Boolean(row.notified),
+    auto_approved: true
+  }));
+}
+
+export function getAutoApprovedCount() {
+  const row = db.prepare('SELECT COUNT(*) as count FROM write_queue WHERE auto_approved = 1').get();
+  return row.count;
 }
 
 export function updateQueueNotification(id, success, error = null) {
@@ -800,7 +839,8 @@ export function listUnnotifiedEntries() {
     ...row,
     requests: JSON.parse(row.requests),
     results: row.results ? JSON.parse(row.results) : null,
-    notified: false
+    notified: false,
+    auto_approved: Boolean(row.auto_approved)
   }));
 }
 
