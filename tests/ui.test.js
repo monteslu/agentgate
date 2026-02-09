@@ -12,6 +12,11 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getApiKeyByName: jest.fn(),
   updateAgentWebhook: jest.fn(),
   setAgentEnabled: jest.fn(),
+  updateGatewayProxy: jest.fn(),
+  regenerateProxyId: jest.fn(),
+  getGatewayProxy: jest.fn(),
+  listGatewayProxies: jest.fn(() => []),
+  disableGatewayProxy: jest.fn(),
   
   // Avatar functions
   getAvatarsDir: jest.fn(() => '/tmp/avatars'),
