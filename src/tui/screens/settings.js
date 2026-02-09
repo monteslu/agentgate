@@ -1,6 +1,6 @@
 // Settings screen for TUI
 import { selectPrompt, handleCancel } from '../helpers.js';
-import { getMessagingMode, setMessagingMode, getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setSetting, getSetting } from '../../lib/db.js';
+import { getMessagingMode, setMessagingMode, getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setSetting } from '../../lib/db.js';
 
 function showSettings() {
   const messaging = getMessagingMode();
