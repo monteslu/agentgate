@@ -11,7 +11,7 @@ const LLM_TIMEOUT_MS = parseInt(process.env.AGENTGATE_LLM_TIMEOUT_MS, 10) || 300
 const PROVIDER_DEFAULTS = {
   openai: 'https://api.openai.com',
   anthropic: 'https://api.anthropic.com',
-  google: 'https://generativelanguage.googleapis.com',
+  google: 'https://generativelanguage.googleapis.com'
 };
 
 /**
@@ -21,19 +21,19 @@ const PROVIDER_DEFAULTS = {
  */
 function buildUpstreamHeaders(provider, originalHeaders) {
   const headers = {
-    'Content-Type': 'application/json',
+    'Content-Type': 'application/json'
   };
 
   // Provider-specific auth
   switch (provider.provider_type) {
-    case 'anthropic':
-      headers['x-api-key'] = provider.api_key;
-      headers['anthropic-version'] = originalHeaders['anthropic-version'] || '2023-06-01';
-      break;
-    case 'openai':
-    default:
-      headers['Authorization'] = `Bearer ${provider.api_key}`;
-      break;
+  case 'anthropic':
+    headers['x-api-key'] = provider.api_key;
+    headers['anthropic-version'] = originalHeaders['anthropic-version'] || '2023-06-01';
+    break;
+  case 'openai':
+  default:
+    headers['Authorization'] = `Bearer ${provider.api_key}`;
+    break;
   }
 
   // Forward select headers
