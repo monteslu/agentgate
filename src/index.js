@@ -26,6 +26,7 @@ import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
 import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
 import llmRoutes from './routes/llm.js';
+import { createMCPSSEHandler, createMCPMessageHandler } from './routes/mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -87,6 +88,11 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 
 // LLM proxy - require auth, no read-only enforcement (POST for completions)
 app.use('/api/llm', apiKeyAuth, llmRoutes);
+
+// MCP server - SSE transport (requires auth)
+// GET establishes SSE connection, POST receives messages
+app.get('/mcp', apiKeyAuth, createMCPSSEHandler());
+app.post('/mcp', apiKeyAuth, createMCPMessageHandler());
 
 // Readme and skill endpoints - require auth
 app.use('/api/readme', apiKeyAuth, readmeRoutes);

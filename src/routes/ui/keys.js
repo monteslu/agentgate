@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts } from '../../lib/db.js';
 import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -69,6 +69,28 @@ router.post('/:id/webhook', (req, res) => {
   }
 
   updateAgentWebhook(id, webhook_url, webhook_token);
+  const keys = listApiKeys();
+
+  if (wantsJson) {
+    return res.json({ success: true, keys });
+  }
+  res.redirect('/ui/keys');
+});
+
+// Update agent bio
+router.post('/:id/bio', (req, res) => {
+  const { id } = req.params;
+  const { bio } = req.body;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  updateAgentBio(id, bio);
   const keys = listApiKeys();
 
   if (wantsJson) {
@@ -347,20 +369,28 @@ function renderKeysPage(keys, error = null, newKey = null) {
       </td>
       <td><code class="key-value">${escapeHtml(k.key_prefix)}</code></td>
       <td>
-        ${k.webhook_url ? `
-          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}">✓ Configured</span>
+        ${k.bio ? `
+          <span class="bio-preview" title="${escapeHtml(k.bio)}">${escapeHtml(k.bio.substring(0, 30))}${k.bio.length > 30 ? '...' : ''}</span>
         ` : `
-          <span class="webhook-status webhook-none">Not set</span>
+          <span class="bio-none">Not set</span>
         `}
-        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
+        <button type="button" class="btn-sm bio-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-bio="${escapeHtml(k.bio || '')}">Edit</button>
+      </td>
+      <td>
+        ${k.webhook_url ? `
+          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}">✓</span>
+        ` : `
+          <span class="webhook-status webhook-none">-</span>
+        `}
+        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">⚙</button>
       </td>
       <td>
         ${k.gateway_proxy_enabled ? `
-          <span class="proxy-status proxy-configured" title="${escapeHtml(k.gateway_proxy_url || '')}">✓ Enabled</span>
+          <span class="proxy-status proxy-configured">✓</span>
         ` : `
-          <span class="proxy-status proxy-none">Off</span>
+          <span class="proxy-status proxy-none">-</span>
         `}
-        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}">Configure</button>
+        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}">⚙</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
@@ -398,6 +428,10 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .proxy-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
     .proxy-configured { background: #164e63; color: #67e8f9; }
     .proxy-none { background: #374151; color: #9ca3af; }
+    .bio-preview { font-size: 12px; color: #9ca3af; max-width: 150px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+    .bio-none { font-size: 12px; color: #6b7280; font-style: italic; }
+    .modal textarea { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; font-family: inherit; }
+    .modal textarea:focus { border-color: #6366f1; outline: none; }
     .proxy-url-box { background: #111827; padding: 10px 12px; border-radius: 6px; margin: 12px 0; word-break: break-all; font-size: 13px; color: #67e8f9; display: flex; align-items: center; gap: 8px; }
     .proxy-url-box code { flex: 1; }
     .btn-copy-sm { background: #374151; border: 1px solid #4b5563; color: #d1d5db; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
@@ -465,6 +499,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
           <tr>
             <th>Name</th>
             <th>Key Prefix</th>
+            <th>Bio</th>
             <th>Webhook</th>
             <th>Proxy</th>
             <th>Created</th>
@@ -476,6 +511,27 @@ function renderKeysPage(keys, error = null, newKey = null) {
         </tbody>
       </table>
     `}
+  </div>
+
+  <!-- Bio Modal -->
+  <div id="bio-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Agent Bio for <span id="bio-agent-name"></span></h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
+        Describe this agent's role or persona. This is shown to the agent via <code>whoami</code> so it knows its purpose.
+      </p>
+      <form id="bio-form">
+        <input type="hidden" id="bio-agent-id" name="id">
+        <label for="bio-text">Bio</label>
+        <textarea id="bio-text" name="bio" rows="4" placeholder="e.g., You are a cybersecurity expert focused on defensive strategies..." style="width: 100%; resize: vertical;"></textarea>
+        <p class="help-text">The agent will see this when it calls the whoami action</p>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeBioModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save Bio</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Webhook Modal -->
@@ -614,6 +670,48 @@ function renderKeysPage(keys, error = null, newKey = null) {
       });
     }
 
+    // Bio modal functions
+    function showBioModal(btn) {
+      document.getElementById('bio-agent-id').value = btn.dataset.id;
+      document.getElementById('bio-agent-name').textContent = btn.dataset.name;
+      document.getElementById('bio-text').value = btn.dataset.bio;
+      document.getElementById('bio-modal').classList.add('active');
+    }
+
+    function closeBioModal() {
+      document.getElementById('bio-modal').classList.remove('active');
+    }
+
+    document.querySelectorAll('.bio-btn').forEach(btn => {
+      btn.addEventListener('click', () => showBioModal(btn));
+    });
+
+    document.getElementById('bio-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('bio-agent-id').value;
+      const bio = document.getElementById('bio-text').value;
+
+      const res = await fetch('/ui/keys/' + id + '/bio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ bio })
+      });
+      const data = await res.json();
+      if (data.success) {
+        closeBioModal();
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to update bio');
+      }
+    });
+
+    document.getElementById('bio-modal').addEventListener('click', (e) => {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeBioModal();
+      }
+    });
+
+    // Webhook modal functions
     function showWebhookModal(btn) {
       document.getElementById('webhook-agent-id').value = btn.dataset.id;
       document.getElementById('modal-agent-name').textContent = btn.dataset.name;
