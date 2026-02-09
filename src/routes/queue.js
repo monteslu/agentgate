@@ -1,16 +1,14 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth, markAutoApproved, addQueueWarning, getQueueWarnings } from '../lib/db.js';
-import { notifyAgentQueueWarning } from '../lib/agentNotifier.js';
-import { emitCountUpdate, emitEvent } from '../lib/socketManager.js';
-import { executeQueueEntry } from '../lib/queueExecutor.js';
+import {
+  submitWriteRequest,
+  listQueueEntries,
+  getQueueStatus,
+  withdrawQueueEntry,
+  addWarningToQueue,
+  getWarningsForQueue
+} from '../services/queueService.js';
 
 const router = Router();
-
-// Valid services that support write operations
-const VALID_SERVICES = ['github', 'bluesky', 'reddit', 'mastodon', 'calendar', 'google_calendar', 'youtube', 'linkedin', 'jira', 'fitbit'];
-
-// Valid HTTP methods for write operations
-const VALID_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 // Submit a batch of write requests for approval
 // POST /api/queue/:service/:accountName/submit
@@ -18,117 +16,49 @@ router.post('/:service/:accountName/submit', async (req, res) => {
   try {
     const { service, accountName } = req.params;
     const { requests, comment } = req.body;
+    const agentName = req.apiKeyInfo?.name || 'unknown';
 
-    // Validate service
-    if (!VALID_SERVICES.includes(service)) {
-      return res.status(400).json({
-        error: 'Invalid service',
-        message: `Service must be one of: ${VALID_SERVICES.join(', ')}`
+    const result = await submitWriteRequest(agentName, service, accountName, requests, comment);
+
+    // If bypassed, return 200 with results
+    if (result.bypassed) {
+      return res.status(200).json({
+        id: result.id,
+        status: result.status,
+        message: result.message,
+        bypassed: true,
+        results: result.results
       });
     }
 
-    // Check account exists
-    const creds = getAccountCredentials(service, accountName);
-    if (!creds) {
-      return res.status(404).json({
-        error: 'Account not found',
-        message: `No ${service} account named "${accountName}" is configured`
-      });
-    }
-
-    // Check service access
-    const agentName = req.apiKeyInfo?.name;
-    if (agentName) {
-      const access = checkServiceAccess(service, accountName, agentName);
-      if (!access.allowed) {
-        return res.status(403).json({
-          error: `Agent '${agentName}' does not have access to service '${service}/${accountName}'`,
-          reason: access.reason
-        });
-      }
-    }
-
-
-    // Validate requests array
-    if (!Array.isArray(requests) || requests.length === 0) {
-      return res.status(400).json({
-        error: 'Invalid requests',
-        message: 'requests must be a non-empty array'
-      });
-    }
-
-    // Validate each request in the batch
-    for (let i = 0; i < requests.length; i++) {
-      const req_item = requests[i];
-
-      if (!req_item.method || !VALID_METHODS.includes(req_item.method.toUpperCase())) {
-        return res.status(400).json({
-          error: 'Invalid request method',
-          message: `Request ${i}: method must be one of: ${VALID_METHODS.join(', ')}`
-        });
-      }
-
-      if (!req_item.path || typeof req_item.path !== 'string') {
-        return res.status(400).json({
-          error: 'Invalid request path',
-          message: `Request ${i}: path is required and must be a string`
-        });
-      }
-
-      // Normalize method to uppercase
-      requests[i].method = req_item.method.toUpperCase();
-    }
-
-    // Get the API key name for audit trail
-    const submittedBy = req.apiKeyInfo?.name || 'unknown';
-
-    // Check if agent has bypass_auth enabled for this service
-    const hasBypass = agentName && checkBypassAuth(service, accountName, agentName);
-
-    // Create the queue entry
-    const entry = createQueueEntry(service, accountName, requests, comment, submittedBy);
-
-    // If bypass enabled, auto-approve with audit trail
-    if (hasBypass) {
-      try {
-        markAutoApproved(entry.id);
-        updateQueueStatus(entry.id, 'approved');
-        await executeQueueEntry({ ...entry, status: 'approved' });
-        const updatedEntry = getQueueEntry(entry.id);
-        
-        emitCountUpdate();
-        
-        return res.status(200).json({
-          id: entry.id,
-          status: updatedEntry.status,
-          message: 'Request auto-approved and executed (bypass_auth)',
-          bypassed: true,
-          results: updatedEntry.results
-        });
-      } catch (err) {
-        updateQueueStatus(entry.id, 'failed', { results: [{ error: err.message }] });
-        emitCountUpdate();
-        
-        return res.status(500).json({
-          id: entry.id,
-          status: 'failed',
-          message: 'Bypass execution failed',
-          bypassed: true,
-          error: err.message
-        });
-      }
-    }
-
-    // Emit real-time update
-    emitCountUpdate();
-
+    // Normal queued response
     res.status(201).json({
-      id: entry.id,
-      status: entry.status,
-      message: 'Request queued for approval'
+      id: result.id,
+      status: result.status,
+      message: result.message
     });
 
   } catch (error) {
+    // Handle bypass execution failures
+    if (error.bypassed) {
+      return res.status(500).json({
+        id: error.queueId,
+        status: error.status,
+        message: 'Bypass execution failed',
+        bypassed: true,
+        error: error.details
+      });
+    }
+
+    // Handle access errors
+    if (error.reason) {
+      return res.status(403).json({
+        error: error.message,
+        reason: error.reason
+      });
+    }
+
+    // Generic error
     res.status(500).json({
       error: 'Failed to queue request',
       message: error.message
@@ -140,17 +70,9 @@ router.post('/:service/:accountName/submit', async (req, res) => {
 // GET /api/queue/list (all services) or /api/queue/:service/:accountName/list (filtered)
 router.get('/list', (req, res) => {
   try {
-    const submittedBy = req.apiKeyInfo?.name || 'unknown';
-    const sharedVisibility = getSharedQueueVisibility();
-    const entries = sharedVisibility 
-      ? listAllQueueEntries() 
-      : listQueueEntriesBySubmitter(submittedBy);
-
-    res.json({
-      count: entries.length,
-      shared_visibility: sharedVisibility,
-      entries: entries
-    });
+    const agentName = req.apiKeyInfo?.name || 'unknown';
+    const result = listQueueEntries(agentName);
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       error: 'Failed to list queue entries',
@@ -162,26 +84,10 @@ router.get('/list', (req, res) => {
 router.get('/:service/:accountName/list', (req, res) => {
   try {
     const { service, accountName } = req.params;
-    const submittedBy = req.apiKeyInfo?.name || 'unknown';
+    const agentName = req.apiKeyInfo?.name || 'unknown';
 
-    // Validate service
-    if (!VALID_SERVICES.includes(service)) {
-      return res.status(400).json({
-        error: 'Invalid service',
-        message: `Service must be one of: ${VALID_SERVICES.join(', ')}`
-      });
-    }
-
-    const sharedVisibility = getSharedQueueVisibility();
-    const entries = sharedVisibility 
-      ? listAllQueueEntries(service, accountName) 
-      : listQueueEntriesBySubmitter(submittedBy, service, accountName);
-
-    res.json({
-      count: entries.length,
-      shared_visibility: sharedVisibility,
-      entries: entries
-    });
+    const result = listQueueEntries(agentName, service, accountName);
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       error: 'Failed to list queue entries',
@@ -196,49 +102,13 @@ router.get('/:service/:accountName/status/:id', (req, res) => {
   try {
     const { service, accountName, id } = req.params;
 
-    const entry = getQueueEntry(id);
-
-    if (!entry) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: `No queue entry with id "${id}"`
-      });
-    }
-
-    // Verify the entry belongs to this service/account
-    if (entry.service !== service || entry.account_name !== accountName) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: `No queue entry with id "${id}" for ${service}/${accountName}`
-      });
-    }
-
-    // Build response based on status
-    const response = {
-      id: entry.id,
-      status: entry.status,
-      submitted_at: entry.submitted_at
-    };
-
-    if (entry.status === 'rejected') {
-      response.rejection_reason = entry.rejection_reason;
-      response.reviewed_at = entry.reviewed_at;
-    }
-
-    if (entry.status === 'completed' || entry.status === 'failed') {
-      response.results = entry.results;
-      response.completed_at = entry.completed_at;
-    }
-
-    if (entry.status === 'executing') {
-      response.message = 'Request is currently being executed';
-    }
-
+    const response = getQueueStatus(id, service, accountName);
     res.json(response);
 
   } catch (error) {
-    res.status(500).json({
-      error: 'Failed to get status',
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      error: statusCode === 404 ? 'Not found' : 'Error',
       message: error.message
     });
   }
@@ -249,64 +119,18 @@ router.get('/:service/:accountName/status/:id', (req, res) => {
 // DELETE /api/queue/:service/:accountName/status/:id
 router.delete('/:service/:accountName/status/:id', (req, res) => {
   try {
-    // Check if withdraw is enabled
-    if (!getAgentWithdrawEnabled()) {
-      return res.status(403).json({
-        error: 'Disabled',
-        message: 'Agent withdraw is not enabled. Ask admin to enable agent_withdraw_enabled setting.'
-      });
-    }
-
     const { id } = req.params;
-    const agentName = req.apiKeyInfo?.name || 'unknown'; // Set by auth middleware
-
-    const entry = getQueueEntry(id);
-
-    if (!entry) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: 'Queue entry not found'
-      });
-    }
-
-    // Verify the requesting agent is the submitter
-    if (entry.submitted_by !== agentName) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'You can only withdraw your own submissions'
-      });
-    }
-
-    // Only allow withdrawal of pending items
-    if (entry.status !== 'pending') {
-      return res.status(400).json({
-        error: 'Cannot withdraw',
-        message: `Cannot withdraw entry with status "${entry.status}". Only pending items can be withdrawn.`
-      });
-    }
-
-    // Get optional reason from request body
+    const agentName = req.apiKeyInfo?.name || 'unknown';
     const { reason } = req.body || {};
 
-    // Update status to withdrawn (with optional reason)
-    updateQueueStatus(id, 'withdrawn', { 
-      reviewed_at: new Date().toISOString().replace('T', ' ').replace('Z', ''),
-      rejection_reason: reason || null
-    });
-
-    // Emit real-time update
-    emitCountUpdate();
-
-    res.json({
-      success: true,
-      message: 'Queue entry withdrawn',
-      id: id,
-      reason: reason || null
-    });
+    const result = withdrawQueueEntry(id, agentName, reason);
+    res.json(result);
 
   } catch (error) {
-    res.status(500).json({
-      error: 'Failed to withdraw',
+    const statusCode = error.statusCode || 400;
+    res.status(statusCode).json({
+      error: statusCode === 403 ? 'Forbidden' :
+        statusCode === 404 ? 'Not found' : 'Cannot withdraw',
       message: error.message
     });
   }
@@ -320,74 +144,18 @@ router.post('/:service/:accountName/:id/warn', async (req, res) => {
     const { message } = req.body;
     const agentName = req.apiKeyInfo?.name;
 
-    if (!agentName) {
-      return res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Agent authentication required'
-      });
-    }
-
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return res.status(400).json({
-        error: 'Invalid request',
-        message: 'Warning message is required'
-      });
-    }
-
-    const entry = getQueueEntry(id);
-
-    if (!entry) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: 'Queue entry not found'
-      });
-    }
-
-    // Only allow warnings on pending items
-    if (entry.status !== 'pending') {
-      return res.status(400).json({
-        error: 'Cannot warn',
-        message: `Cannot add warning to entry with status "${entry.status}". Only pending items can be warned.`
-      });
-    }
-
-    // Cannot warn your own items (should withdraw instead)
-    if (entry.submitted_by === agentName) {
-      return res.status(403).json({
-        error: 'Forbidden',
-        message: 'Cannot warn your own submission. Use withdraw instead.'
-      });
-    }
-
-    // Add the warning
-    const warningId = addQueueWarning(id, agentName, message.trim());
-
-    // Notify the submitting agent
-    if (entry.submitted_by) {
-      notifyAgentQueueWarning(entry, agentName, message.trim()).catch(err => {
-        console.error('Failed to notify agent of warning:', err.message);
-      });
-    }
-
-    // Emit socket event for real-time UI update
-    const warnings = getQueueWarnings(id);
-    emitEvent('queueItemUpdate', {
-      id,
-      type: 'warning_added',
-      warningCount: warnings.length,
-      warnings
-    });
-
-    res.json({
-      success: true,
-      message: 'Warning added',
-      warning_id: warningId,
-      queue_id: id
-    });
+    const result = await addWarningToQueue(id, agentName, message);
+    res.json(result);
 
   } catch (error) {
-    res.status(500).json({
-      error: 'Failed to add warning',
+    const statusCode = error.message.includes('authentication') ? 401 :
+      error.message.includes('not found') ? 404 :
+        error.message.includes('own submission') ? 403 : 400;
+
+    res.status(statusCode).json({
+      error: error.message.includes('authentication') ? 'Unauthorized' :
+        error.message.includes('not found') ? 'Not found' :
+          error.message.includes('own submission') ? 'Forbidden' : 'Cannot warn',
       message: error.message
     });
   }
@@ -398,21 +166,13 @@ router.post('/:service/:accountName/:id/warn', async (req, res) => {
 router.get('/:service/:accountName/:id/warnings', (req, res) => {
   try {
     const { id } = req.params;
-    
-    const entry = getQueueEntry(id);
-    if (!entry) {
-      return res.status(404).json({
-        error: 'Not found',
-        message: 'Queue entry not found'
-      });
-    }
 
-    const warnings = getQueueWarnings(id);
-    res.json({ warnings });
+    const result = getWarningsForQueue(id);
+    res.json(result);
 
   } catch (error) {
-    res.status(500).json({
-      error: 'Failed to get warnings',
+    res.status(404).json({
+      error: 'Not found',
       message: error.message
     });
   }

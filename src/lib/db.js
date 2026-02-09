@@ -415,6 +415,11 @@ try {
         key_hash TEXT NOT NULL,
         webhook_url TEXT,
         webhook_token TEXT,
+        enabled INTEGER DEFAULT 1,
+        gateway_proxy_enabled INTEGER DEFAULT 0,
+        gateway_proxy_id TEXT,
+        gateway_proxy_url TEXT,
+        bio TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -469,6 +474,14 @@ try {
           ALTER TABLE api_keys ADD COLUMN gateway_proxy_url TEXT;
         `);
         console.log('Gateway proxy columns added.');
+      }
+
+      // Check if we need to add bio column (agent identity/persona)
+      const hasBio = tableInfo.some(col => col.name === 'bio');
+      if (!hasBio) {
+        console.log('Adding bio column to api_keys table...');
+        db.exec('ALTER TABLE api_keys ADD COLUMN bio TEXT;');
+        console.log('Bio column added.');
       }
     }
   }
@@ -531,16 +544,16 @@ export async function regenerateApiKey(id) {
 }
 
 export function listApiKeys() {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, created_at FROM api_keys').all();
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys').all();
 }
 
 export function getApiKeyByName(name) {
   // Case-insensitive lookup
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
 }
 
 export function getApiKeyById(id) {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, created_at FROM api_keys WHERE id = ?').get(id);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys WHERE id = ?').get(id);
 }
 
 // Get counts of all data associated with an agent (for delete warning)
@@ -594,6 +607,10 @@ export function updateAgentWebhook(id, webhookUrl, webhookToken) {
 
 export function setAgentEnabled(id, enabled) {
   return db.prepare('UPDATE api_keys SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+}
+
+export function updateAgentBio(id, bio) {
+  return db.prepare('UPDATE api_keys SET bio = ? WHERE id = ?').run(bio || null, id);
 }
 
 // Gateway proxy functions

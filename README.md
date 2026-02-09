@@ -109,6 +109,48 @@ curl -H "Authorization: Bearer rms_your_key" \
   https://your-server.com/api/skill > SKILL.md
 ```
 
+### Optionally Using as an MCP Server
+
+agentgate provides an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server for AI coding assistants like Claude Code, Codex, and other MCP-compatible clients. The MCP server gives agents access to all agentgate tools without needing to configure REST endpoints.
+
+**Available MCP Tools:**
+- **services** - Discover which services you can access, check your identity (whoami)
+- **queue** - Submit write requests for approval, check status, withdraw pending items
+- **mementos** - Persistent memory storage with keyword tagging for cross-session context
+- **messages** - Inter-agent communication for multi-agent coordination
+
+**Configure Claude Code:**
+
+Add to your `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "agentgate": {
+      "type": "sse",
+      "url": "https://your-agentgate-server.com/mcp",
+      "headers": {
+        "Authorization": "Bearer rms_your_key_here"
+      }
+    }
+  }
+}
+```
+
+**Configure Other MCP Clients:**
+
+Most MCP clients support SSE transport. Use:
+- **URL:** `https://your-server.com/mcp`
+- **Auth:** Bearer token in Authorization header
+
+**Key Security Benefit:**
+
+With MCP, your agent never sees the actual credentials for connected services. All API calls are proxied through agentgate, which injects the real tokens. This prevents credential leakage even if agent context is compromised.
+
+**Quick Test:**
+
+Once connected, try calling the `services` tool with action `whoami` to verify your agent identity and see what services you can access.
+
 ### Webhook Notifications
 
 agentgate can notify your agent when queue items are completed, failed, or rejected — closing the feedback loop so your agent knows immediately when requests are processed.
@@ -237,30 +279,59 @@ GET /api/agents/memento/42,38,15
 
 Each agent sees only their own mementos. Maximum 12KB per memento.
 
-## Inter-Agent Messaging
+## Secure Team Management
 
-Agents can communicate with each other through agentgate, with optional human oversight.
+When you have multiple specialized agents, they can coordinate through agentgate's messaging system—without any of them having direct access to your credentials. This enables multi-agent workflows where each agent focuses on what it's good at, while you maintain visibility and control.
 
-📖 **[See full documentation](docs/inter-agent-messaging.md)**
+**Example team setup:**
 
-**Quick overview:**
-- Three modes: **Off**, **Supervised** (human approval), **Open** (immediate delivery)
-- Configure agent webhooks in Admin UI under **API Keys > Configure**
-- Endpoints: `/api/agents/messageable`, `/api/agents/message`, `/api/agents/messages`, `/api/agents/status`
+- **PMBot** - Project manager. Tracks progress, coordinates handoffs, keeps the team on task
+- **CodeBot** - Writes code, understands the codebase, runs tests
+- **SocialBot** - Manages social media, drafts announcements
+- **DocsBot** - Maintains documentation, writes READMEs
 
-### Broadcasts
+**How they coordinate:**
 
-Send messages to all agents at once:
+1. PMBot messages CodeBot: "Start on the dark mode feature"
+2. CodeBot finishes and messages PMBot: "Dark mode complete, tests passing"
+3. PMBot messages SocialBot: "CodeBot shipped dark mode, draft a tweet"
+4. PMBot messages DocsBot: "Update the README with dark mode instructions"
+
+The PM agent doesn't need to write code—it just orchestrates. Each specialist does its job and reports back.
+
+**Combined with mementos:**
+
+The PM can store project decisions and status updates in mementos, creating a persistent project log. Later, you can ask "what happened this week?" and it can search its memory.
+
+### Messaging Modes
+
+- **Off** - No inter-agent messaging
+- **Supervised** - Messages queue for your approval before delivery
+- **Open** - Messages deliver immediately (for trusted agent teams)
+
+Configure in Admin UI under **Settings → Messaging Mode**.
+
+### Sending Messages
 
 ```bash
-POST /api/agents/broadcast
-{ "message": "Team announcement: deployment starting" }
+# Direct message
+POST /api/agents/message
+{ "to": "CodeBot", "message": "Status on the auth refactor?" }
 
-# Response
-{ "delivered": ["Agent1", "Agent2"], "failed": [], "total": 2 }
+# Broadcast to all agents
+POST /api/agents/broadcast
+{ "message": "Team standup in 5 minutes" }
 ```
 
-Broadcasts are stored in the database and appear in each agent's message history. View broadcast history in the Admin UI under **Messages → Broadcast**.
+### Receiving Messages
+
+Agents receive messages via webhook (configure in **API Keys > Configure**) or by polling:
+
+```bash
+GET /api/agents/messages
+```
+
+📖 **[Full messaging documentation](docs/inter-agent-messaging.md)**
 
 ## Agent Registry
 
