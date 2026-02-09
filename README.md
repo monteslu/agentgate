@@ -128,7 +128,7 @@ Add to your `~/.claude.json`:
   "mcpServers": {
     "agentgate": {
       "type": "sse",
-      "url": "https://your-agentgate-server.com/mcp/sse",
+      "url": "https://your-agentgate-server.com/mcp",
       "headers": {
         "Authorization": "Bearer rms_your_key_here"
       }
@@ -140,7 +140,7 @@ Add to your `~/.claude.json`:
 **Configure Other MCP Clients:**
 
 Most MCP clients support SSE transport. Use:
-- **URL:** `https://your-server.com/mcp/sse`
+- **URL:** `https://your-server.com/mcp`
 - **Auth:** Bearer token in Authorization header
 
 **Key Security Benefit:**

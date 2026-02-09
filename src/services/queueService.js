@@ -166,12 +166,16 @@ export function getQueueStatus(id, service, accountName) {
   const entry = getQueueEntry(id);
 
   if (!entry) {
-    throw new Error(`No queue entry with id "${id}"`);
+    const error = new Error(`No queue entry with id "${id}"`);
+    error.statusCode = 404;
+    throw error;
   }
 
   // Verify the entry belongs to this service/account
   if (entry.service !== service || entry.account_name !== accountName) {
-    throw new Error(`No queue entry with id "${id}" for ${service}/${accountName}`);
+    const error = new Error(`No queue entry with id "${id}" for ${service}/${accountName}`);
+    error.statusCode = 404;
+    throw error;
   }
 
   // Build response based on status
@@ -211,23 +215,31 @@ export function getQueueStatus(id, service, accountName) {
 export function withdrawQueueEntry(id, agentName, reason = null, { emitEvents = true } = {}) {
   // Check if withdraw is enabled
   if (!getAgentWithdrawEnabled()) {
-    throw new Error('Agent withdraw is not enabled. Ask admin to enable agent_withdraw_enabled setting.');
+    const error = new Error('Agent withdraw is not enabled. Ask admin to enable agent_withdraw_enabled setting.');
+    error.statusCode = 403;
+    throw error;
   }
 
   const entry = getQueueEntry(id);
 
   if (!entry) {
-    throw new Error('Queue entry not found');
+    const error = new Error('Queue entry not found');
+    error.statusCode = 404;
+    throw error;
   }
 
   // Verify the requesting agent is the submitter
   if (entry.submitted_by !== agentName) {
-    throw new Error('You can only withdraw your own submissions');
+    const error = new Error('You can only withdraw your own submissions');
+    error.statusCode = 403;
+    throw error;
   }
 
   // Only allow withdrawal of pending items
   if (entry.status !== 'pending') {
-    throw new Error(`Cannot withdraw entry with status "${entry.status}". Only pending items can be withdrawn.`);
+    const error = new Error(`Cannot withdraw entry with status "${entry.status}". Only pending items can be withdrawn.`);
+    error.statusCode = 400;
+    throw error;
   }
 
   // Update status to withdrawn (with optional reason)

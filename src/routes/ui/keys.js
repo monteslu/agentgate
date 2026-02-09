@@ -378,25 +378,25 @@ function renderKeysPage(keys, error = null, newKey = null) {
       </td>
       <td>
         ${k.webhook_url ? `
-          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}">✓</span>
+          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}" aria-label="Webhook configured">✓</span>
         ` : `
-          <span class="webhook-status webhook-none">-</span>
+          <span class="webhook-status webhook-none" aria-label="No webhook configured">-</span>
         `}
-        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">⚙</button>
+        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}" title="Configure webhook" aria-label="Configure webhook">⚙</button>
       </td>
       <td>
         ${k.gateway_proxy_enabled ? `
-          <span class="proxy-status proxy-configured">✓</span>
+          <span class="proxy-status proxy-configured" aria-label="Gateway proxy enabled">✓</span>
         ` : `
-          <span class="proxy-status proxy-none">-</span>
+          <span class="proxy-status proxy-none" aria-label="Gateway proxy disabled">-</span>
         `}
-        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}">⚙</button>
+        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}" title="Configure gateway proxy" aria-label="Configure gateway proxy">⚙</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
-        <button type="button" class="btn-sm btn-regen" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-prefix="${escapeHtml(k.key_prefix)}" title="Regenerate API Key">🔄</button>
-        <button type="button" class="btn-sm btn-toggle ${k.enabled === 0 ? 'btn-enable' : 'btn-disable'}" onclick="toggleEnabled('${k.id}')" title="${k.enabled === 0 ? 'Enable' : 'Disable'}">${k.enabled === 0 ? '✓' : '⏸'}</button>
-        <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete">&times;</button>
+        <button type="button" class="btn-sm btn-regen" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-prefix="${escapeHtml(k.key_prefix)}" title="Regenerate API Key" aria-label="Regenerate API Key">🔄</button>
+        <button type="button" class="btn-sm btn-toggle ${k.enabled === 0 ? 'btn-enable' : 'btn-disable'}" onclick="toggleEnabled('${k.id}')" title="${k.enabled === 0 ? 'Enable agent' : 'Disable agent'}" aria-label="${k.enabled === 0 ? 'Enable agent' : 'Disable agent'}">${k.enabled === 0 ? '✓' : '⏸'}</button>
+        <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete agent" aria-label="Delete agent">&times;</button>
       </td>
     </tr>
   `;

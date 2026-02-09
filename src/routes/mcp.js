@@ -29,15 +29,29 @@ import {
   addBroadcastRecipient,
   markMessageRead,
   listBroadcastsWithRecipients,
-  getBroadcast
+  getBroadcast,
+  createAgentMessage
 } from '../lib/db.js';
 import { notifyAgent } from '../lib/agentNotifier.js';
 
 const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_SESSIONS = 1000;
 
-// Store active MCP sessions (sessionId -> { transport, server, agentName })
+// Store active MCP sessions (sessionId -> { transport, server, agentName, lastSeen })
 const activeSessions = new Map();
+
+// Periodic cleanup of stale sessions
+setInterval(() => {
+  const now = Date.now();
+  for (const [sessionId, session] of activeSessions) {
+    if (now - session.lastSeen > SESSION_TTL_MS) {
+      console.log(`Cleaning up stale MCP session: ${sessionId}`);
+      activeSessions.delete(sessionId);
+    }
+  }
+}, 60 * 1000); // Check every minute
 
 /**
  * Create MCP SSE handler for GET requests (establish SSE connection)
@@ -51,13 +65,19 @@ export function createMCPSSEHandler() {
     }
 
     try {
+      // Check session limit
+      if (activeSessions.size >= MAX_SESSIONS) {
+        console.warn(`MCP session limit reached (${MAX_SESSIONS}), rejecting new connection`);
+        return res.status(503).json({ error: 'Too many active sessions' });
+      }
+
       // Create transport and server for this session
       const transport = new SSEServerTransport('/mcp', res);
       const server = createMCPServer(agentName);
 
       // Store session for POST message handling
       const sessionId = transport.sessionId;
-      activeSessions.set(sessionId, { transport, server, agentName });
+      activeSessions.set(sessionId, { transport, server, agentName, lastSeen: Date.now() });
 
       // Connect server to transport
       await server.connect(transport);
@@ -103,8 +123,19 @@ export function createMCPMessageHandler() {
       return res.status(403).json({ error: 'Session belongs to different agent' });
     }
 
+    // Update last seen timestamp
+    session.lastSeen = Date.now();
+
     // Let the transport handle the POST message
-    await session.transport.handlePostMessage(req, res, req.body);
+    try {
+      await session.transport.handlePostMessage(req, res, req.body);
+    } catch (err) {
+      console.error(`MCP message handling error for session ${sessionId}:`, err.message);
+      // Only send error if response hasn't been sent
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to process MCP message' });
+      }
+    }
   };
 }
 
@@ -309,31 +340,35 @@ async function handleMessagesAction(agentName, args) {
         return toolError('Cannot send message to yourself');
       }
 
+      // Create the message record (status depends on mode: open=delivered, supervised=pending)
+      const msg = createAgentMessage(agentName, recipientName, message);
+
+      // If open mode and recipient has webhook, notify them
       if (mode === 'open' && recipient.webhook_url) {
         const payload = {
           type: 'agent_message',
           from: agentName,
+          message_id: msg.id,
           message: message,
           timestamp: new Date().toISOString(),
           text: `💬 [agentgate] Message from ${agentName}:\n${message.substring(0, 500)}`,
           mode: 'now'
         };
 
-        const result = await notifyAgent(recipientName, payload);
-
-        return toolResponse({
-          status: result.success ? 'delivered' : 'failed',
-          to: recipientName,
-          error: result.error || null
-        });
-      } else {
-        return toolResponse({
-          status: 'pending',
-          message: mode === 'supervised'
-            ? 'Message queued for human approval'
-            : 'Recipient has no webhook configured'
+        // Fire and forget - message is already persisted
+        notifyAgent(recipientName, payload).catch(err => {
+          console.error(`Failed to notify ${recipientName}:`, err.message);
         });
       }
+
+      return toolResponse({
+        id: msg.id,
+        status: msg.status,
+        to: recipientName,
+        message: msg.status === 'pending'
+          ? 'Message queued for human approval'
+          : 'Message delivered'
+      });
     }
 
     case 'get': {

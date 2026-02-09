@@ -106,8 +106,9 @@ router.get('/:service/:accountName/status/:id', (req, res) => {
     res.json(response);
 
   } catch (error) {
-    res.status(404).json({
-      error: 'Not found',
+    const statusCode = error.statusCode || 500;
+    res.status(statusCode).json({
+      error: statusCode === 404 ? 'Not found' : 'Error',
       message: error.message
     });
   }
@@ -126,14 +127,10 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
     res.json(result);
 
   } catch (error) {
-    const statusCode = error.message.includes('not enabled') ? 403 :
-      error.message.includes('not found') ? 404 :
-        error.message.includes('only withdraw') ? 403 : 400;
-
+    const statusCode = error.statusCode || 400;
     res.status(statusCode).json({
-      error: error.message.includes('not enabled') ? 'Disabled' :
-        error.message.includes('not found') ? 'Not found' :
-          error.message.includes('only withdraw') ? 'Forbidden' : 'Cannot withdraw',
+      error: statusCode === 403 ? 'Forbidden' :
+        statusCode === 404 ? 'Not found' : 'Cannot withdraw',
       message: error.message
     });
   }
