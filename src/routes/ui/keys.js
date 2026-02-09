@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, getAgentDataCounts } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts } from '../../lib/db.js';
 import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
@@ -295,6 +295,41 @@ router.delete('/:id/avatar', (req, res) => {
   res.redirect('/ui/keys');
 });
 
+// Gateway proxy configuration
+router.post('/:id/proxy', (req, res) => {
+  const { id } = req.params;
+  const { proxy_enabled, proxy_url } = req.body;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const enabled = proxy_enabled === 'on' || proxy_enabled === '1' || proxy_enabled === true;
+  updateGatewayProxy(id, enabled, proxy_url);
+  const updated = getApiKeyById(id);
+
+  res.json({
+    success: true,
+    proxy_enabled: !!updated.gateway_proxy_enabled,
+    proxy_id: updated.gateway_proxy_id,
+    proxy_url: updated.gateway_proxy_url
+  });
+});
+
+// Regenerate proxy ID
+router.post('/:id/regenerate-proxy', (req, res) => {
+  const { id } = req.params;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const newProxyId = regenerateProxyId(id);
+  res.json({ success: true, proxy_id: newProxyId });
+});
+
 // Render function
 function renderKeysPage(keys, error = null, newKey = null) {
   const renderKeyRow = (k) => `
@@ -318,6 +353,14 @@ function renderKeysPage(keys, error = null, newKey = null) {
           <span class="webhook-status webhook-none">Not set</span>
         `}
         <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}">Configure</button>
+      </td>
+      <td>
+        ${k.gateway_proxy_enabled ? `
+          <span class="proxy-status proxy-configured" title="${escapeHtml(k.gateway_proxy_url || '')}">✓ Enabled</span>
+        ` : `
+          <span class="proxy-status proxy-none">Off</span>
+        `}
+        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}">Configure</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
@@ -352,6 +395,13 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .webhook-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
     .webhook-configured { background: #065f46; color: #6ee7b7; }
     .webhook-none { background: #374151; color: #9ca3af; }
+    .proxy-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
+    .proxy-configured { background: #164e63; color: #67e8f9; }
+    .proxy-none { background: #374151; color: #9ca3af; }
+    .proxy-url-box { background: #111827; padding: 10px 12px; border-radius: 6px; margin: 12px 0; word-break: break-all; font-size: 13px; color: #67e8f9; display: flex; align-items: center; gap: 8px; }
+    .proxy-url-box code { flex: 1; }
+    .btn-copy-sm { background: #374151; border: 1px solid #4b5563; color: #d1d5db; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .btn-copy-sm:hover { background: #4b5563; }
     .btn-sm { font-size: 12px; padding: 4px 8px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; }
     .btn-sm:hover { background: #4338ca; }
     .btn-test { padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; }
@@ -416,6 +466,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
             <th>Name</th>
             <th>Key Prefix</th>
             <th>Webhook</th>
+            <th>Proxy</th>
             <th>Created</th>
             <th></th>
           </tr>
@@ -512,6 +563,45 @@ function renderKeysPage(keys, error = null, newKey = null) {
         <button type="button" id="avatar-delete-btn" class="btn-danger" onclick="deleteAvatar()" style="display: none;">Delete</button>
         <button type="button" id="avatar-upload-btn" class="btn-primary" onclick="uploadAvatar()" disabled>Upload</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Proxy Modal -->
+  <div id="proxy-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Gateway Proxy for <span id="proxy-agent-name"></span></h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
+        Expose this agent's OpenClaw gateway through AgentGate. Clients connect to the proxy URL and traffic is forwarded transparently.
+      </p>
+      <form id="proxy-form">
+        <input type="hidden" id="proxy-agent-id">
+
+        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer;">
+          <input type="checkbox" id="proxy-enabled" style="width: auto; margin: 0;">
+          <span>Enable gateway proxy</span>
+        </label>
+
+        <div id="proxy-fields" style="display: none;">
+          <label for="proxy-url-input">Internal Gateway URL</label>
+          <input type="url" id="proxy-url-input" placeholder="http://localhost:18789">
+          <p class="help-text">The internal URL of the agent's OpenClaw gateway</p>
+
+          <div id="proxy-url-display" style="display: none;">
+            <label>Proxy URL <span style="color: #9ca3af; font-weight: normal;">(share with clients)</span></label>
+            <div class="proxy-url-box">
+              <code id="proxy-full-url"></code>
+              <button type="button" class="btn-copy-sm" onclick="copyProxyUrl()">Copy</button>
+            </div>
+            <button type="button" class="btn-sm" style="background: #7f1d1d; border: 1px solid rgba(239,68,68,0.3); margin-bottom: 12px;" onclick="regenProxyId()">Regenerate Proxy ID</button>
+            <p class="help-text" style="color: #fbbf24;">⚠️ Regenerating will break existing client connections</p>
+          </div>
+        </div>
+
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeProxyModal()">Cancel</button>
+          <button type="submit" class="btn-primary">Save</button>
+        </div>
+      </form>
     </div>
   </div>
 
@@ -889,6 +979,103 @@ function renderKeysPage(keys, error = null, newKey = null) {
     document.getElementById('avatar-modal').addEventListener('click', (e) => {
       if (e.target.classList.contains('modal-overlay')) {
         closeAvatarModal();
+      }
+    });
+
+    // Proxy modal functions
+    function showProxyModal(btn) {
+      document.getElementById('proxy-agent-id').value = btn.dataset.id;
+      document.getElementById('proxy-agent-name').textContent = btn.dataset.name;
+      var enabled = btn.dataset.enabled === '1';
+      document.getElementById('proxy-enabled').checked = enabled;
+      document.getElementById('proxy-url-input').value = btn.dataset.proxyUrl || '';
+      toggleProxyFields();
+      if (enabled && btn.dataset.proxyId) {
+        showProxyUrl(btn.dataset.proxyId);
+      }
+      document.getElementById('proxy-modal').classList.add('active');
+    }
+
+    function closeProxyModal() {
+      document.getElementById('proxy-modal').classList.remove('active');
+    }
+
+    function toggleProxyFields() {
+      var enabled = document.getElementById('proxy-enabled').checked;
+      document.getElementById('proxy-fields').style.display = enabled ? '' : 'none';
+    }
+
+    function showProxyUrl(proxyId) {
+      if (!proxyId) {
+        document.getElementById('proxy-url-display').style.display = 'none';
+        return;
+      }
+      var baseUrl = window.location.origin;
+      document.getElementById('proxy-full-url').textContent = baseUrl + '/px/' + proxyId + '/';
+      document.getElementById('proxy-url-display').style.display = '';
+    }
+
+    function copyProxyUrl() {
+      var url = document.getElementById('proxy-full-url').textContent;
+      navigator.clipboard.writeText(url).then(function() {
+        var btns = document.querySelectorAll('.btn-copy-sm');
+        btns.forEach(function(b) { b.textContent = 'Copied!'; });
+        setTimeout(function() { btns.forEach(function(b) { b.textContent = 'Copy'; }); }, 1500);
+      });
+    }
+
+    async function regenProxyId() {
+      if (!confirm('Regenerate proxy ID? This will break existing client connections.')) return;
+      var id = document.getElementById('proxy-agent-id').value;
+      try {
+        var res = await fetch('/ui/keys/' + id + '/regenerate-proxy', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        var data = await res.json();
+        if (data.success) {
+          showProxyUrl(data.proxy_id);
+        } else {
+          alert(data.error || 'Failed to regenerate proxy ID');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    document.getElementById('proxy-enabled').addEventListener('change', toggleProxyFields);
+
+    document.querySelectorAll('.proxy-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() { showProxyModal(btn); });
+    });
+
+    document.getElementById('proxy-form').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      var id = document.getElementById('proxy-agent-id').value;
+      var enabled = document.getElementById('proxy-enabled').checked;
+      var proxyUrl = document.getElementById('proxy-url-input').value;
+
+      try {
+        var res = await fetch('/ui/keys/' + id + '/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ proxy_enabled: enabled ? 'on' : '', proxy_url: proxyUrl })
+        });
+        var data = await res.json();
+        if (data.success) {
+          closeProxyModal();
+          window.location.reload();
+        } else {
+          alert(data.error || 'Failed to save proxy settings');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+
+    document.getElementById('proxy-modal').addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal-overlay')) {
+        closeProxyModal();
       }
     });
   </script>

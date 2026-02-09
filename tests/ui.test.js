@@ -12,6 +12,11 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getApiKeyByName: jest.fn(),
   updateAgentWebhook: jest.fn(),
   setAgentEnabled: jest.fn(),
+  updateGatewayProxy: jest.fn(),
+  regenerateProxyId: jest.fn(),
+  getGatewayProxy: jest.fn(),
+  listGatewayProxies: jest.fn(() => []),
+  disableGatewayProxy: jest.fn(),
   getAgentDataCounts: jest.fn(() => ({ messages: 0, queueEntries: 0, mementos: 0, broadcasts: 0, broadcastRecipients: 0, warnings: 0, serviceAccess: 0 })),
   cascadeDeleteAgentData: jest.fn(),
   
