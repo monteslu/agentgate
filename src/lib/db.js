@@ -204,7 +204,7 @@ try {
     console.log('Migrating TEXT primary keys to INTEGER AUTOINCREMENT...');
     db.transaction(() => {
       // 1. write_queue (has FK from queue_warnings)
-      db.exec(`ALTER TABLE write_queue RENAME TO write_queue_old`);
+      db.exec('ALTER TABLE write_queue RENAME TO write_queue_old');
       db.exec(`CREATE TABLE write_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service TEXT NOT NULL,
@@ -233,14 +233,14 @@ try {
       const insertWarning = db.prepare('INSERT INTO queue_warnings (agent_id, message, created_at, queue_id) VALUES (?, ?, ?, ?)');
       for (const w of oldWarnings) {
         const newQueueId = wqMap.get(w.queue_id);
-        if (newQueueId != null) {
+        if (newQueueId !== null) {
           insertWarning.run(w.agent_id, w.message, w.created_at, newQueueId);
         }
       }
       db.exec('DROP TABLE write_queue_old');
 
       // 2. agent_messages
-      db.exec(`ALTER TABLE agent_messages RENAME TO agent_messages_old`);
+      db.exec('ALTER TABLE agent_messages RENAME TO agent_messages_old');
       db.exec(`CREATE TABLE agent_messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         from_agent TEXT NOT NULL,
@@ -258,7 +258,7 @@ try {
       db.exec('DROP TABLE agent_messages_old');
 
       // 3. broadcasts (has FK from broadcast_recipients)
-      db.exec(`ALTER TABLE broadcasts RENAME TO broadcasts_old`);
+      db.exec('ALTER TABLE broadcasts RENAME TO broadcasts_old');
       db.exec(`CREATE TABLE broadcasts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         from_agent TEXT NOT NULL,
@@ -289,14 +289,14 @@ try {
       const insertRecip = db.prepare('INSERT INTO broadcast_recipients (broadcast_id, to_agent, status, delivered_at, error_message) VALUES (?, ?, ?, ?, ?)');
       for (const r of oldRecipients) {
         const newBId = bMap.get(r.broadcast_id);
-        if (newBId != null) {
+        if (newBId !== null) {
           insertRecip.run(newBId, r.to_agent, r.status, r.delivered_at, r.error_message);
         }
       }
       db.exec('DROP TABLE broadcasts_old');
 
       // 4. service_accounts
-      db.exec(`ALTER TABLE service_accounts RENAME TO service_accounts_old`);
+      db.exec('ALTER TABLE service_accounts RENAME TO service_accounts_old');
       db.exec(`CREATE TABLE service_accounts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         service TEXT NOT NULL,
@@ -311,7 +311,7 @@ try {
       db.exec('DROP TABLE service_accounts_old');
 
       // Recreate queue_warnings with INTEGER queue_id type
-      db.exec(`ALTER TABLE queue_warnings RENAME TO queue_warnings_old`);
+      db.exec('ALTER TABLE queue_warnings RENAME TO queue_warnings_old');
       db.exec(`CREATE TABLE queue_warnings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         queue_id INTEGER NOT NULL,
