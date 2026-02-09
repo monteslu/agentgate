@@ -60,6 +60,11 @@ export function statusBadge(status) {
   return `<span class="status" style="${colors[status] || ''}">${status}</span>`;
 }
 
+export function autoApprovedBadge(autoApproved) {
+  if (!autoApproved) return '';
+  return '<span class="status" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); margin-left: 6px;">auto-approved</span>';
+}
+
 // Format date for display - outputs span with data-utc for client-side localization
 export function formatDate(dateStr) {
   if (!dateStr) return '';

@@ -3,12 +3,12 @@ import { Router } from 'express';
 import {
   listQueueEntries, getQueueEntry, updateQueueStatus,
   clearQueueByStatus, deleteQueueEntry, getQueueCounts,
-  getQueueWarnings
+  getQueueWarnings, listAutoApprovedEntries, getAutoApprovedCount
 } from '../../lib/db.js';
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
 import { emitCountUpdate, emitEvent } from '../../lib/socketManager.js';
-import { escapeHtml, renderMarkdownLinks, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
+import { escapeHtml, renderMarkdownLinks, statusBadge, autoApprovedBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -18,10 +18,13 @@ router.get('/', (req, res) => {
   let entries;
   if (filter === 'all') {
     entries = listQueueEntries();
+  } else if (filter === 'auto-approved') {
+    entries = listAutoApprovedEntries();
   } else {
     entries = listQueueEntries(filter);
   }
   const counts = getQueueCounts();
+  counts['auto-approved'] = getAutoApprovedCount();
   res.send(renderQueuePage(entries, filter, counts));
 });
 
@@ -257,7 +260,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
-            <span class="status-badge">${statusBadge(entry.status)}</span>
+            <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}</span>
             ${warningBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
@@ -287,7 +290,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     `;
   };
 
-  const filters = ['all', 'pending', 'completed', 'failed', 'rejected', 'withdrawn'];
+  const filters = ['all', 'pending', 'auto-approved', 'completed', 'failed', 'rejected', 'withdrawn'];
   const filterLinks = filters.map(f =>
     `<a href="/ui/queue?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');

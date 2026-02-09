@@ -84,7 +84,7 @@ export async function notifyAgentQueueStatus(entry) {
       results: entry.results
     },
     // Also include a human-readable message for Clawdbot-style gateways
-    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id.substring(0, 8)} ${entry.status}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
+    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id.substring(0, 8)} ${entry.auto_approved ? 'auto-approved + ' : ''}${entry.status}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
     mode: 'now'
   };
 

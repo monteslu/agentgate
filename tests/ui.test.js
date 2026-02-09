@@ -48,6 +48,9 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   clearCompletedQueue: jest.fn(),
   getPendingQueueCount: jest.fn(() => 0),
   getQueueCounts: jest.fn(() => ({ pending: 0, approved: 0, rejected: 0, completed: 0 })),
+  markAutoApproved: jest.fn(),
+  listAutoApprovedEntries: jest.fn(() => []),
+  getAutoApprovedCount: jest.fn(() => 0),
   
   // Auth functions
   getCookieSecret: jest.fn(() => 'test-secret'),
