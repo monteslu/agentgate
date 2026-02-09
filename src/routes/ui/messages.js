@@ -1,6 +1,5 @@
 // Messages routes - agent messaging management
 import { Router } from 'express';
-import { nanoid } from 'nanoid';
 import {
   getMessagingMode, listAgentMessages,
   approveAgentMessage, rejectAgentMessage, deleteAgentMessage,
@@ -155,8 +154,7 @@ router.post('/broadcast', async (req, res) => {
   }
 
   // Create broadcast record in database
-  const broadcastId = nanoid();
-  createBroadcast(broadcastId, 'admin', message, recipients.length);
+  const broadcastId = createBroadcast('admin', message, recipients.length);
 
   const delivered = [];
   const failed = [];
