@@ -375,88 +375,6 @@ function renderQueuePage(entries, filter, counts = {}) {
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    const statusColors = {
-      pending: 'background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3);',
-      approved: 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);',
-      executing: 'background: rgba(59, 130, 246, 0.15); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);',
-      completed: 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);',
-      failed: 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);',
-      rejected: 'background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3);',
-      withdrawn: 'background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3);'
-    };
-
-    function renderStatusBadge(status) {
-      return '<span class="status" style="' + (statusColors[status] || '') + '">' + status + '</span>';
-    }
-
-    function updateFilterCounts(counts) {
-      const filterBar = document.getElementById('filter-bar');
-      if (!filterBar) return;
-      const links = filterBar.querySelectorAll('.filter-link');
-      links.forEach(link => {
-        const href = link.getAttribute('href');
-        const match = href.match(/filter=(\\w+)/);
-        if (match) {
-          const f = match[1];
-          const count = counts[f] || 0;
-          const label = f + (count > 0 ? ' (' + count + ')' : '');
-          link.textContent = label;
-        }
-      });
-    }
-
-    function updateEntryStatus(entryEl, entry, counts) {
-      // Update status badge
-      const badgeContainer = entryEl.querySelector('.status-badge');
-      if (badgeContainer) {
-        badgeContainer.innerHTML = renderStatusBadge(entry.status);
-      }
-      entryEl.dataset.status = entry.status;
-
-      // Remove action buttons
-      const actionsEl = entryEl.querySelector('.queue-actions');
-      if (actionsEl) actionsEl.remove();
-
-      // Add result or rejection section
-      let resultHtml = '';
-      if (entry.results) {
-        resultHtml = '<details style="margin-top: 12px;"><summary>Results (' + entry.results.length + ')</summary>' +
-          '<pre style="margin-top: 8px; font-size: 12px;">' + escapeHtml(JSON.stringify(entry.results, null, 2)) + '</pre></details>';
-      }
-      if (entry.rejection_reason) {
-        resultHtml = '<div class="rejection-reason"><strong>Rejection reason:</strong> ' + escapeHtml(entry.rejection_reason) + '</div>';
-      }
-      if (resultHtml) {
-        const existing = entryEl.querySelector('.rejection-reason') || entryEl.querySelector('details:last-of-type');
-        const insertPoint = entryEl.querySelector('.warnings-section') || entryEl.querySelector('.notification-status');
-        if (insertPoint) {
-          insertPoint.insertAdjacentHTML('beforebegin', resultHtml);
-        } else {
-          entryEl.insertAdjacentHTML('beforeend', resultHtml);
-        }
-      }
-
-      // Add notification status section
-      if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) {
-        let existingNotify = entryEl.querySelector('.notification-status');
-        if (!existingNotify) {
-          const notifyHtml = '<div class="notification-status" id="notify-status-' + entry.id + '">' +
-            '<span class="notify-status notify-pending">— Not notified</span> ' +
-            '<button type="button" class="btn-sm btn-link" onclick="retryNotify(\'' + entry.id + '\')" id="retry-' + entry.id + '">Retry</button>' +
-            '</div>';
-          entryEl.insertAdjacentHTML('beforeend', notifyHtml);
-        }
-      }
-
-      // Flash the entry to indicate update
-      entryEl.style.transition = 'box-shadow 0.3s ease';
-      entryEl.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.5)';
-      setTimeout(() => { entryEl.style.boxShadow = ''; }, 1500);
-
-      // Update filter counts
-      if (counts) updateFilterCounts(counts);
-    }
-
     async function approveEntry(id) {
       const btn = event.target;
       btn.disabled = true;
@@ -465,8 +383,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         const res = await fetch('/ui/queue/' + id + '/approve', { method: 'POST', headers: { 'Accept': 'application/json' } });
         const data = await res.json();
         if (data.success) {
-          const entryEl = document.getElementById('entry-' + id);
-          if (entryEl) updateEntryStatus(entryEl, data.entry, data.counts);
+          window.location.reload();
         } else {
           alert(data.error || 'Failed to approve');
           btn.disabled = false;
@@ -493,8 +410,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         });
         const data = await res.json();
         if (data.success) {
-          const entryEl = document.getElementById('entry-' + id);
-          if (entryEl) updateEntryStatus(entryEl, data.entry, data.counts);
+          window.location.reload();
         } else {
           alert(data.error || 'Failed to reject');
           btn.disabled = false;
@@ -519,27 +435,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         });
         const data = await res.json();
         if (data.success) {
-          // Remove cleared entries from DOM
-          const container = document.getElementById('entries-container');
-          const entries = container.querySelectorAll('.queue-entry');
-          entries.forEach(el => {
-            const s = el.dataset.status;
-            if (status === 'all' ? s !== 'pending' : s === status) {
-              el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-              el.style.opacity = '0';
-              el.style.transform = 'translateX(-20px)';
-              setTimeout(() => el.remove(), 300);
-            }
-          });
-          // Show empty state after animation if needed
-          setTimeout(() => {
-            if (container.querySelectorAll('.queue-entry').length === 0) {
-              container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
-            }
-          }, 350);
-          if (data.counts) updateFilterCounts(data.counts);
-          // Hide the clear button
-          btn.style.display = 'none';
+          window.location.reload();
         }
       } catch (err) {
         alert('Error: ' + err.message);
@@ -553,20 +449,11 @@ function renderQueuePage(entries, filter, counts = {}) {
         const res = await fetch('/ui/queue/' + id, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
         const data = await res.json();
         if (data.success) {
-          const el = document.getElementById('entry-' + id);
-          if (el) {
-            el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-            el.style.opacity = '0';
-            el.style.transform = 'translateX(-20px)';
-            setTimeout(() => {
-              el.remove();
-              const container = document.getElementById('entries-container');
-              if (container.querySelectorAll('.queue-entry').length === 0) {
-                container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
-              }
-            }, 300);
+          document.getElementById('entry-' + id)?.remove();
+          const container = document.getElementById('entries-container');
+          if (container.querySelectorAll('.queue-entry').length === 0) {
+            container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
           }
-          if (data.counts) updateFilterCounts(data.counts);
         } else {
           alert(data.error || 'Failed to delete');
         }
@@ -655,7 +542,19 @@ function renderQueuePage(entries, filter, counts = {}) {
         }
 
         if (data.type === 'status_changed') {
-          updateEntryStatus(entryEl, data.entry || { id: data.id, status: data.status });
+          // Update status badge
+          const statusBadge = entryEl.querySelector('.status-badge .status');
+          if (statusBadge) {
+            statusBadge.textContent = data.status;
+            statusBadge.className = 'status ' + data.status;
+          }
+          entryEl.dataset.status = data.status;
+
+          // Remove action buttons if no longer pending
+          if (data.status !== 'pending') {
+            const actionsEl = entryEl.querySelector('.queue-actions');
+            if (actionsEl) actionsEl.remove();
+          }
         }
       });
     });
