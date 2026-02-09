@@ -12,6 +12,8 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getApiKeyByName: jest.fn(),
   updateAgentWebhook: jest.fn(),
   setAgentEnabled: jest.fn(),
+  getAgentDataCounts: jest.fn(() => ({ messages: 0, queueEntries: 0, mementos: 0, broadcasts: 0, broadcastRecipients: 0, warnings: 0, serviceAccess: 0 })),
+  cascadeDeleteAgentData: jest.fn(),
   
   // Avatar functions
   getAvatarsDir: jest.fn(() => '/tmp/avatars'),
