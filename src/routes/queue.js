@@ -127,13 +127,13 @@ router.delete('/:service/:accountName/status/:id', (req, res) => {
 
   } catch (error) {
     const statusCode = error.message.includes('not enabled') ? 403 :
-                      error.message.includes('not found') ? 404 :
-                      error.message.includes('only withdraw') ? 403 : 400;
+      error.message.includes('not found') ? 404 :
+        error.message.includes('only withdraw') ? 403 : 400;
 
     res.status(statusCode).json({
       error: error.message.includes('not enabled') ? 'Disabled' :
-             error.message.includes('not found') ? 'Not found' :
-             error.message.includes('only withdraw') ? 'Forbidden' : 'Cannot withdraw',
+        error.message.includes('not found') ? 'Not found' :
+          error.message.includes('only withdraw') ? 'Forbidden' : 'Cannot withdraw',
       message: error.message
     });
   }
@@ -152,13 +152,13 @@ router.post('/:service/:accountName/:id/warn', async (req, res) => {
 
   } catch (error) {
     const statusCode = error.message.includes('authentication') ? 401 :
-                      error.message.includes('not found') ? 404 :
-                      error.message.includes('own submission') ? 403 : 400;
+      error.message.includes('not found') ? 404 :
+        error.message.includes('own submission') ? 403 : 400;
 
     res.status(statusCode).json({
       error: error.message.includes('authentication') ? 'Unauthorized' :
-             error.message.includes('not found') ? 'Not found' :
-             error.message.includes('own submission') ? 'Forbidden' : 'Cannot warn',
+        error.message.includes('not found') ? 'Not found' :
+          error.message.includes('own submission') ? 'Forbidden' : 'Cannot warn',
       message: error.message
     });
   }

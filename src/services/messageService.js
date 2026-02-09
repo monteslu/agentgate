@@ -6,10 +6,9 @@ import {
   markMessageDelivered,
   listAgentsForMessaging,
   checkMessageable,
-  updateBroadcastEnabled,
   getBroadcastEnabled
 } from '../lib/db.js';
-import { notifyAgentMessage, notifyAgentMessagesBatch } from '../lib/agentNotifier.js';
+import { notifyAgentMessagesBatch } from '../lib/agentNotifier.js';
 import { emitEvent } from '../lib/socketManager.js';
 
 /**

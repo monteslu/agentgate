@@ -226,52 +226,52 @@ async function handleQueueAction(agentName, args) {
 
   try {
     switch (action) {
-      case 'submit': {
-        const result = await submitWriteRequest(
-          agentName,
-          args.service,
-          args.account,
-          args.requests,
-          args.comment,
-          { emitEvents: false }
-        );
+    case 'submit': {
+      const result = await submitWriteRequest(
+        agentName,
+        args.service,
+        args.account,
+        args.requests,
+        args.comment,
+        { emitEvents: false }
+      );
 
-        return toolResponse({
-          id: result.id,
-          status: result.status,
-          message: result.message,
-          bypassed: result.bypassed,
-          results: result.results
-        });
-      }
+      return toolResponse({
+        id: result.id,
+        status: result.status,
+        message: result.message,
+        bypassed: result.bypassed,
+        results: result.results
+      });
+    }
 
-      case 'list': {
-        const result = listQueueEntries(agentName, args.service || null, args.account || null);
-        return toolResponse(result);
-      }
+    case 'list': {
+      const result = listQueueEntries(agentName, args.service || null, args.account || null);
+      return toolResponse(result);
+    }
 
-      case 'status': {
-        const result = getQueueStatus(args.queue_id, args.service, args.account);
-        return toolResponse(result);
-      }
+    case 'status': {
+      const result = getQueueStatus(args.queue_id, args.service, args.account);
+      return toolResponse(result);
+    }
 
-      case 'withdraw': {
-        const result = withdrawQueueEntry(args.queue_id, agentName, args.reason, { emitEvents: false });
-        return toolResponse(result);
-      }
+    case 'withdraw': {
+      const result = withdrawQueueEntry(args.queue_id, agentName, args.reason, { emitEvents: false });
+      return toolResponse(result);
+    }
 
-      case 'warn': {
-        const result = await addWarningToQueue(args.queue_id, agentName, args.message, { emitEvents: false });
-        return toolResponse(result);
-      }
+    case 'warn': {
+      const result = await addWarningToQueue(args.queue_id, agentName, args.message, { emitEvents: false });
+      return toolResponse(result);
+    }
 
-      case 'get_warnings': {
-        const result = getWarningsForQueue(args.queue_id);
-        return toolResponse(result);
-      }
+    case 'get_warnings': {
+      const result = getWarningsForQueue(args.queue_id);
+      return toolResponse(result);
+    }
 
-      default:
-        return toolError(`Unknown queue action: ${action}`);
+    default:
+      return toolError(`Unknown queue action: ${action}`);
     }
   } catch (error) {
     return toolError(error.message);
@@ -284,257 +284,257 @@ async function handleMessagesAction(agentName, args) {
 
   try {
     switch (action) {
-      case 'send': {
-        const { to_agent, message } = args;
+    case 'send': {
+      const { to_agent, message } = args;
 
-        if (!to_agent) {
-          return toolError('to_agent is required');
-        }
-        if (!message) {
-          return toolError('message is required');
-        }
-        if (message.length > MAX_MESSAGE_LENGTH) {
-          return toolError(`Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`);
-        }
-
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
-
-        const recipient = getApiKeyByName(to_agent);
-        if (!recipient) {
-          return toolError(`Agent "${to_agent}" not found`);
-        }
-
-        const recipientName = recipient.name;
-
-        if (recipientName.toLowerCase() === agentName.toLowerCase()) {
-          return toolError('Cannot send message to yourself');
-        }
-
-        if (mode === 'open' && recipient.webhook_url) {
-          const payload = {
-            type: 'agent_message',
-            from: agentName,
-            message: message,
-            timestamp: new Date().toISOString(),
-            text: `💬 [agentgate] Message from ${agentName}:\n${message.substring(0, 500)}`,
-            mode: 'now'
-          };
-
-          const result = await notifyAgent(recipientName, payload);
-
-          return toolResponse({
-            status: result.success ? 'delivered' : 'failed',
-            to: recipientName,
-            error: result.error || null
-          });
-        } else {
-          return toolResponse({
-            status: 'pending',
-            message: mode === 'supervised'
-              ? 'Message queued for human approval'
-              : 'Recipient has no webhook configured'
-          });
-        }
+      if (!to_agent) {
+        return toolError('to_agent is required');
+      }
+      if (!message) {
+        return toolError('message is required');
+      }
+      if (message.length > MAX_MESSAGE_LENGTH) {
+        return toolError(`Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`);
       }
 
-      case 'get': {
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
 
-        const unreadOnly = args.unread_only || false;
-        const messages = getMessagesForAgent(agentName, unreadOnly);
+      const recipient = getApiKeyByName(to_agent);
+      if (!recipient) {
+        return toolError(`Agent "${to_agent}" not found`);
+      }
+
+      const recipientName = recipient.name;
+
+      if (recipientName.toLowerCase() === agentName.toLowerCase()) {
+        return toolError('Cannot send message to yourself');
+      }
+
+      if (mode === 'open' && recipient.webhook_url) {
+        const payload = {
+          type: 'agent_message',
+          from: agentName,
+          message: message,
+          timestamp: new Date().toISOString(),
+          text: `💬 [agentgate] Message from ${agentName}:\n${message.substring(0, 500)}`,
+          mode: 'now'
+        };
+
+        const result = await notifyAgent(recipientName, payload);
 
         return toolResponse({
-          mode,
-          messages: messages.map(m => ({
-            id: m.id,
-            from: m.from_agent,
-            message: m.message,
-            created_at: m.created_at,
-            read: m.read_at !== null
-          }))
+          status: result.success ? 'delivered' : 'failed',
+          to: recipientName,
+          error: result.error || null
         });
-      }
-
-      case 'mark_read': {
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
-
-        if (!args.message_id) {
-          return toolError('message_id is required');
-        }
-
-        const result = markMessageRead(args.message_id, agentName);
-
-        if (result.changes === 0) {
-          return toolError('Message not found or already read');
-        }
-
-        return toolResponse({ success: true });
-      }
-
-      case 'list_agents': {
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
-
-        const apiKeys = listApiKeys();
-        const agents = apiKeys
-          .filter(k => k.name.toLowerCase() !== agentName.toLowerCase())
-          .map(k => ({
-            name: k.name,
-            enabled: !!k.enabled
-          }));
-
-        return toolResponse({ mode, agents });
-      }
-
-      case 'status': {
-        const mode = getMessagingMode();
-
-        if (mode === 'off') {
-          return toolResponse({
-            mode: 'off',
-            enabled: false,
-            message: 'Agent messaging is disabled'
-          });
-        }
-
-        const messages = getMessagesForAgent(agentName, true);
-
+      } else {
         return toolResponse({
-          mode,
-          enabled: true,
-          unread_count: messages.length
+          status: 'pending',
+          message: mode === 'supervised'
+            ? 'Message queued for human approval'
+            : 'Recipient has no webhook configured'
         });
       }
+    }
 
-      case 'broadcast': {
-        const { message } = args;
+    case 'get': {
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
 
-        if (!message) {
-          return toolError('message is required');
-        }
-        if (message.length > MAX_MESSAGE_LENGTH) {
-          return toolError(`Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`);
-        }
+      const unreadOnly = args.unread_only || false;
+      const messages = getMessagesForAgent(agentName, unreadOnly);
 
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
+      return toolResponse({
+        mode,
+        messages: messages.map(m => ({
+          id: m.id,
+          from: m.from_agent,
+          message: m.message,
+          created_at: m.created_at,
+          read: m.read_at !== null
+        }))
+      });
+    }
 
-        const apiKeys = listApiKeys();
-        const recipients = apiKeys.filter(k =>
-          k.webhook_url && k.enabled && k.name.toLowerCase() !== agentName.toLowerCase()
-        );
+    case 'mark_read': {
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
 
-        if (recipients.length === 0) {
-          return toolResponse({
-            delivered: [],
-            failed: [],
-            total: 0,
-            message: 'No agents with webhooks available'
-          });
-        }
+      if (!args.message_id) {
+        return toolError('message_id is required');
+      }
 
-        const broadcastId = createBroadcast(agentName, message, recipients.length);
+      const result = markMessageRead(args.message_id, agentName);
 
-        const delivered = [];
-        const failed = [];
+      if (result.changes === 0) {
+        return toolError('Message not found or already read');
+      }
 
-        await Promise.allSettled(recipients.map(async (agent) => {
-          const payload = {
-            type: 'broadcast',
-            from: agentName,
-            message: message,
-            broadcast_id: broadcastId,
-            timestamp: new Date().toISOString(),
-            text: `📢 [agentgate] Broadcast from ${agentName}:\n${message.substring(0, 500)}`,
-            mode: 'now'
-          };
+      return toolResponse({ success: true });
+    }
 
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+    case 'list_agents': {
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
 
-          try {
-            const headers = { 'Content-Type': 'application/json' };
-            if (agent.webhook_token) {
-              headers['Authorization'] = `Bearer ${agent.webhook_token}`;
-            }
-
-            const response = await fetch(agent.webhook_url, {
-              method: 'POST',
-              headers,
-              body: JSON.stringify(payload),
-              signal: controller.signal
-            });
-
-            if (response.ok) {
-              delivered.push(agent.name);
-              addBroadcastRecipient(broadcastId, agent.name, 'delivered');
-            } else {
-              const errorMsg = `HTTP ${response.status}`;
-              failed.push({ name: agent.name, error: errorMsg });
-              addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
-            }
-          } catch (err) {
-            const errorMsg = err.name === 'AbortError' ? `Webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms` : err.message;
-            failed.push({ name: agent.name, error: errorMsg });
-            addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
-          } finally {
-            clearTimeout(timer);
-          }
+      const apiKeys = listApiKeys();
+      const agents = apiKeys
+        .filter(k => k.name.toLowerCase() !== agentName.toLowerCase())
+        .map(k => ({
+          name: k.name,
+          enabled: !!k.enabled
         }));
 
+      return toolResponse({ mode, agents });
+    }
+
+    case 'status': {
+      const mode = getMessagingMode();
+
+      if (mode === 'off') {
         return toolResponse({
-          broadcast_id: broadcastId,
-          delivered,
-          failed,
-          total: recipients.length
+          mode: 'off',
+          enabled: false,
+          message: 'Agent messaging is disabled'
         });
       }
 
-      case 'list_broadcasts': {
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
+      const messages = getMessagesForAgent(agentName, true);
 
-        const limit = args.limit || 50;
-        const broadcasts = listBroadcastsWithRecipients(Math.min(limit, 100));
+      return toolResponse({
+        mode,
+        enabled: true,
+        unread_count: messages.length
+      });
+    }
 
-        return toolResponse({ broadcasts });
+    case 'broadcast': {
+      const { message } = args;
+
+      if (!message) {
+        return toolError('message is required');
+      }
+      if (message.length > MAX_MESSAGE_LENGTH) {
+        return toolError(`Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`);
       }
 
-      case 'get_broadcast': {
-        const mode = getMessagingMode();
-        if (mode === 'off') {
-          return toolError('Agent messaging is disabled');
-        }
-
-        if (!args.broadcast_id) {
-          return toolError('broadcast_id is required');
-        }
-
-        const broadcast = getBroadcast(args.broadcast_id);
-        if (!broadcast) {
-          return toolError('Broadcast not found');
-        }
-
-        return toolResponse(broadcast);
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
       }
 
-      default:
-        return toolError(`Unknown messages action: ${action}`);
+      const apiKeys = listApiKeys();
+      const recipients = apiKeys.filter(k =>
+        k.webhook_url && k.enabled && k.name.toLowerCase() !== agentName.toLowerCase()
+      );
+
+      if (recipients.length === 0) {
+        return toolResponse({
+          delivered: [],
+          failed: [],
+          total: 0,
+          message: 'No agents with webhooks available'
+        });
+      }
+
+      const broadcastId = createBroadcast(agentName, message, recipients.length);
+
+      const delivered = [];
+      const failed = [];
+
+      await Promise.allSettled(recipients.map(async (agent) => {
+        const payload = {
+          type: 'broadcast',
+          from: agentName,
+          message: message,
+          broadcast_id: broadcastId,
+          timestamp: new Date().toISOString(),
+          text: `📢 [agentgate] Broadcast from ${agentName}:\n${message.substring(0, 500)}`,
+          mode: 'now'
+        };
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
+        try {
+          const headers = { 'Content-Type': 'application/json' };
+          if (agent.webhook_token) {
+            headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+          }
+
+          const response = await fetch(agent.webhook_url, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+            signal: controller.signal
+          });
+
+          if (response.ok) {
+            delivered.push(agent.name);
+            addBroadcastRecipient(broadcastId, agent.name, 'delivered');
+          } else {
+            const errorMsg = `HTTP ${response.status}`;
+            failed.push({ name: agent.name, error: errorMsg });
+            addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
+          }
+        } catch (err) {
+          const errorMsg = err.name === 'AbortError' ? `Webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms` : err.message;
+          failed.push({ name: agent.name, error: errorMsg });
+          addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
+        } finally {
+          clearTimeout(timer);
+        }
+      }));
+
+      return toolResponse({
+        broadcast_id: broadcastId,
+        delivered,
+        failed,
+        total: recipients.length
+      });
+    }
+
+    case 'list_broadcasts': {
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
+
+      const limit = args.limit || 50;
+      const broadcasts = listBroadcastsWithRecipients(Math.min(limit, 100));
+
+      return toolResponse({ broadcasts });
+    }
+
+    case 'get_broadcast': {
+      const mode = getMessagingMode();
+      if (mode === 'off') {
+        return toolError('Agent messaging is disabled');
+      }
+
+      if (!args.broadcast_id) {
+        return toolError('broadcast_id is required');
+      }
+
+      const broadcast = getBroadcast(args.broadcast_id);
+      if (!broadcast) {
+        return toolError('Broadcast not found');
+      }
+
+      return toolResponse(broadcast);
+    }
+
+    default:
+      return toolError(`Unknown messages action: ${action}`);
     }
   } catch (error) {
     return toolError(error.message);
@@ -547,33 +547,33 @@ async function handleMementosAction(agentName, args) {
 
   try {
     switch (action) {
-      case 'save': {
-        const memento = saveMemento(agentName, args.content, args.keywords, args.model, args.role);
-        return toolResponse(memento);
-      }
+    case 'save': {
+      const memento = saveMemento(agentName, args.content, args.keywords, args.model, args.role);
+      return toolResponse(memento);
+    }
 
-      case 'search': {
-        const matches = searchMementosByKeywords(agentName, args.keywords, args.limit || 10);
-        return toolResponse({ matches });
-      }
+    case 'search': {
+      const matches = searchMementosByKeywords(agentName, args.keywords, args.limit || 10);
+      return toolResponse({ matches });
+    }
 
-      case 'keywords': {
-        const keywords = listMementoKeywords(agentName);
-        return toolResponse({ keywords });
-      }
+    case 'keywords': {
+      const keywords = listMementoKeywords(agentName);
+      return toolResponse({ keywords });
+    }
 
-      case 'recent': {
-        const mementos = listRecentMementos(agentName, args.limit || 5);
-        return toolResponse({ mementos });
-      }
+    case 'recent': {
+      const mementos = listRecentMementos(agentName, args.limit || 5);
+      return toolResponse({ mementos });
+    }
 
-      case 'get_by_ids': {
-        const mementos = getMementosByIds(agentName, args.ids);
-        return toolResponse({ mementos });
-      }
+    case 'get_by_ids': {
+      const mementos = getMementosByIds(agentName, args.ids);
+      return toolResponse({ mementos });
+    }
 
-      default:
-        return toolError(`Unknown mementos action: ${action}`);
+    default:
+      return toolError(`Unknown mementos action: ${action}`);
     }
   } catch (error) {
     return toolError(error.message);
@@ -586,57 +586,57 @@ async function handleServicesAction(agentName, args) {
 
   try {
     switch (action) {
-      case 'whoami': {
-        const agent = getApiKeyByName(agentName);
+    case 'whoami': {
+      const agent = getApiKeyByName(agentName);
 
-        if (!agent) {
-          return toolError('Agent not found');
+      if (!agent) {
+        return toolError('Agent not found');
+      }
+
+      const services = listAccessibleServices(agentName);
+
+      const response = {
+        name: agent.name,
+        enabled: !!agent.enabled,
+        accessible_services_count: services.length,
+        security_note: 'Credentials for connected services never leave this gateway. You can read data and request writes, but tokens are never exposed to you.',
+        capabilities: {
+          read: 'You can read from any service in your access list via the REST API (e.g., GET /api/github/{account}/user)',
+          write: 'Write requests go through the gateway. Depending on config, they are either queued for human approval or auto-approved with bypass - but always logged.',
+          memory: 'Use the mementos tool to persist notes across sessions'
         }
+      };
 
-        const services = listAccessibleServices(agentName);
-
-        const response = {
-          name: agent.name,
-          enabled: !!agent.enabled,
-          accessible_services_count: services.length,
-          security_note: 'Credentials for connected services never leave this gateway. You can read data and request writes, but tokens are never exposed to you.',
-          capabilities: {
-            read: 'You can read from any service in your access list via the REST API (e.g., GET /api/github/{account}/user)',
-            write: 'Write requests go through the gateway. Depending on config, they are either queued for human approval or auto-approved with bypass - but always logged.',
-            memory: 'Use the mementos tool to persist notes across sessions'
-          }
-        };
-
-        // Include bio if configured
-        if (agent.bio) {
-          response.bio = agent.bio;
-        }
-
-        // Include webhook info if relevant
-        if (agent.webhook_url) {
-          response.webhook_configured = true;
-        }
-
-        return toolResponse(response);
+      // Include bio if configured
+      if (agent.bio) {
+        response.bio = agent.bio;
       }
 
-      case 'list': {
-        const services = listAccessibleServices(agentName, { includeDocs: true });
-        return toolResponse({ services });
+      // Include webhook info if relevant
+      if (agent.webhook_url) {
+        response.webhook_configured = true;
       }
 
-      case 'get_access': {
-        const result = getServiceAccess(agentName, args.service, args.account);
-        return toolResponse(result);
-      }
+      return toolResponse(response);
+    }
 
-      case 'check_bypass': {
-        const result = checkBypassStatus(agentName, args.service, args.account);
-        return toolResponse(result);
-      }
+    case 'list': {
+      const services = listAccessibleServices(agentName, { includeDocs: true });
+      return toolResponse({ services });
+    }
 
-      default:
-        return toolError(`Unknown services action: ${action}`);
+    case 'get_access': {
+      const result = getServiceAccess(agentName, args.service, args.account);
+      return toolResponse(result);
+    }
+
+    case 'check_bypass': {
+      const result = checkBypassStatus(agentName, args.service, args.account);
+      return toolResponse(result);
+    }
+
+    default:
+      return toolError(`Unknown services action: ${action}`);
     }
   } catch (error) {
     return toolError(error.message);
