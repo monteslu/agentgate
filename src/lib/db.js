@@ -192,6 +192,31 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_broadcasts_from
   ON broadcasts(from_agent, created_at DESC);
+
+  -- LLM Providers (credential vault)
+  CREATE TABLE IF NOT EXISTS llm_providers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    provider_type TEXT NOT NULL,
+    api_key TEXT NOT NULL,
+    base_url TEXT,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Agent → LLM model mapping
+  CREATE TABLE IF NOT EXISTS llm_agent_models (
+    agent_name TEXT NOT NULL,
+    provider_id INTEGER NOT NULL REFERENCES llm_providers(id) ON DELETE CASCADE,
+    model_id TEXT NOT NULL,
+    is_default INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (agent_name, provider_id, model_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_llm_agent_default
+  ON llm_agent_models(agent_name, is_default);
 `);
 
 // Migrate write_queue table to add notification columns
@@ -1418,4 +1443,114 @@ export function deleteBroadcast(id) {
 export function clearBroadcasts() {
   db.prepare('DELETE FROM broadcast_recipients').run();
   return db.prepare('DELETE FROM broadcasts').run();
+}
+
+// ============================================
+// LLM Providers
+// ============================================
+
+export function createLlmProvider(name, providerType, apiKey, baseUrl = null) {
+  const result = db.prepare(`
+    INSERT INTO llm_providers (name, provider_type, api_key, base_url)
+    VALUES (?, ?, ?, ?)
+  `).run(name, providerType, apiKey, baseUrl || null);
+  return { id: Number(result.lastInsertRowid), name, provider_type: providerType };
+}
+
+export function getLlmProvider(id) {
+  return db.prepare('SELECT * FROM llm_providers WHERE id = ?').get(id);
+}
+
+export function getLlmProviderByName(name) {
+  return db.prepare('SELECT * FROM llm_providers WHERE name = ?').get(name);
+}
+
+export function listLlmProviders() {
+  return db.prepare('SELECT id, name, provider_type, base_url, enabled, created_at, updated_at FROM llm_providers ORDER BY name').all();
+}
+
+export function updateLlmProvider(id, updates) {
+  const fields = [];
+  const values = [];
+  for (const [key, val] of Object.entries(updates)) {
+    if (['name', 'provider_type', 'api_key', 'base_url', 'enabled'].includes(key)) {
+      fields.push(`${key} = ?`);
+      values.push(val);
+    }
+  }
+  if (fields.length === 0) return;
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+  db.prepare(`UPDATE llm_providers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function deleteLlmProvider(id) {
+  return db.prepare('DELETE FROM llm_providers WHERE id = ?').run(id);
+}
+
+// ============================================
+// LLM Agent Model Assignments
+// ============================================
+
+// Get the default LLM config for an agent
+export function getAgentLlmConfig(agentName) {
+  // First try agent-specific default
+  const agentConfig = db.prepare(`
+    SELECT lam.*, lp.name as provider_name, lp.provider_type, lp.api_key, lp.base_url, lp.enabled
+    FROM llm_agent_models lam
+    JOIN llm_providers lp ON lam.provider_id = lp.id
+    WHERE LOWER(lam.agent_name) = LOWER(?) AND lam.is_default = 1
+  `).get(agentName);
+  if (agentConfig) return agentConfig;
+
+  // Fallback: check for a wildcard default ('*')
+  const wildcard = db.prepare(`
+    SELECT lam.*, lp.name as provider_name, lp.provider_type, lp.api_key, lp.base_url, lp.enabled
+    FROM llm_agent_models lam
+    JOIN llm_providers lp ON lam.provider_id = lp.id
+    WHERE lam.agent_name = '*' AND lam.is_default = 1
+  `).get();
+  return wildcard || null;
+}
+
+// List all models available to an agent
+export function listAgentModels(agentName) {
+  // Agent-specific models + wildcard models
+  return db.prepare(`
+    SELECT lam.model_id, lam.is_default, lp.name as provider_name, lp.provider_type, lp.id as provider_id
+    FROM llm_agent_models lam
+    JOIN llm_providers lp ON lam.provider_id = lp.id
+    WHERE (LOWER(lam.agent_name) = LOWER(?) OR lam.agent_name = '*') AND lp.enabled = 1
+    ORDER BY lam.is_default DESC, lam.model_id
+  `).all(agentName);
+}
+
+// Assign a model to an agent
+export function setAgentLlmModel(agentName, providerId, modelId, isDefault = false) {
+  // If setting as default, clear other defaults for this agent
+  if (isDefault) {
+    db.prepare('UPDATE llm_agent_models SET is_default = 0 WHERE LOWER(agent_name) = LOWER(?)').run(agentName);
+  }
+  db.prepare(`
+    INSERT INTO llm_agent_models (agent_name, provider_id, model_id, is_default)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(agent_name, provider_id, model_id) DO UPDATE SET
+      is_default = excluded.is_default
+  `).run(agentName, providerId, modelId, isDefault ? 1 : 0);
+}
+
+// Remove a model assignment
+export function removeAgentLlmModel(agentName, providerId, modelId) {
+  return db.prepare('DELETE FROM llm_agent_models WHERE LOWER(agent_name) = LOWER(?) AND provider_id = ? AND model_id = ?')
+    .run(agentName, providerId, modelId);
+}
+
+// List all agent model assignments (for admin)
+export function listAllAgentLlmModels() {
+  return db.prepare(`
+    SELECT lam.*, lp.name as provider_name, lp.provider_type
+    FROM llm_agent_models lam
+    JOIN llm_providers lp ON lam.provider_id = lp.id
+    ORDER BY lam.agent_name, lam.model_id
+  `).all();
 }
