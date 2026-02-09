@@ -9,7 +9,8 @@ export const serviceInfo = {
   name: 'Mastodon',
   shortDesc: 'Timeline, notifications, profile (DMs blocked)',
   description: 'Mastodon API proxy (DMs blocked)',
-  authType: 'oauth',
+  authType: 'access token',
+  authMethods: ['access_token', 'oauth'],
   docs: 'https://docs.joinmastodon.org/api/',
   examples: [
     'GET /api/mastodon/{accountName}/api/v1/timelines/home',
