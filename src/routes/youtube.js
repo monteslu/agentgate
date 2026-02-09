@@ -12,6 +12,7 @@ export const serviceInfo = {
   shortDesc: 'Channels, videos, subscriptions',
   description: 'YouTube Data API proxy',
   authType: 'oauth',
+  authMethods: ['oauth'],
   docs: 'https://developers.google.com/youtube/v3/docs',
   examples: [
     'GET /api/youtube/{accountName}/channels?part=snippet,statistics&mine=true',

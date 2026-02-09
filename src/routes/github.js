@@ -11,6 +11,7 @@ export const serviceInfo = {
   shortDesc: 'Repos, issues, PRs, commits',
   description: 'GitHub API proxy',
   authType: 'personal access token',
+  authMethods: ['personal_token'],
   docs: 'https://docs.github.com/en/rest',
   examples: [
     'GET /api/github/{accountName}/users/{username}',

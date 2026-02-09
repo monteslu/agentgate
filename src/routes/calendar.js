@@ -12,6 +12,7 @@ export const serviceInfo = {
   shortDesc: 'Events, calendars',
   description: 'Google Calendar API proxy',
   authType: 'oauth',
+  authMethods: ['oauth'],
   dbKey: 'google_calendar',
   docs: 'https://developers.google.com/calendar/api/v3/reference',
   examples: [

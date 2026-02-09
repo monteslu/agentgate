@@ -1,8 +1,11 @@
 // Agent notification delivery - sends webhooks to agent gateways
 import { getApiKeyByName, updateQueueNotification, getQueueWarnings } from './db.js';
 
+// Default per-agent webhook timeout (ms)
+const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
+
 // Send a notification to an agent's webhook
-export async function notifyAgent(agentName, payload) {
+export async function notifyAgent(agentName, payload, { timeoutMs = WEBHOOK_TIMEOUT_MS } = {}) {
   const agent = getApiKeyByName(agentName);
 
   if (!agent) {
@@ -22,19 +25,30 @@ export async function notifyAgent(agentName, payload) {
       headers['Authorization'] = `Bearer ${agent.webhook_token}`;
     }
 
-    const response = await fetch(agent.webhook_url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (response.ok) {
-      return { success: true };
-    } else {
-      const text = await response.text().catch(() => '');
-      return { success: false, error: `HTTP ${response.status}: ${text.substring(0, 200)}` };
+    try {
+      const response = await fetch(agent.webhook_url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (response.ok) {
+        return { success: true };
+      } else {
+        const text = await response.text().catch(() => '');
+        return { success: false, error: `HTTP ${response.status}: ${text.substring(0, 200)}` };
+      }
+    } finally {
+      clearTimeout(timer);
     }
   } catch (err) {
+    if (err.name === 'AbortError') {
+      return { success: false, error: `Webhook timeout after ${timeoutMs}ms` };
+    }
     return { success: false, error: err.message };
   }
 }
@@ -220,12 +234,13 @@ export async function notifyMessageRejected(message) {
   return notifyAgent(agentName, payload);
 }
 
-// Batch notify multiple agents about their messages
+// Batch notify multiple agents about their messages (parallel)
 export async function notifyAgentMessagesBatch(messages) {
-  const results = [];
-  for (const msg of messages) {
-    const result = await notifyAgentMessage(msg);
-    results.push({ messageId: msg.id, ...result });
-  }
-  return results;
+  const settled = await Promise.allSettled(
+    messages.map(async (msg) => {
+      const result = await notifyAgentMessage(msg);
+      return { messageId: msg.id, ...result };
+    })
+  );
+  return settled.map(s => s.status === 'fulfilled' ? s.value : { success: false, error: s.reason?.message || 'Unknown error' });
 }

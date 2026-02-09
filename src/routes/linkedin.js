@@ -11,6 +11,7 @@ export const serviceInfo = {
   shortDesc: 'Profile (messaging blocked)',
   description: 'LinkedIn API proxy (messaging blocked)',
   authType: 'oauth',
+  authMethods: ['oauth'],
   docs: 'https://learn.microsoft.com/en-us/linkedin/shared/integrations/people/profile-api',
   examples: [
     'GET /api/linkedin/{accountName}/me',

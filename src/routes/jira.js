@@ -10,6 +10,7 @@ export const serviceInfo = {
   shortDesc: 'Issues, projects, search',
   description: 'Jira API proxy',
   authType: 'api token',
+  authMethods: ['api_token'],
   docs: 'https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/',
   examples: [
     'GET /api/jira/{accountName}/myself',

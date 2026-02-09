@@ -25,6 +25,7 @@ import servicesRoutes from './routes/services.js';
 import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
 import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
+import llmRoutes from './routes/llm.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -83,6 +84,9 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
   req.apiKeyName = req.apiKeyInfo.name;
   next();
 }, mementoRoutes);
+
+// LLM proxy - require auth, no read-only enforcement (POST for completions)
+app.use('/api/llm', apiKeyAuth, llmRoutes);
 
 // Readme and skill endpoints - require auth
 app.use('/api/readme', apiKeyAuth, readmeRoutes);

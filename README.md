@@ -32,7 +32,7 @@ flowchart LR
 
 ## Security Notes
 
-> **IMPORTANT: Do NOT run this service on the same machine as your AI agents (clawdbot, moltbot, openclaw, etc.).** If an agent has local access to the agentgate box, it could potentially read the database file directly, bypassing all security controls. Run this gateway on a separate, isolated machine that agents can only reach over the network.
+> **IMPORTANT: Do NOT run this service on the same machine as your AI agents (clawdbot, moltbot, openclaw, etc.).** If an agent has local access to the agentgate box, it could potentially read the database file directly, bypassing all security controls. Run this gateway on a separate, isolated machine or container that agents can only reach over the network.
 
 - All write operations require human approval via the admin UI
 - Agents cannot approve their own requests
