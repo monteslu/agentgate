@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth, addQueueWarning, getQueueWarnings } from '../lib/db.js';
+import { createQueueEntry, getQueueEntry, getAccountCredentials, listQueueEntriesBySubmitter, updateQueueStatus, getSharedQueueVisibility, listAllQueueEntries, getAgentWithdrawEnabled, checkServiceAccess, checkBypassAuth, markAutoApproved, addQueueWarning, getQueueWarnings } from '../lib/db.js';
 import { notifyAgentQueueWarning } from '../lib/agentNotifier.js';
 import { emitCountUpdate, emitEvent } from '../lib/socketManager.js';
 import { executeQueueEntry } from '../lib/queueExecutor.js';
@@ -88,9 +88,10 @@ router.post('/:service/:accountName/submit', async (req, res) => {
     // Create the queue entry
     const entry = createQueueEntry(service, accountName, requests, comment, submittedBy);
 
-    // If bypass enabled, execute immediately
+    // If bypass enabled, auto-approve with audit trail
     if (hasBypass) {
       try {
+        markAutoApproved(entry.id);
         updateQueueStatus(entry.id, 'approved');
         await executeQueueEntry({ ...entry, status: 'approved' });
         const updatedEntry = getQueueEntry(entry.id);
@@ -100,7 +101,7 @@ router.post('/:service/:accountName/submit', async (req, res) => {
         return res.status(200).json({
           id: entry.id,
           status: updatedEntry.status,
-          message: 'Request executed immediately (bypass_auth enabled)',
+          message: 'Request auto-approved and executed (bypass_auth)',
           bypassed: true,
           results: updatedEntry.results
         });
