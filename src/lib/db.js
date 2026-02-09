@@ -233,7 +233,7 @@ try {
       const insertWarning = db.prepare('INSERT INTO queue_warnings (agent_id, message, created_at, queue_id) VALUES (?, ?, ?, ?)');
       for (const w of oldWarnings) {
         const newQueueId = wqMap.get(w.queue_id);
-        if (newQueueId !== null) {
+        if (newQueueId !== undefined && newQueueId !== null) {
           insertWarning.run(w.agent_id, w.message, w.created_at, newQueueId);
         }
       }
@@ -289,7 +289,7 @@ try {
       const insertRecip = db.prepare('INSERT INTO broadcast_recipients (broadcast_id, to_agent, status, delivered_at, error_message) VALUES (?, ?, ?, ?, ?)');
       for (const r of oldRecipients) {
         const newBId = bMap.get(r.broadcast_id);
-        if (newBId !== null) {
+        if (newBId !== undefined && newBId !== null) {
           insertRecip.run(newBId, r.to_agent, r.status, r.delivered_at, r.error_message);
         }
       }
