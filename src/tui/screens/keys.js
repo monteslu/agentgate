@@ -25,7 +25,7 @@ async function createKeyScreen() {
 
     const result = await createApiKey(name.trim());
     console.log(`\n✅ API key created for "${name.trim()}"`);
-    console.log(`\n  ⚠️  Save this key — it won't be shown again:\n`);
+    console.log("\n  ⚠️  Save this key — it won't be shown again:\n");
     console.log(`  ${result.key}\n`);
   } catch (err) {
     if (handleCancel(err)) return;
@@ -67,13 +67,12 @@ async function deleteKeyScreen(keys) {
 
 async function toggleKeyScreen(keys) {
   try {
-    const toggleable = keys.filter(k => true);
-    if (toggleable.length === 0) {
+    if (keys.length === 0) {
       console.log('\n  No keys to toggle.\n');
       return;
     }
 
-    const choices = toggleable.map(k => ({
+    const choices = keys.map(k => ({
       name: k.id,
       message: `${k.name} — currently ${k.enabled === 0 ? 'DISABLED' : 'enabled'}`
     }));
