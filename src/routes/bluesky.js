@@ -11,6 +11,7 @@ export const serviceInfo = {
   shortDesc: 'Timeline, posts, profile (DMs blocked)',
   description: 'Bluesky/AT Protocol proxy (DMs blocked)',
   authType: 'app password',
+  authMethods: ['app_password'],
   docs: 'https://docs.bsky.app/docs/api/',
   examples: [
     'GET /api/bluesky/{accountName}/app.bsky.feed.getTimeline',

@@ -12,6 +12,7 @@ export const serviceInfo = {
   shortDesc: 'Subreddits, posts, comments (DMs blocked)',
   description: 'Reddit API proxy (DMs blocked)',
   authType: 'oauth',
+  authMethods: ['oauth'],
   docs: 'https://www.reddit.com/dev/api/',
   examples: [
     'GET /api/reddit/{accountName}/api/v1/me',
