@@ -71,7 +71,7 @@ const db = new Database(dbPath);
 // Initialize other tables first
 db.exec(`
   CREATE TABLE IF NOT EXISTS service_accounts (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT NOT NULL,
     name TEXT NOT NULL,
     credentials TEXT NOT NULL,
@@ -87,7 +87,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS write_queue (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT NOT NULL,
     account_name TEXT NOT NULL,
     requests TEXT NOT NULL,
@@ -105,7 +105,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS agent_messages (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_agent TEXT NOT NULL,
     to_agent TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -160,7 +160,7 @@ db.exec(`
 
   -- Broadcast history
   CREATE TABLE IF NOT EXISTS broadcasts (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_agent TEXT NOT NULL,
     message TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -170,7 +170,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS broadcast_recipients (
-    broadcast_id TEXT NOT NULL,
+    broadcast_id INTEGER NOT NULL,
     to_agent TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     delivered_at TEXT,
@@ -181,7 +181,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS queue_warnings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    queue_id TEXT NOT NULL,
+    queue_id INTEGER NOT NULL,
     agent_id TEXT NOT NULL,
     message TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -193,6 +193,146 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_broadcasts_from
   ON broadcasts(from_agent, created_at DESC);
 `);
+
+// ============================================
+// Migration: TEXT PK → INTEGER PK AUTOINCREMENT
+// ============================================
+try {
+  const wqInfo = db.prepare('PRAGMA table_info(write_queue)').all();
+  const wqIdCol = wqInfo.find(c => c.name === 'id');
+  if (wqIdCol && wqIdCol.type === 'TEXT') {
+    console.log('Migrating TEXT primary keys to INTEGER AUTOINCREMENT...');
+    db.transaction(() => {
+      // 1. write_queue (has FK from queue_warnings)
+      db.exec('ALTER TABLE write_queue RENAME TO write_queue_old');
+      db.exec(`CREATE TABLE write_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service TEXT NOT NULL,
+        account_name TEXT NOT NULL,
+        requests TEXT NOT NULL,
+        comment TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        rejection_reason TEXT,
+        results TEXT,
+        submitted_by TEXT,
+        submitted_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TEXT,
+        completed_at TEXT,
+        notified INTEGER DEFAULT 0,
+        notified_at TEXT,
+        notify_error TEXT
+      )`);
+      db.exec(`INSERT INTO write_queue (service, account_name, requests, comment, status, rejection_reason, results, submitted_by, submitted_at, reviewed_at, completed_at, notified, notified_at, notify_error)
+        SELECT service, account_name, requests, comment, status, rejection_reason, results, submitted_by, submitted_at, reviewed_at, completed_at, notified, notified_at, notify_error FROM write_queue_old`);
+      // Migrate queue_warnings FK references
+      const oldWarnings = db.prepare('SELECT qw.*, wqo.rowid as old_rowid FROM queue_warnings qw LEFT JOIN write_queue_old wqo ON qw.queue_id = wqo.id').all();
+      db.exec('DELETE FROM queue_warnings');
+      // Build old_text_id -> new_int_id mapping
+      const idMap = db.prepare('SELECT wo.id as old_id, wn.id as new_id FROM write_queue_old wo JOIN write_queue wn ON wo.service = wn.service AND wo.account_name = wn.account_name AND wo.submitted_at = wn.submitted_at AND wo.requests = wn.requests').all();
+      const wqMap = new Map(idMap.map(r => [r.old_id, r.new_id]));
+      const insertWarning = db.prepare('INSERT INTO queue_warnings (agent_id, message, created_at, queue_id) VALUES (?, ?, ?, ?)');
+      for (const w of oldWarnings) {
+        const newQueueId = wqMap.get(w.queue_id);
+        if (newQueueId !== undefined && newQueueId !== null) {
+          insertWarning.run(w.agent_id, w.message, w.created_at, newQueueId);
+        }
+      }
+      db.exec('DROP TABLE write_queue_old');
+
+      // 2. agent_messages
+      db.exec('ALTER TABLE agent_messages RENAME TO agent_messages_old');
+      db.exec(`CREATE TABLE agent_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_agent TEXT NOT NULL,
+        to_agent TEXT NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        rejection_reason TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TEXT,
+        delivered_at TEXT,
+        read_at TEXT
+      )`);
+      db.exec(`INSERT INTO agent_messages (from_agent, to_agent, message, status, rejection_reason, created_at, reviewed_at, delivered_at, read_at)
+        SELECT from_agent, to_agent, message, status, rejection_reason, created_at, reviewed_at, delivered_at, read_at FROM agent_messages_old`);
+      db.exec('DROP TABLE agent_messages_old');
+
+      // 3. broadcasts (has FK from broadcast_recipients)
+      db.exec('ALTER TABLE broadcasts RENAME TO broadcasts_old');
+      db.exec(`CREATE TABLE broadcasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_agent TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        total_recipients INTEGER DEFAULT 0,
+        delivered_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0
+      )`);
+      db.exec(`INSERT INTO broadcasts (from_agent, message, created_at, total_recipients, delivered_count, failed_count)
+        SELECT from_agent, message, created_at, total_recipients, delivered_count, failed_count FROM broadcasts_old`);
+      // Migrate broadcast_recipients
+      const bIdMap = db.prepare('SELECT bo.id as old_id, bn.id as new_id FROM broadcasts_old bo JOIN broadcasts bn ON bo.from_agent = bn.from_agent AND bo.created_at = bn.created_at AND bo.message = bn.message').all();
+      const bMap = new Map(bIdMap.map(r => [r.old_id, r.new_id]));
+      const oldRecipients = db.prepare('SELECT * FROM broadcast_recipients').all();
+      db.exec('DELETE FROM broadcast_recipients');
+      // Recreate broadcast_recipients with INTEGER FK
+      db.exec('DROP TABLE broadcast_recipients');
+      db.exec(`CREATE TABLE broadcast_recipients (
+        broadcast_id INTEGER NOT NULL,
+        to_agent TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        delivered_at TEXT,
+        error_message TEXT,
+        PRIMARY KEY (broadcast_id, to_agent),
+        FOREIGN KEY (broadcast_id) REFERENCES broadcasts(id)
+      )`);
+      const insertRecip = db.prepare('INSERT INTO broadcast_recipients (broadcast_id, to_agent, status, delivered_at, error_message) VALUES (?, ?, ?, ?, ?)');
+      for (const r of oldRecipients) {
+        const newBId = bMap.get(r.broadcast_id);
+        if (newBId !== undefined && newBId !== null) {
+          insertRecip.run(newBId, r.to_agent, r.status, r.delivered_at, r.error_message);
+        }
+      }
+      db.exec('DROP TABLE broadcasts_old');
+
+      // 4. service_accounts
+      db.exec('ALTER TABLE service_accounts RENAME TO service_accounts_old');
+      db.exec(`CREATE TABLE service_accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service TEXT NOT NULL,
+        name TEXT NOT NULL,
+        credentials TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(service, name)
+      )`);
+      db.exec(`INSERT INTO service_accounts (service, name, credentials, created_at, updated_at)
+        SELECT service, name, credentials, created_at, updated_at FROM service_accounts_old`);
+      db.exec('DROP TABLE service_accounts_old');
+
+      // Recreate queue_warnings with INTEGER queue_id type
+      db.exec('ALTER TABLE queue_warnings RENAME TO queue_warnings_old');
+      db.exec(`CREATE TABLE queue_warnings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        queue_id INTEGER NOT NULL,
+        agent_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec(`INSERT INTO queue_warnings (queue_id, agent_id, message, created_at)
+        SELECT queue_id, agent_id, message, created_at FROM queue_warnings_old`);
+      db.exec('DROP TABLE queue_warnings_old');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_queue_warnings_queue ON queue_warnings(queue_id)');
+    })();
+    // Recreate indexes
+    db.exec('CREATE INDEX IF NOT EXISTS idx_agent_messages_recipient ON agent_messages(to_agent, status)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_broadcasts_from ON broadcasts(from_agent, created_at DESC)');
+    console.log('TEXT → INTEGER PK migration complete.');
+  }
+} catch (err) {
+  console.error('Error during TEXT→INTEGER PK migration:', err.message);
+  throw err;
+}
 
 // Migrate write_queue table to add notification columns
 try {
@@ -381,15 +521,14 @@ export async function validateApiKey(key) {
 
 // Service Accounts
 export function setAccountCredentials(service, name, credentials) {
-  const id = nanoid();
   const json = JSON.stringify(credentials);
   db.prepare(`
-    INSERT INTO service_accounts (id, service, name, credentials)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO service_accounts (service, name, credentials)
+    VALUES (?, ?, ?)
     ON CONFLICT(service, name) DO UPDATE SET
       credentials = excluded.credentials,
       updated_at = CURRENT_TIMESTAMP
-  `).run(id, service, name, json);
+  `).run(service, name, json);
 }
 
 export function getAccountCredentials(service, name) {
@@ -495,12 +634,11 @@ export function getCookieSecret() {
 
 // Write Queue
 export function createQueueEntry(service, accountName, requests, comment, submittedBy) {
-  const id = nanoid();
-  db.prepare(`
-    INSERT INTO write_queue (id, service, account_name, requests, comment, submitted_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, service, accountName, JSON.stringify(requests), comment || null, submittedBy);
-  return { id, status: 'pending' };
+  const result = db.prepare(`
+    INSERT INTO write_queue (service, account_name, requests, comment, submitted_by)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(service, accountName, JSON.stringify(requests), comment || null, submittedBy);
+  return { id: Number(result.lastInsertRowid), status: 'pending' };
 }
 
 export function getQueueEntry(id) {
@@ -655,7 +793,6 @@ export function setMessagingMode(mode) {
 }
 
 export function createAgentMessage(fromAgent, toAgent, message) {
-  const id = nanoid();
   const mode = getMessagingMode();
 
   if (mode === 'off') {
@@ -666,12 +803,12 @@ export function createAgentMessage(fromAgent, toAgent, message) {
   const status = mode === 'open' ? 'delivered' : 'pending';
   const deliveredAt = mode === 'open' ? new Date().toISOString() : null;
 
-  db.prepare(`
-    INSERT INTO agent_messages (id, from_agent, to_agent, message, status, delivered_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, fromAgent, toAgent, message, status, deliveredAt);
+  const result = db.prepare(`
+    INSERT INTO agent_messages (from_agent, to_agent, message, status, delivered_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(fromAgent, toAgent, message, status, deliveredAt);
 
-  return { id, status };
+  return { id: Number(result.lastInsertRowid), status };
 }
 
 export function getAgentMessage(id) {
@@ -1348,12 +1485,12 @@ export function listServicesWithAccess() {
 // Broadcast History
 // ============================================
 
-export function createBroadcast(id, fromAgent, message, recipientCount) {
-  db.prepare(`
-    INSERT INTO broadcasts (id, from_agent, message, total_recipients)
-    VALUES (?, ?, ?, ?)
-  `).run(id, fromAgent, message, recipientCount);
-  return id;
+export function createBroadcast(fromAgent, message, recipientCount) {
+  const result = db.prepare(`
+    INSERT INTO broadcasts (from_agent, message, total_recipients)
+    VALUES (?, ?, ?)
+  `).run(fromAgent, message, recipientCount);
+  return Number(result.lastInsertRowid);
 }
 
 export function addBroadcastRecipient(broadcastId, toAgent, status, errorMessage = null) {
