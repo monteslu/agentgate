@@ -230,7 +230,9 @@ router.post('/broadcast', async (req, res) => {
   const delivered = [];
   const failed = [];
 
-  await Promise.all(recipients.map(async (agent) => {
+  const TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
+
+  await Promise.allSettled(recipients.map(async (agent) => {
     const payload = {
       type: 'broadcast',
       from: fromAgent,
@@ -241,6 +243,9 @@ router.post('/broadcast', async (req, res) => {
       mode: 'now'
     };
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
     try {
       const headers = { 'Content-Type': 'application/json' };
       if (agent.webhook_token) {
@@ -250,7 +255,8 @@ router.post('/broadcast', async (req, res) => {
       const response = await fetch(agent.webhook_url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: controller.signal
       });
 
       if (response.ok) {
@@ -262,8 +268,11 @@ router.post('/broadcast', async (req, res) => {
         addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
       }
     } catch (err) {
-      failed.push({ name: agent.name, error: err.message });
-      addBroadcastRecipient(broadcastId, agent.name, 'failed', err.message);
+      const errorMsg = err.name === 'AbortError' ? `Webhook timeout after ${TIMEOUT_MS}ms` : err.message;
+      failed.push({ name: agent.name, error: errorMsg });
+      addBroadcastRecipient(broadcastId, agent.name, 'failed', errorMsg);
+    } finally {
+      clearTimeout(timer);
     }
   }));
 
