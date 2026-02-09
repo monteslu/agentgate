@@ -1419,3 +1419,4 @@ export function clearBroadcasts() {
   db.prepare('DELETE FROM broadcast_recipients').run();
   return db.prepare('DELETE FROM broadcasts').run();
 }
+
