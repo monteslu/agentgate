@@ -351,7 +351,6 @@ export function getApiKeyById(id) {
 
 // Get counts of all data associated with an agent (for delete warning)
 export function getAgentDataCounts(agentName) {
-  const name = agentName;
   const nameLower = agentName.toLowerCase();
   return {
     messages: db.prepare('SELECT COUNT(*) as count FROM agent_messages WHERE LOWER(from_agent) = ? OR LOWER(to_agent) = ?').get(nameLower, nameLower)?.count || 0,
