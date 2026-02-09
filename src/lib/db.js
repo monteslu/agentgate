@@ -71,7 +71,7 @@ const db = new Database(dbPath);
 // Initialize other tables first
 db.exec(`
   CREATE TABLE IF NOT EXISTS service_accounts (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT NOT NULL,
     name TEXT NOT NULL,
     credentials TEXT NOT NULL,
@@ -87,7 +87,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS write_queue (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     service TEXT NOT NULL,
     account_name TEXT NOT NULL,
     requests TEXT NOT NULL,
@@ -105,7 +105,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS agent_messages (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_agent TEXT NOT NULL,
     to_agent TEXT NOT NULL,
     message TEXT NOT NULL,
@@ -160,7 +160,7 @@ db.exec(`
 
   -- Broadcast history
   CREATE TABLE IF NOT EXISTS broadcasts (
-    id TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     from_agent TEXT NOT NULL,
     message TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -170,7 +170,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS broadcast_recipients (
-    broadcast_id TEXT NOT NULL,
+    broadcast_id INTEGER NOT NULL,
     to_agent TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     delivered_at TEXT,
@@ -181,7 +181,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS queue_warnings (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    queue_id TEXT NOT NULL,
+    queue_id INTEGER NOT NULL,
     agent_id TEXT NOT NULL,
     message TEXT NOT NULL,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -417,15 +417,14 @@ export async function validateApiKey(key) {
 
 // Service Accounts
 export function setAccountCredentials(service, name, credentials) {
-  const id = nanoid();
   const json = JSON.stringify(credentials);
   db.prepare(`
-    INSERT INTO service_accounts (id, service, name, credentials)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO service_accounts (service, name, credentials)
+    VALUES (?, ?, ?)
     ON CONFLICT(service, name) DO UPDATE SET
       credentials = excluded.credentials,
       updated_at = CURRENT_TIMESTAMP
-  `).run(id, service, name, json);
+  `).run(service, name, json);
 }
 
 export function getAccountCredentials(service, name) {
@@ -531,12 +530,11 @@ export function getCookieSecret() {
 
 // Write Queue
 export function createQueueEntry(service, accountName, requests, comment, submittedBy) {
-  const id = nanoid();
-  db.prepare(`
-    INSERT INTO write_queue (id, service, account_name, requests, comment, submitted_by)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, service, accountName, JSON.stringify(requests), comment || null, submittedBy);
-  return { id, status: 'pending' };
+  const result = db.prepare(`
+    INSERT INTO write_queue (service, account_name, requests, comment, submitted_by)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(service, accountName, JSON.stringify(requests), comment || null, submittedBy);
+  return { id: Number(result.lastInsertRowid), status: 'pending' };
 }
 
 export function getQueueEntry(id) {
@@ -691,7 +689,6 @@ export function setMessagingMode(mode) {
 }
 
 export function createAgentMessage(fromAgent, toAgent, message) {
-  const id = nanoid();
   const mode = getMessagingMode();
 
   if (mode === 'off') {
@@ -702,12 +699,12 @@ export function createAgentMessage(fromAgent, toAgent, message) {
   const status = mode === 'open' ? 'delivered' : 'pending';
   const deliveredAt = mode === 'open' ? new Date().toISOString() : null;
 
-  db.prepare(`
-    INSERT INTO agent_messages (id, from_agent, to_agent, message, status, delivered_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, fromAgent, toAgent, message, status, deliveredAt);
+  const result = db.prepare(`
+    INSERT INTO agent_messages (from_agent, to_agent, message, status, delivered_at)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(fromAgent, toAgent, message, status, deliveredAt);
 
-  return { id, status };
+  return { id: Number(result.lastInsertRowid), status };
 }
 
 export function getAgentMessage(id) {
@@ -1384,12 +1381,12 @@ export function listServicesWithAccess() {
 // Broadcast History
 // ============================================
 
-export function createBroadcast(id, fromAgent, message, recipientCount) {
-  db.prepare(`
-    INSERT INTO broadcasts (id, from_agent, message, total_recipients)
-    VALUES (?, ?, ?, ?)
-  `).run(id, fromAgent, message, recipientCount);
-  return id;
+export function createBroadcast(fromAgent, message, recipientCount) {
+  const result = db.prepare(`
+    INSERT INTO broadcasts (from_agent, message, total_recipients)
+    VALUES (?, ?, ?)
+  `).run(fromAgent, message, recipientCount);
+  return Number(result.lastInsertRowid);
 }
 
 export function addBroadcastRecipient(broadcastId, toAgent, status, errorMessage = null) {

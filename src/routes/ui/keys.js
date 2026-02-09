@@ -752,7 +752,10 @@ function renderKeysPage(keys, error = null, newKey = null) {
 
           const tbody = document.getElementById('keys-tbody');
           const count = tbody ? tbody.querySelectorAll('tr').length : 0;
-          document.querySelector('.card:last-of-type h3').textContent = 'Existing Keys (' + count + ')';
+          const heading = document.querySelector('.card:last-of-type h3');
+          if (heading) {
+            heading.textContent = 'Existing Keys (' + count + ')';
+          }
 
           if (count === 0) {
             const table = document.querySelector('.keys-table');

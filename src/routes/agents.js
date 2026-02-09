@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { nanoid } from 'nanoid';
 import {
   getMessagingMode,
   createAgentMessage,
@@ -224,8 +223,7 @@ router.post('/broadcast', async (req, res) => {
   }
 
   // Create broadcast record
-  const broadcastId = nanoid();
-  createBroadcast(broadcastId, fromAgent, message, recipients.length);
+  const broadcastId = createBroadcast(fromAgent, message, recipients.length);
 
   const delivered = [];
   const failed = [];
