@@ -349,10 +349,47 @@ export function getApiKeyById(id) {
   return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, created_at FROM api_keys WHERE id = ?').get(id);
 }
 
+// Get counts of all data associated with an agent (for delete warning)
+export function getAgentDataCounts(agentName) {
+  const name = agentName;
+  const nameLower = agentName.toLowerCase();
+  return {
+    messages: db.prepare('SELECT COUNT(*) as count FROM agent_messages WHERE LOWER(from_agent) = ? OR LOWER(to_agent) = ?').get(nameLower, nameLower)?.count || 0,
+    queueEntries: db.prepare('SELECT COUNT(*) as count FROM write_queue WHERE LOWER(submitted_by) = ?').get(nameLower)?.count || 0,
+    mementos: db.prepare('SELECT COUNT(*) as count FROM mementos WHERE LOWER(agent_id) = ?').get(nameLower)?.count || 0,
+    broadcasts: db.prepare('SELECT COUNT(*) as count FROM broadcasts WHERE LOWER(from_agent) = ?').get(nameLower)?.count || 0,
+    broadcastRecipients: db.prepare('SELECT COUNT(*) as count FROM broadcast_recipients WHERE LOWER(to_agent) = ?').get(nameLower)?.count || 0,
+    warnings: db.prepare('SELECT COUNT(*) as count FROM queue_warnings WHERE LOWER(agent_id) = ?').get(nameLower)?.count || 0,
+    serviceAccess: db.prepare('SELECT COUNT(*) as count FROM service_agent_access WHERE LOWER(agent_name) = ?').get(nameLower)?.count || 0
+  };
+}
+
+// Cascade delete all data associated with an agent
+export function cascadeDeleteAgentData(agentName) {
+  const nameLower = agentName.toLowerCase();
+  const deleteAll = db.transaction(() => {
+    db.prepare('DELETE FROM agent_messages WHERE LOWER(from_agent) = ? OR LOWER(to_agent) = ?').run(nameLower, nameLower);
+    db.prepare('DELETE FROM write_queue WHERE LOWER(submitted_by) = ?').run(nameLower);
+    // Mementos cascade deletes memento_keywords via FK
+    db.prepare('DELETE FROM mementos WHERE LOWER(agent_id) = ?').run(nameLower);
+    // Delete broadcast recipients first, then broadcasts
+    db.prepare('DELETE FROM broadcast_recipients WHERE LOWER(to_agent) = ?').run(nameLower);
+    const broadcastIds = db.prepare('SELECT id FROM broadcasts WHERE LOWER(from_agent) = ?').all(nameLower);
+    for (const b of broadcastIds) {
+      db.prepare('DELETE FROM broadcast_recipients WHERE broadcast_id = ?').run(b.id);
+    }
+    db.prepare('DELETE FROM broadcasts WHERE LOWER(from_agent) = ?').run(nameLower);
+    db.prepare('DELETE FROM queue_warnings WHERE LOWER(agent_id) = ?').run(nameLower);
+    db.prepare('DELETE FROM service_agent_access WHERE LOWER(agent_name) = ?').run(nameLower);
+  });
+  deleteAll();
+}
+
 export function deleteApiKey(id) {
-  // Get the agent name before deleting so we can clean up the avatar
+  // Get the agent name before deleting so we can clean up the avatar and related data
   const agent = getApiKeyById(id);
   if (agent?.name) {
+    cascadeDeleteAgentData(agent.name);
     deleteAgentAvatar(agent.name);
   }
   return db.prepare('DELETE FROM api_keys WHERE id = ?').run(id);
