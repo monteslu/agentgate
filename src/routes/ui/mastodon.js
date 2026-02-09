@@ -4,6 +4,22 @@ import { renderErrorPage } from './shared.js';
 export function registerRoutes(router, baseUrl) {
   const DEFAULT_SCOPES = 'read write:statuses';
 
+  // Simple auth: paste an access token directly (no OAuth dance)
+  router.post('/mastodon/token-setup', (req, res) => {
+    const { accountName, instance, accessToken } = req.body;
+    if (!accountName || !instance || !accessToken) {
+      return res.status(400).send('Account name, instance, and access token required');
+    }
+
+    const cleanInstance = instance.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    setAccountCredentials('mastodon', accountName, {
+      instance: cleanInstance,
+      accessToken,
+      authStatus: 'success'
+    });
+    res.redirect('/ui');
+  });
+
   router.post('/mastodon/setup', async (req, res) => {
     const { accountName, instance, scopes } = req.body;
     if (!accountName || !instance) {
@@ -173,16 +189,31 @@ export function renderCard(accounts, _baseUrl) {
     <details>
       <summary>Add Mastodon Account</summary>
       <div style="margin-top: 15px;">
-        <p class="help">Enter your Mastodon instance (e.g., fosstodon.org, mastodon.social)</p>
-        <form method="POST" action="/ui/mastodon/setup">
+        <p class="help">Paste an access token from your instance's settings. Go to <strong>Preferences → Development → New Application</strong>, create an app with <code>read</code> + <code>write:statuses</code> scopes, then copy the access token.</p>
+        <form method="POST" action="/ui/mastodon/token-setup">
           <label>Account Name</label>
           <input type="text" name="accountName" placeholder="main, tech, etc." required>
           <label>Instance</label>
           <input type="text" name="instance" placeholder="fosstodon.org" required>
-          <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(space separated)</span></label>
-          <input type="text" name="scopes" placeholder="read write:statuses" value="read write:statuses">
+          <label>Access Token</label>
+          <input type="password" name="accessToken" placeholder="Paste your access token" required>
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
+        <details style="margin-top: 16px;">
+          <summary style="color: #9ca3af; font-size: 13px;">Advanced: Use OAuth flow instead</summary>
+          <div style="margin-top: 12px;">
+            <p class="help">This will register an OAuth app and redirect you to authorize. Use this if you prefer not to create a token manually.</p>
+            <form method="POST" action="/ui/mastodon/setup">
+              <label>Account Name</label>
+              <input type="text" name="accountName" placeholder="main, tech, etc." required>
+              <label>Instance</label>
+              <input type="text" name="instance" placeholder="fosstodon.org" required>
+              <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(space separated)</span></label>
+              <input type="text" name="scopes" placeholder="read write:statuses" value="read write:statuses">
+              <button type="submit" class="btn-primary">Add via OAuth</button>
+            </form>
+          </div>
+        </details>
       </div>
     </details>
   </div>`;

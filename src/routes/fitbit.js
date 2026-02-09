@@ -12,6 +12,7 @@ export const serviceInfo = {
   shortDesc: 'Activity, sleep, heart rate, profile',
   description: 'Fitbit API proxy',
   authType: 'oauth',
+  authMethods: ['oauth'],
   docs: 'https://dev.fitbit.com/build/reference/web-api/',
   examples: [
     'GET /api/fitbit/{accountName}/1/user/-/profile.json',
