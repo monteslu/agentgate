@@ -24,10 +24,16 @@ import webhooksRoutes from './routes/webhooks.js';
 import servicesRoutes from './routes/services.js';
 import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
+import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3050;
+
+// Gateway proxy — transparent reverse proxy to agent gateways
+// Mounted BEFORE body parsers so request bodies pass through untouched
+// No API key auth — the target gateway handles its own authentication
+app.use('/px/:proxyId', createProxyRouter());
 
 app.use(express.json({
   limit: '10mb',
@@ -100,6 +106,10 @@ const server = app.listen(PORT, async () => {
   // Initialize socket.io for real-time updates
   initSocket(server);
   console.log('Socket.io initialized for real-time updates');
+
+  // Set up WebSocket proxy for agent gateways (after socket.io)
+  setupWebSocketProxy(server);
+  console.log('Gateway proxy WebSocket handler initialized');
 
   // Start tunnels if configured
   try {
