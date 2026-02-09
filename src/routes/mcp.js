@@ -18,9 +18,7 @@ import {
   getMementosByIds
 } from '../services/mementoService.js';
 import {
-  listAccessibleServices,
-  getServiceAccess,
-  checkBypassStatus
+  listAccessibleServices
 } from '../services/serviceService.js';
 import {
   getMessagesForAgent,
@@ -183,11 +181,9 @@ function createMCPServer(agentName) {
 
   // Register services tool
   server.registerTool('services', {
-    description: 'AgentGate secure service access: read from connected services (GitHub, Bluesky, Mastodon, etc.) without ever seeing credentials - they stay on the gateway. Actions: whoami (your identity and bio), list (available services), get_access, check_bypass',
+    description: 'AgentGate secure service access: read from connected services (GitHub, Bluesky, Mastodon, etc.) without ever seeing credentials - they stay on the gateway. Actions: whoami (your identity and bio), list (available services with bypass_auth status)',
     inputSchema: {
-      action: z.enum(['whoami', 'list', 'get_access', 'check_bypass']).describe('Operation to perform'),
-      service: z.string().optional().describe('Service name (required for get_access/check_bypass)'),
-      account: z.string().optional().describe('Account name (required for get_access/check_bypass)')
+      action: z.enum(['whoami', 'list']).describe('Operation to perform')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
@@ -623,16 +619,6 @@ async function handleServicesAction(agentName, args) {
     case 'list': {
       const services = listAccessibleServices(agentName, { includeDocs: true });
       return toolResponse({ services });
-    }
-
-    case 'get_access': {
-      const result = getServiceAccess(agentName, args.service, args.account);
-      return toolResponse(result);
-    }
-
-    case 'check_bypass': {
-      const result = checkBypassStatus(agentName, args.service, args.account);
-      return toolResponse(result);
     }
 
     default:
