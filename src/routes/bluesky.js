@@ -35,6 +35,78 @@ const BLOCKED_PATTERNS = [
   /^com\.atproto\.admin/       // admin endpoints
 ];
 
+// Simplify timeline/feed responses
+function simplifyFeed(data) {
+  if (!data?.feed) return data;
+  return {
+    cursor: data.cursor,
+    posts: data.feed.map(item => {
+      const post = item.post;
+      const record = post.record || {};
+      return {
+        uri: post.uri,
+        cid: post.cid,
+        author: {
+          handle: post.author?.handle,
+          displayName: post.author?.displayName
+        },
+        text: record.text || '',
+        createdAt: record.createdAt,
+        replyCount: post.replyCount || 0,
+        repostCount: post.repostCount || 0,
+        likeCount: post.likeCount || 0,
+        hasImages: !!(record.embed?.images?.length || record.embed?.media?.images?.length),
+        isRepost: !!item.reason?.by,
+        isReply: !!record.reply
+      };
+    })
+  };
+}
+
+// Simplify profile response
+function simplifyProfile(data) {
+  if (!data?.did) return data;
+  return {
+    did: data.did,
+    handle: data.handle,
+    displayName: data.displayName,
+    description: data.description,
+    avatar: data.avatar,
+    followersCount: data.followersCount,
+    followsCount: data.followsCount,
+    postsCount: data.postsCount
+  };
+}
+
+// Simplify single post/thread
+function simplifyThread(data) {
+  if (!data?.thread?.post) return data;
+  const post = data.thread.post;
+  const record = post.record || {};
+  return {
+    post: {
+      uri: post.uri,
+      cid: post.cid,
+      author: {
+        handle: post.author?.handle,
+        displayName: post.author?.displayName
+      },
+      text: record.text || '',
+      createdAt: record.createdAt,
+      replyCount: post.replyCount || 0,
+      repostCount: post.repostCount || 0,
+      likeCount: post.likeCount || 0,
+      embed: record.embed,
+      facets: record.facets
+    },
+    replies: data.thread.replies?.map(r => ({
+      uri: r.post?.uri,
+      author: r.post?.author?.handle,
+      text: r.post?.record?.text
+    })) || []
+  };
+}
+
 // Get a valid access token, refreshing if needed
 async function getAccessToken(accountName) {
   const creds = getAccountCredentials('bluesky', accountName);
@@ -107,7 +179,10 @@ router.get('/:accountName/*', async (req, res) => {
       }
     }
 
-    const queryString = new URLSearchParams(req.query).toString();
+    const raw = req.query.raw === 'true';
+    const queryParams = { ...req.query };
+    delete queryParams.raw;
+    const queryString = new URLSearchParams(queryParams).toString();
     const url = `${BSKY_API}/${path}${queryString ? '?' + queryString : ''}`;
 
     const response = await fetch(url, {
@@ -117,7 +192,19 @@ router.get('/:accountName/*', async (req, res) => {
       }
     });
 
-    const data = await response.json();
+    let data = await response.json();
+
+    // Simplify responses by default unless raw=true
+    if (!raw && response.ok) {
+      if (path === 'app.bsky.feed.getTimeline' || path === 'app.bsky.feed.getAuthorFeed') {
+        data = simplifyFeed(data);
+      } else if (path === 'app.bsky.actor.getProfile') {
+        data = simplifyProfile(data);
+      } else if (path === 'app.bsky.feed.getPostThread') {
+        data = simplifyThread(data);
+      }
+    }
+
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: 'Bluesky API request failed', message: error.message });

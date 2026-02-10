@@ -1,7 +1,18 @@
-import { validateApiKey, checkServiceAccess } from './db.js';
+import { validateApiKey, checkServiceAccess, getApiKeyByName } from './db.js';
 
 // API key auth middleware for /api routes
 export async function apiKeyAuth(req, res, next) {
+  // Allow internal MCP requests (from services read action)
+  if (req.headers['x-mcp-internal'] === 'true' && req.headers['x-agent-name']) {
+    const agentName = req.headers['x-agent-name'];
+    const agent = getApiKeyByName(agentName);
+    if (agent && agent.enabled) {
+      req.apiKeyInfo = { name: agent.name, enabled: true };
+      return next();
+    }
+    return res.status(403).json({ error: 'Invalid internal MCP request' });
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });

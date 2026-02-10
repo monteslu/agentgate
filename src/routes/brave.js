@@ -20,11 +20,53 @@ export const serviceInfo = {
   ]
 };
 
+// Simplify search results to just title, url, description (like Claude's WebSearch)
+function simplifyWebResults(data) {
+  if (!data?.web?.results) return { results: [] };
+  return {
+    query: data.query?.original || '',
+    results: data.web.results.map(r => ({
+      title: r.title,
+      url: r.url,
+      description: r.description?.replace(/<\/?strong>/g, '') || ''
+    }))
+  };
+}
+
+function simplifyNewsResults(data) {
+  if (!data?.results) return { results: [] };
+  return {
+    query: data.query?.original || '',
+    results: data.results.map(r => ({
+      title: r.title,
+      url: r.url,
+      description: r.description?.replace(/<\/?strong>/g, '') || '',
+      age: r.age || ''
+    }))
+  };
+}
+
+function simplifyImageResults(data) {
+  if (!data?.results) return { results: [] };
+  return {
+    query: data.query?.original || '',
+    results: data.results.map(r => ({
+      title: r.title,
+      url: r.url,
+      thumbnail: r.thumbnail?.src || '',
+      source: r.source || ''
+    }))
+  };
+}
+
 // Generic proxy handler for all Brave Search endpoints
-async function proxyBraveRequest(req, res, endpoint) {
+async function proxyBraveRequest(req, res, endpoint, simplifyFn = null) {
   try {
     const { accountName } = req.params;
-    const queryString = new URLSearchParams(req.query).toString();
+    const raw = req.query.raw === 'true';
+    const queryParams = { ...req.query };
+    delete queryParams.raw;
+    const queryString = new URLSearchParams(queryParams).toString();
     const url = `${BRAVE_API}/${endpoint}${queryString ? '?' + queryString : ''}`;
 
     const creds = getAccountCredentials('brave', accountName);
@@ -42,7 +84,13 @@ async function proxyBraveRequest(req, res, endpoint) {
 
     const response = await fetch(url, { headers });
     const data = await response.json();
-    res.status(response.status).json(data);
+
+    // Return simplified results by default, raw if requested
+    if (!raw && simplifyFn && response.ok) {
+      res.status(response.status).json(simplifyFn(data));
+    } else {
+      res.status(response.status).json(data);
+    }
   } catch (error) {
     res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
   }
@@ -50,17 +98,17 @@ async function proxyBraveRequest(req, res, endpoint) {
 
 // Web search
 router.get('/:accountName/web/search', (req, res) => {
-  proxyBraveRequest(req, res, 'web/search');
+  proxyBraveRequest(req, res, 'web/search', simplifyWebResults);
 });
 
 // Image search
 router.get('/:accountName/images/search', (req, res) => {
-  proxyBraveRequest(req, res, 'images/search');
+  proxyBraveRequest(req, res, 'images/search', simplifyImageResults);
 });
 
 // News search
 router.get('/:accountName/news/search', (req, res) => {
-  proxyBraveRequest(req, res, 'news/search');
+  proxyBraveRequest(req, res, 'news/search', simplifyNewsResults);
 });
 
 // Account info endpoint
