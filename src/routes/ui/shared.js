@@ -103,34 +103,67 @@ export function htmlHead(title, { includeSocket = false } = {}) {
 </head>`;
 }
 
-// Navigation header with real-time badge support
+// Main navigation header with hamburger menu
 export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off' } = {}) {
   return `
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <img src="/public/favicon.svg" alt="agentgate" style="height: 64px;">
-      <h1 style="margin: 0;">agentgate</h1>
+  <header class="site-header">
+    <div class="header-left">
+      <a href="/ui" class="logo-link">
+        <img src="/public/favicon.svg" alt="agentgate" class="logo">
+        <h1>agentgate</h1>
+      </a>
     </div>
-    <div style="display: flex; gap: 12px; align-items: center;">
-      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
+    <nav class="main-nav">
       <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
         Queue
         <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
       </a>
-      <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
-      <a href="/ui/llm" class="nav-btn nav-btn-default">LLM</a>
+      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
+      <a href="/ui" class="nav-btn nav-btn-default">Services</a>
       <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
         Messages
         <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
       </a>
-      <div class="nav-divider"></div>
-      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings">⚙️</a>
+    </nav>
+    <div class="header-right">
+      <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+    </div>
+    <div class="dropdown-menu" id="dropdown-menu">
+      <a href="/ui/llm" class="dropdown-item">LLM Providers</a>
+      <a href="/ui/settings" class="dropdown-item">Settings</a>
+      <div class="dropdown-divider"></div>
       <form method="POST" action="/ui/logout" style="margin: 0;">
-        <button type="submit" class="nav-btn nav-btn-danger">Logout</button>
+        <button type="submit" class="dropdown-item dropdown-item-danger">Logout</button>
       </form>
     </div>
-  </div>`;
+  </header>`;
+}
+
+// Script for hamburger menu toggle
+export function menuScript() {
+  return `
+  <script>
+    function toggleMenu() {
+      const menu = document.getElementById('dropdown-menu');
+      const hamburger = document.querySelector('.hamburger');
+      menu.classList.toggle('open');
+      hamburger.classList.toggle('open');
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('dropdown-menu');
+      const hamburger = document.querySelector('.hamburger');
+      if (!menu.contains(e.target) && !hamburger.contains(e.target)) {
+        menu.classList.remove('open');
+        hamburger.classList.remove('open');
+      }
+    });
+  </script>`;
 }
 
 // Socket.io client script for real-time badge updates
@@ -243,34 +276,7 @@ export function renderErrorPage(title, message, { backUrl = '/ui', backText = 'B
 </html>`;
 }
 
-// Simple navigation header for sub-pages (includes badge elements for socket.io updates)
-export function simpleNavHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, messagingMode = 'off' } = {}) {
-  return `
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <a href="/ui" style="display: flex; align-items: center; gap: 12px; text-decoration: none; color: inherit;">
-        <img src="/public/favicon.svg" alt="agentgate" style="height: 48px;">
-        <h1 style="margin: 0;">agentgate</h1>
-      </a>
-    </div>
-    <div style="display: flex; gap: 12px; align-items: center;">
-      <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
-      <a href="/ui/access" class="nav-btn nav-btn-default">Access</a>
-      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
-        Queue
-        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
-      </a>
-      <a href="/ui/mementos" class="nav-btn nav-btn-default">Mementos</a>
-      <a href="/ui/llm" class="nav-btn nav-btn-default">LLM</a>
-      <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
-        Messages
-        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
-      </a>
-      <div class="nav-divider"></div>
-      <a href="/ui#settings" class="nav-btn nav-btn-default" title="Settings">⚙️</a>
-      <form method="POST" action="/ui/logout" style="margin: 0;">
-        <button type="submit" class="nav-btn nav-btn-danger">Logout</button>
-      </form>
-    </div>
-  </div>`;
+// Simple navigation header - now just calls navHeader for consistency
+export function simpleNavHeader(options = {}) {
+  return navHeader(options);
 }

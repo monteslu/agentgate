@@ -146,28 +146,74 @@ export function renderCatalog(accounts) {
 
 /**
  * Render only cards for services that have configured accounts ("Your Services").
- * Each card gets an id="service-{id}" anchor for catalog links.
+ * Shows a simple list with Details link for each configured account.
  */
-export function renderConfiguredCards(accounts, baseUrl) {
-  const configuredServiceIds = new Set(accounts.map(a => a.service));
-  return services
-    .filter(s => configuredServiceIds.has(s.serviceName))
-    .map(s => {
-      // Wrap the card in a div with an anchor id
-      const card = s.renderCard(accounts, baseUrl);
-      return `<div id="service-${s.serviceName}">${card}</div>`;
-    })
-    .join('\n');
+export function renderConfiguredCards(accounts) {
+  // Group accounts by service
+  const byService = {};
+  for (const acc of accounts) {
+    if (!byService[acc.service]) byService[acc.service] = [];
+    byService[acc.service].push(acc);
+  }
+
+  const serviceIds = Object.keys(byService);
+  if (serviceIds.length === 0) {
+    return '<div class="empty-state-box">No services configured yet. Click a service below to add one.</div>';
+  }
+
+  return serviceIds.map(serviceId => {
+    const svcAccounts = byService[serviceId];
+    const svcModule = getServiceModule(serviceId);
+    const displayName = svcModule?.displayName || serviceId;
+    const icon = getServiceIcon(serviceId);
+
+    const accountRows = svcAccounts.map(acc => `
+      <div class="configured-account">
+        <span class="account-name">${escapeHtml(acc.name)}</span>
+        <a href="/ui/services/${acc.id}" class="btn-sm">Details</a>
+      </div>
+    `).join('');
+
+    return `
+      <div class="card configured-service" id="service-${serviceId}">
+        <div class="service-header">
+          <img class="service-icon" src="${icon}" alt="${escapeHtml(displayName)}">
+          <h3>${escapeHtml(displayName)}</h3>
+        </div>
+        ${accountRows}
+      </div>
+    `;
+  }).join('\n');
+}
+
+function getServiceIcon(service) {
+  const icons = {
+    github: '/public/icons/github.svg',
+    bluesky: '/public/icons/bluesky.svg',
+    mastodon: '/public/icons/mastodon.svg',
+    reddit: '/public/icons/reddit.svg',
+    google_calendar: '/public/icons/google-calendar.svg',
+    youtube: '/public/icons/youtube.svg',
+    linkedin: '/public/icons/linkedin.svg',
+    jira: '/public/icons/jira.svg',
+    fitbit: '/public/icons/fitbit.svg',
+    brave: '/public/icons/brave.svg',
+    google_search: '/public/icons/google-search.svg'
+  };
+  return icons[service] || '/public/favicon.svg';
+}
+
+function escapeHtml(str) {
+  if (typeof str !== 'string') str = String(str);
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 /**
- * Render cards for services with NO configured accounts (available to set up).
+ * Render setup cards for all services (allows adding accounts).
  * Each card gets an id="service-{id}" anchor for catalog links.
  */
 export function renderUnconfiguredCards(accounts, baseUrl) {
-  const configuredServiceIds = new Set(accounts.map(a => a.service));
   return services
-    .filter(s => !configuredServiceIds.has(s.serviceName))
     .map(s => {
       const card = s.renderCard(accounts, baseUrl);
       return `<div id="service-${s.serviceName}">${card}</div>`;

@@ -8,13 +8,13 @@ import {
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
 import { emitCountUpdate, emitEvent } from '../../lib/socketManager.js';
-import { escapeHtml, renderMarkdownLinks, statusBadge, autoApprovedBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
+import { escapeHtml, renderMarkdownLinks, statusBadge, autoApprovedBadge, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
 // Write Queue Management
 router.get('/', (req, res) => {
-  const filter = req.query.filter || 'all';
+  const filter = req.query.filter || 'pending';
   let entries;
   if (filter === 'all') {
     entries = listQueueEntries();
@@ -290,18 +290,14 @@ function renderQueuePage(entries, filter, counts = {}) {
     `;
   };
 
-  const filters = ['all', 'pending', 'auto-approved', 'completed', 'failed', 'rejected', 'withdrawn'];
+  const filters = ['pending', 'auto-approved', 'completed', 'failed', 'rejected', 'withdrawn', 'all'];
   const filterLinks = filters.map(f =>
     `<a href="/ui/queue?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');
 
   return `<!DOCTYPE html>
 <html>
-<head>
-  <title>agentgate - Write Queue</title>
-  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
-  <link rel="stylesheet" href="/public/style.css">
-  <script src="/socket.io/socket.io.js"></script>
+${htmlHead('Write Queue', { includeSocket: true })}
   <style>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: var(--gray-400); font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
@@ -346,9 +342,8 @@ function renderQueuePage(entries, filter, counts = {}) {
     .warning-time { color: #6b7280; font-size: 12px; margin-left: auto; }
     .warning-message { color: #e5e7eb; font-size: 14px; line-height: 1.5; }
   </style>
-</head>
 <body>
-  ${simpleNavHeader()}
+  ${navHeader()}
   <h2 style="margin-top: 0;">Write Queue</h2>
   <p>Review and approve write requests from agents.</p>
 
@@ -563,6 +558,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     });
   </script>
 ${socketScript()}
+${menuScript()}
 ${localizeScript()}
 </body>
 </html>`;

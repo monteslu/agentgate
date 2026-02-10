@@ -2,8 +2,8 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts } from '../../lib/db.js';
-import { escapeHtml, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
+import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -11,6 +11,22 @@ const router = Router();
 router.get('/', (req, res) => {
   const keys = listApiKeys();
   res.send(renderKeysPage(keys));
+});
+
+// Agent details page
+router.get('/:id', (req, res, next) => {
+  const { id } = req.params;
+  // Skip if this looks like a sub-route (avatar, counts, etc.)
+  if (id === 'create' || id === 'avatar') {
+    return next();
+  }
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).send(renderAgentNotFound(id));
+  }
+  const counts = getAgentDataCounts(agent.name);
+  const serviceAccess = getAgentServiceAccess(agent.name);
+  res.send(renderAgentDetailPage(agent, counts, serviceAccess));
 });
 
 router.post('/create', async (req, res) => {
@@ -358,115 +374,97 @@ function renderKeysPage(keys, error = null, newKey = null) {
     <tr id="key-${k.id}" class="${k.enabled === 0 ? 'agent-disabled' : ''}">
       <td>
         <div class="agent-with-avatar">
-          <span class="avatar-clickable" data-id="${k.id}" data-name="${escapeHtml(k.name)}" title="Click to change avatar">
-            ${renderAvatar(k.name, { size: 32 })}
-          </span>
-          <div>
-            <strong>${escapeHtml(k.name)}</strong>
-            ${k.enabled === 0 ? '<span class="status-disabled">Disabled</span>' : ''}
-          </div>
+          ${renderAvatar(k.name, { size: 32 })}
+          <strong>${escapeHtml(k.name)}</strong>
+          <span class="status-disabled" ${k.enabled === 0 ? '' : 'style="display:none"'}>Disabled</span>
         </div>
-      </td>
-      <td><code class="key-value">${escapeHtml(k.key_prefix)}</code></td>
-      <td>
-        ${k.bio ? `
-          <span class="bio-preview" title="${escapeHtml(k.bio)}">${escapeHtml(k.bio.substring(0, 30))}${k.bio.length > 30 ? '...' : ''}</span>
-        ` : `
-          <span class="bio-none">Not set</span>
-        `}
-        <button type="button" class="btn-sm bio-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-bio="${escapeHtml(k.bio || '')}">Edit</button>
-      </td>
-      <td>
-        ${k.webhook_url ? `
-          <span class="webhook-status webhook-configured" title="${escapeHtml(k.webhook_url)}" aria-label="Webhook configured">✓</span>
-        ` : `
-          <span class="webhook-status webhook-none" aria-label="No webhook configured">-</span>
-        `}
-        <button type="button" class="btn-sm webhook-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-url="${escapeHtml(k.webhook_url || '')}" data-token="${escapeHtml(k.webhook_token || '')}" title="Configure webhook" aria-label="Configure webhook">⚙</button>
-      </td>
-      <td>
-        ${k.gateway_proxy_enabled ? `
-          <span class="proxy-status proxy-configured" aria-label="Gateway proxy enabled">✓</span>
-        ` : `
-          <span class="proxy-status proxy-none" aria-label="Gateway proxy disabled">-</span>
-        `}
-        <button type="button" class="btn-sm proxy-btn" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-enabled="${k.gateway_proxy_enabled ? '1' : '0'}" data-proxy-id="${escapeHtml(k.gateway_proxy_id || '')}" data-proxy-url="${escapeHtml(k.gateway_proxy_url || '')}" title="Configure gateway proxy" aria-label="Configure gateway proxy">⚙</button>
       </td>
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
-        <button type="button" class="btn-sm btn-regen" data-id="${k.id}" data-name="${escapeHtml(k.name)}" data-prefix="${escapeHtml(k.key_prefix)}" title="Regenerate API Key" aria-label="Regenerate API Key">🔄</button>
-        <button type="button" class="btn-sm btn-toggle ${k.enabled === 0 ? 'btn-enable' : 'btn-disable'}" onclick="toggleEnabled('${k.id}')" title="${k.enabled === 0 ? 'Enable agent' : 'Disable agent'}" aria-label="${k.enabled === 0 ? 'Enable agent' : 'Disable agent'}">${k.enabled === 0 ? '✓' : '⏸'}</button>
-        <button type="button" class="delete-btn" onclick="deleteKey('${k.id}')" title="Delete agent" aria-label="Delete agent">&times;</button>
+        <label class="toggle">
+          <input type="checkbox" ${k.enabled ? 'checked' : ''} onchange="toggleEnabled('${k.id}', this)">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td>
+        <a href="/ui/keys/${k.id}" class="btn-sm">Details</a>
       </td>
     </tr>
   `;
 
   return `<!DOCTYPE html>
 <html>
-<head>
-  <title>agentgate - Agents</title>
-  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
-  <link rel="stylesheet" href="/public/style.css">
-  <script src="/socket.io/socket.io.js"></script>
+${htmlHead('Agents', { includeSocket: true })}
   <style>
-    .keys-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-    .keys-table th, .keys-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }
-    .keys-table th { font-weight: 600; color: #9ca3af; font-size: 14px; }
-    .key-value { background: #1f2937; padding: 4px 8px; border-radius: 4px; font-size: 13px; color: #e5e7eb; }
-    .new-key-banner { background: #065f46; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; color: #d1fae5; }
-    .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
-    .delete-btn { background: none; border: none; color: #f87171; font-size: 20px; cursor: pointer; padding: 0 4px; line-height: 1; font-weight: bold; }
-    .delete-btn:hover { color: #dc2626; }
-    .btn-regen { background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3); color: #fbbf24; font-size: 14px; padding: 4px 8px; cursor: pointer; border-radius: 4px; margin-right: 8px; }
-    .btn-regen:hover { background: rgba(245, 158, 11, 0.25); border-color: rgba(245, 158, 11, 0.5); }
-    .back-link { color: #a78bfa; text-decoration: none; font-weight: 500; }
-    .back-link:hover { text-decoration: underline; }
-    .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
-    .webhook-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
-    .webhook-configured { background: #065f46; color: #6ee7b7; }
-    .webhook-none { background: #374151; color: #9ca3af; }
-    .proxy-status { font-size: 12px; padding: 4px 8px; border-radius: 4px; margin-right: 8px; }
-    .proxy-configured { background: #164e63; color: #67e8f9; }
-    .proxy-none { background: #374151; color: #9ca3af; }
-    .bio-preview { font-size: 12px; color: #9ca3af; max-width: 150px; display: inline-block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
-    .bio-none { font-size: 12px; color: #6b7280; font-style: italic; }
-    .modal textarea { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; font-family: inherit; }
-    .modal textarea:focus { border-color: #6366f1; outline: none; }
-    .proxy-url-box { background: #111827; padding: 10px 12px; border-radius: 6px; margin: 12px 0; word-break: break-all; font-size: 13px; color: #67e8f9; display: flex; align-items: center; gap: 8px; }
-    .proxy-url-box code { flex: 1; }
-    .btn-copy-sm { background: #374151; border: 1px solid #4b5563; color: #d1d5db; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-    .btn-copy-sm:hover { background: #4b5563; }
-    .btn-sm { font-size: 12px; padding: 4px 8px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; }
-    .btn-sm:hover { background: #4338ca; }
-    .btn-test { padding: 10px 20px; background: #059669; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; }
-    .btn-test:hover { background: #047857; }
-    .btn-test:disabled { background: #6b7280; cursor: not-allowed; }
-    .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
-    .modal-overlay.active { display: flex; }
-    .modal { background: #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-    .modal h3 { margin: 0 0 16px 0; color: #f3f4f6; }
-    .modal label { display: block; margin-bottom: 4px; color: #d1d5db; font-size: 14px; }
-    .modal input { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; }
-    .modal input:focus { border-color: #6366f1; outline: none; }
-    .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
-    .modal .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
-    .avatar-clickable { cursor: pointer; display: inline-block; border-radius: 50%; transition: transform 0.15s ease, box-shadow 0.15s ease; }
-    .avatar-clickable:hover { transform: scale(1.1); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4); }
-
+    .add-agent-box {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .add-agent-box label {
+      color: #9ca3af;
+      font-size: 14px;
+      white-space: nowrap;
+      margin: 0;
+    }
+    .add-agent-box input {
+      flex: 1;
+      max-width: 280px;
+      padding: 8px 12px;
+      border: 1px solid #374151;
+      border-radius: 6px;
+      background: #111827;
+      color: #f3f4f6;
+      height: 38px;
+      box-sizing: border-box;
+    }
+    .add-agent-box input:focus {
+      border-color: #6366f1;
+      outline: none;
+    }
+    .add-agent-box .btn-primary {
+      height: 38px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+    }
+  </style>
+  <style>
+    .agents-table { width: 100%; border-collapse: collapse; }
+    .agents-table th, .agents-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .agents-table th { font-weight: 600; color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .agent-with-avatar { display: flex; align-items: center; gap: 12px; }
     .agent-disabled { opacity: 0.5; }
     .status-disabled { background: #7f1d1d; color: #fca5a5; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
-    .btn-toggle { margin-right: 8px; }
-    .btn-enable { background: #065f46; border-color: #10b981; color: #6ee7b7; }
-    .btn-enable:hover { background: #047857; }
-    .btn-disable { background: #7f1d1d; border-color: #ef4444; color: #fca5a5; }
-    .btn-disable:hover { background: #991b1b; }
+    .new-key-banner { background: #065f46; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; color: #d1fae5; }
+    .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
+    .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
+    .btn-sm { font-size: 12px; padding: 6px 12px; background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); border-radius: 4px; cursor: pointer; text-decoration: none; }
+    .btn-sm:hover { background: rgba(99,102,241,0.3); }
+
+    /* Toggle switch */
+    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
+    .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+    .toggle input:checked + .toggle-slider { background-color: #10b981; }
+    .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+    .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
+
+    /* Toast notifications */
+    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-size: 14px; z-index: 1000; opacity: 0; transform: translateY(20px); transition: opacity 0.3s, transform 0.3s; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background: #dc2626; }
+    .toast.success { background: #059669; }
   </style>
 </head>
 <body>
-  <div>
-    ${simpleNavHeader()}
-  </div>
-  <p>Manage API keys for your agents. Keys are hashed and can only be viewed once at creation.</p>
+  ${navHeader()}
 
   ${error ? `<div class="error-message">${escapeHtml(error)}</div>` : ''}
 
@@ -478,190 +476,43 @@ function renderKeysPage(keys, error = null, newKey = null) {
     </div>
   ` : ''}
 
-  <div class="card">
-    <h3>Create New Key</h3>
-    <form method="POST" action="/ui/keys/create" style="display: flex; gap: 12px; align-items: flex-end;">
-      <div style="flex: 1;">
-        <label>Key Name</label>
-        <input type="text" name="name" placeholder="e.g., clawdbot, moltbot, dev-agent" required>
-      </div>
-      <button type="submit" class="btn-primary">Create Key</button>
-    </form>
-  </div>
+  <form method="POST" action="/ui/keys/create" class="add-agent-box">
+    <label>New Agent</label>
+    <input type="text" name="name" placeholder="e.g., johnny-5, clawdbot, Her, Hal" required>
+    <button type="submit" class="btn-primary">Create</button>
+  </form>
 
   <div class="card">
-    <h3>Existing Keys (${keys.length})</h3>
+    <h3>Agents (${keys.length})</h3>
     ${keys.length === 0 ? `
-      <p style="color: var(--gray-500); text-align: center; padding: 20px;">No API keys yet. Create one above.</p>
+      <p style="color: #6b7280; text-align: center; padding: 20px;">No agents yet. Create one above.</p>
     ` : `
-      <table class="keys-table">
+      <table class="agents-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Key Prefix</th>
-            <th>Bio</th>
-            <th>Webhook</th>
-            <th>Proxy</th>
+            <th>Agent</th>
             <th>Created</th>
+            <th>Enabled</th>
             <th></th>
           </tr>
         </thead>
-        <tbody id="keys-tbody">
+        <tbody>
           ${keys.map(renderKeyRow).join('')}
         </tbody>
       </table>
     `}
   </div>
 
-  <!-- Bio Modal -->
-  <div id="bio-modal" class="modal-overlay">
-    <div class="modal">
-      <h3>Agent Bio for <span id="bio-agent-name"></span></h3>
-      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
-        Describe this agent's role or persona. This is shown to the agent via <code>whoami</code> so it knows its purpose.
-      </p>
-      <form id="bio-form">
-        <input type="hidden" id="bio-agent-id" name="id">
-        <label for="bio-text">Bio</label>
-        <textarea id="bio-text" name="bio" rows="4" placeholder="e.g., You are a cybersecurity expert focused on defensive strategies..." style="width: 100%; resize: vertical;"></textarea>
-        <p class="help-text">The agent will see this when it calls the whoami action</p>
-
-        <div class="modal-buttons">
-          <button type="button" class="btn-secondary" onclick="closeBioModal()">Cancel</button>
-          <button type="submit" class="btn-primary">Save Bio</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Webhook Modal -->
-  <div id="webhook-modal" class="modal-overlay">
-    <div class="modal">
-      <h3>Configure Webhook for <span id="modal-agent-name"></span></h3>
-      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
-        When messages or queue updates are ready, agentgate will POST to this URL.
-      </p>
-      <form id="webhook-form">
-        <input type="hidden" id="webhook-agent-id" name="id">
-        <label for="webhook-url">Webhook URL</label>
-        <input type="url" id="webhook-url" name="webhook_url" placeholder="https://your-agent-gateway.com/webhook">
-        <p class="help-text">The endpoint that will receive POST notifications</p>
-
-        <label for="webhook-token">Authorization Token (optional)</label>
-        <input type="text" id="webhook-token" name="webhook_token" placeholder="secret-token">
-        <p class="help-text">Sent as Bearer token in Authorization header</p>
-
-        <div class="modal-buttons">
-          <button type="button" class="btn-secondary" onclick="closeWebhookModal()">Cancel</button>
-          <button type="button" id="webhook-test-btn" class="btn-test" onclick="testWebhook()" style="display: none;">Test</button>
-          <button type="submit" class="btn-primary">Save Webhook</button>
-        </div>
-      </form>
-      <div id="webhook-test-result" style="margin-top: 12px; display: none;"></div>
-    </div>
-  </div>
-
-  <!-- Regenerate Key Modal -->
-  <div id="regen-modal" class="modal-overlay">
-    <div class="modal">
-      <h3>🔄 Regenerate API Key</h3>
-      <!-- Confirmation view -->
-      <div id="regen-confirm-view">
-        <p style="color: #fbbf24; font-size: 14px; margin-bottom: 16px; background: rgba(245, 158, 11, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.3);">
-          ⚠️ <strong>Warning:</strong> This will immediately invalidate the current API key. Any agents using it will lose access until updated with the new key.
-        </p>
-        <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-agent-name" style="color: #f3f4f6;"></strong></p>
-        <p style="color: #9ca3af; margin-bottom: 16px;">Current key: <code id="regen-key-prefix" style="background: #374151; padding: 2px 6px; border-radius: 4px;"></code></p>
-        <input type="hidden" id="regen-agent-id">
-        <div class="modal-buttons">
-          <button type="button" class="btn-secondary" onclick="closeRegenModal()">Cancel</button>
-          <button type="button" id="regen-confirm-btn" class="btn-danger" onclick="confirmRegenerate()">Regenerate Key</button>
-        </div>
-      </div>
-      <!-- Success view with new key -->
-      <div id="regen-success-view" style="display: none;">
-        <p style="color: #34d399; font-size: 14px; margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.3);">
-          ✅ <strong>Key regenerated!</strong> Copy it now - you won't be able to see it again.
-        </p>
-        <p style="color: #9ca3af; margin-bottom: 8px;">Agent: <strong id="regen-success-name" style="color: #f3f4f6;"></strong></p>
-        <div style="background: #1f2937; padding: 12px; border-radius: 8px; margin-bottom: 16px; word-break: break-all;">
-          <code id="regen-new-key" style="color: #34d399; font-size: 14px;"></code>
-        </div>
-        <div class="modal-buttons">
-          <button type="button" id="regen-copy-btn" class="btn-primary" onclick="copyRegenKey()">Copy to Clipboard</button>
-          <button type="button" class="btn-secondary" onclick="closeRegenModalAndRefresh()">Done</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Avatar Modal -->
-  <div id="avatar-modal" class="modal-overlay">
-    <div class="modal">
-      <h3>Avatar for <span id="avatar-agent-name"></span></h3>
-      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
-        Upload an image (PNG, JPG, GIF, WebP). Max size: 500KB.
-      </p>
-      <input type="hidden" id="avatar-agent-id">
-      
-      <div id="avatar-preview-container" style="text-align: center; margin-bottom: 16px;">
-        <div id="avatar-preview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; background: #374151; display: flex; align-items: center; justify-content: center; overflow: hidden;">
-          <span id="avatar-preview-text" style="color: #9ca3af;">No image</span>
-          <img id="avatar-preview-img" style="width: 100%; height: 100%; object-fit: cover; display: none;">
-        </div>
-      </div>
-      
-      <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" style="margin-bottom: 16px;">
-      <p class="help-text">Select an image file to upload</p>
-      
-      <div class="modal-buttons">
-        <button type="button" class="btn-secondary" onclick="closeAvatarModal()">Cancel</button>
-        <button type="button" id="avatar-delete-btn" class="btn-danger" onclick="deleteAvatar()" style="display: none;">Delete</button>
-        <button type="button" id="avatar-upload-btn" class="btn-primary" onclick="uploadAvatar()" disabled>Upload</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Proxy Modal -->
-  <div id="proxy-modal" class="modal-overlay">
-    <div class="modal">
-      <h3>Gateway Proxy for <span id="proxy-agent-name"></span></h3>
-      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
-        Expose this agent's OpenClaw gateway through AgentGate. Clients connect to the proxy URL and traffic is forwarded transparently.
-      </p>
-      <form id="proxy-form">
-        <input type="hidden" id="proxy-agent-id">
-
-        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; cursor: pointer;">
-          <input type="checkbox" id="proxy-enabled" style="width: auto; margin: 0;">
-          <span>Enable gateway proxy</span>
-        </label>
-
-        <div id="proxy-fields" style="display: none;">
-          <label for="proxy-url-input">Internal Gateway URL</label>
-          <input type="url" id="proxy-url-input" placeholder="http://localhost:18789">
-          <p class="help-text">The internal URL of the agent's OpenClaw gateway</p>
-
-          <div id="proxy-url-display" style="display: none;">
-            <label>Proxy URL <span style="color: #9ca3af; font-weight: normal;">(share with clients)</span></label>
-            <div class="proxy-url-box">
-              <code id="proxy-full-url"></code>
-              <button type="button" class="btn-copy-sm" onclick="copyProxyUrl()">Copy</button>
-            </div>
-            <button type="button" class="btn-sm" style="background: #7f1d1d; border: 1px solid rgba(239,68,68,0.3); margin-bottom: 12px;" onclick="regenProxyId()">Regenerate Proxy ID</button>
-            <p class="help-text" style="color: #fbbf24;">⚠️ Regenerating will break existing client connections</p>
-          </div>
-        </div>
-
-        <div class="modal-buttons">
-          <button type="button" class="btn-secondary" onclick="closeProxyModal()">Cancel</button>
-          <button type="submit" class="btn-primary">Save</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <div id="toast" class="toast"></div>
 
   <script>
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + type + ' show';
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
     function copyKey(key, btn) {
       navigator.clipboard.writeText(key).then(() => {
         const orig = btn.textContent;
@@ -670,209 +521,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
       });
     }
 
-    // Bio modal functions
-    function showBioModal(btn) {
-      document.getElementById('bio-agent-id').value = btn.dataset.id;
-      document.getElementById('bio-agent-name').textContent = btn.dataset.name;
-      document.getElementById('bio-text').value = btn.dataset.bio;
-      document.getElementById('bio-modal').classList.add('active');
-    }
-
-    function closeBioModal() {
-      document.getElementById('bio-modal').classList.remove('active');
-    }
-
-    document.querySelectorAll('.bio-btn').forEach(btn => {
-      btn.addEventListener('click', () => showBioModal(btn));
-    });
-
-    document.getElementById('bio-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = document.getElementById('bio-agent-id').value;
-      const bio = document.getElementById('bio-text').value;
-
-      const res = await fetch('/ui/keys/' + id + '/bio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ bio })
-      });
-      const data = await res.json();
-      if (data.success) {
-        closeBioModal();
-        window.location.reload();
-      } else {
-        alert(data.error || 'Failed to update bio');
-      }
-    });
-
-    document.getElementById('bio-modal').addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) {
-        closeBioModal();
-      }
-    });
-
-    // Webhook modal functions
-    function showWebhookModal(btn) {
-      document.getElementById('webhook-agent-id').value = btn.dataset.id;
-      document.getElementById('modal-agent-name').textContent = btn.dataset.name;
-      document.getElementById('webhook-url').value = btn.dataset.url;
-      document.getElementById('webhook-token').value = btn.dataset.token;
-      // Show test button if webhook URL is already configured
-      const testBtn = document.getElementById('webhook-test-btn');
-      const testResult = document.getElementById('webhook-test-result');
-      testBtn.style.display = btn.dataset.url ? 'inline-block' : 'none';
-      testResult.style.display = 'none';
-      testResult.innerHTML = '';
-      document.getElementById('webhook-modal').classList.add('active');
-    }
-
-    function closeWebhookModal() {
-      document.getElementById('webhook-modal').classList.remove('active');
-    }
-
-    // Regenerate key modal functions
-    let regenNewKey = null;
-
-    function showRegenModal(btn) {
-      document.getElementById('regen-agent-id').value = btn.dataset.id;
-      document.getElementById('regen-agent-name').textContent = btn.dataset.name;
-      document.getElementById('regen-key-prefix').textContent = btn.dataset.prefix;
-      // Reset to confirmation view
-      document.getElementById('regen-confirm-view').style.display = '';
-      document.getElementById('regen-success-view').style.display = 'none';
-      document.getElementById('regen-confirm-btn').disabled = false;
-      document.getElementById('regen-confirm-btn').textContent = 'Regenerate Key';
-      regenNewKey = null;
-      document.getElementById('regen-modal').classList.add('active');
-    }
-
-    function closeRegenModal() {
-      document.getElementById('regen-modal').classList.remove('active');
-    }
-
-    function closeRegenModalAndRefresh() {
-      closeRegenModal();
-      window.location.reload();
-    }
-
-    function copyRegenKey() {
-      if (!regenNewKey) return;
-      navigator.clipboard.writeText(regenNewKey).then(() => {
-        const btn = document.getElementById('regen-copy-btn');
-        const orig = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = orig, 1500);
-      });
-    }
-
-    async function confirmRegenerate() {
-      const id = document.getElementById('regen-agent-id').value;
-      const btn = document.getElementById('regen-confirm-btn');
-      btn.disabled = true;
-      btn.textContent = 'Regenerating...';
-
-      try {
-        const res = await fetch('/ui/keys/' + id + '/regenerate', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json' }
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          // Show success view with new key
-          regenNewKey = data.key;
-          document.getElementById('regen-success-name').textContent = data.name;
-          document.getElementById('regen-new-key').textContent = data.key;
-          document.getElementById('regen-confirm-view').style.display = 'none';
-          document.getElementById('regen-success-view').style.display = '';
-        } else {
-          alert(data.error || 'Failed to regenerate key');
-          btn.disabled = false;
-          btn.textContent = 'Regenerate Key';
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Regenerate Key';
-      }
-    }
-
-    document.querySelectorAll('.btn-regen').forEach(btn => {
-      btn.addEventListener('click', () => showRegenModal(btn));
-    });
-
-    document.getElementById('regen-modal').addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) {
-        closeRegenModal();
-      }
-    });
-
-    async function testWebhook() {
-      const id = document.getElementById('webhook-agent-id').value;
-      const testBtn = document.getElementById('webhook-test-btn');
-      const testResult = document.getElementById('webhook-test-result');
-      
-      testBtn.disabled = true;
-      testBtn.textContent = 'Testing...';
-      testResult.style.display = 'block';
-      testResult.innerHTML = '<span style="color: #9ca3af;">Sending test webhook...</span>';
-      
-      try {
-        const res = await fetch('/ui/keys/' + id + '/test-webhook', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json' }
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          testResult.innerHTML = '<span style="color: #34d399;">✓ ' + data.message + '</span>';
-        } else {
-          testResult.innerHTML = '<span style="color: #f87171;">✗ ' + data.message + '</span>';
-        }
-      } catch (err) {
-        testResult.innerHTML = '<span style="color: #f87171;">✗ Error: ' + err.message + '</span>';
-      } finally {
-        testBtn.disabled = false;
-        testBtn.textContent = 'Test';
-      }
-    }
-
-    document.querySelectorAll('.webhook-btn').forEach(btn => {
-      btn.addEventListener('click', () => showWebhookModal(btn));
-    });
-
-    document.getElementById('webhook-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const id = document.getElementById('webhook-agent-id').value;
-      const webhookUrl = document.getElementById('webhook-url').value;
-      const webhookToken = document.getElementById('webhook-token').value;
-
-      try {
-        const res = await fetch('/ui/keys/' + id + '/webhook', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ webhook_url: webhookUrl, webhook_token: webhookToken })
-        });
-        const data = await res.json();
-
-        if (data.success) {
-          closeWebhookModal();
-          window.location.reload();
-        } else {
-          alert(data.error || 'Failed to save webhook');
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    });
-
-    document.getElementById('webhook-modal').addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) {
-        closeWebhookModal();
-      }
-    });
-
-    async function toggleEnabled(id) {
+    async function toggleEnabled(id, checkbox) {
+      checkbox.disabled = true;
       try {
         const res = await fetch('/ui/keys/' + id + '/toggle-enabled', {
           method: 'POST',
@@ -880,307 +530,677 @@ function renderKeysPage(keys, error = null, newKey = null) {
         });
         const data = await res.json();
         if (data.success) {
-          window.location.reload();
-        } else {
-          alert(data.error || 'Failed to toggle agent status');
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
-
-    async function deleteKey(id) {
-      // Fetch data counts first
-      try {
-        const countsRes = await fetch('/ui/keys/' + id + '/counts', { headers: { 'Accept': 'application/json' } });
-        const countsData = await countsRes.json();
-        if (countsData.error) {
-          alert(countsData.error);
-          return;
-        }
-
-        const c = countsData.counts;
-        const items = [];
-        if (c.messages > 0) items.push(c.messages + ' message' + (c.messages > 1 ? 's' : ''));
-        if (c.queueEntries > 0) items.push(c.queueEntries + ' queue entr' + (c.queueEntries > 1 ? 'ies' : 'y'));
-        if (c.mementos > 0) items.push(c.mementos + ' memento' + (c.mementos > 1 ? 's' : ''));
-        if (c.broadcasts > 0) items.push(c.broadcasts + ' broadcast' + (c.broadcasts > 1 ? 's' : ''));
-        if (c.warnings > 0) items.push(c.warnings + ' warning' + (c.warnings > 1 ? 's' : ''));
-        if (c.serviceAccess > 0) items.push(c.serviceAccess + ' service access rule' + (c.serviceAccess > 1 ? 's' : ''));
-
-        let warning = '⚠️ DELETE AGENT: ' + countsData.name + '\\n\\n';
-        if (items.length > 0) {
-          warning += 'This will permanently delete:\\n- ' + items.join('\\n- ') + '\\n- API key access\\n\\n';
-        } else {
-          warning += 'This will permanently delete the API key.\\n\\n';
-        }
-        warning += 'Type the agent name to confirm:';
-
-        const confirmation = prompt(warning);
-        if (confirmation === null) return;
-        if (confirmation.toLowerCase() !== countsData.name.toLowerCase()) {
-          alert('Name does not match. Deletion cancelled.');
-          return;
-        }
-      } catch (err) {
-        // Fallback to simple confirm if counts endpoint fails
-        if (!confirm('Delete this API key? Any agents using it will lose access.')) return;
-      }
-
-      try {
-        const res = await fetch('/ui/keys/' + id, {
-          method: 'DELETE',
-          headers: { 'Accept': 'application/json' }
-        });
-        const data = await res.json();
-
-        if (data.success) {
           const row = document.getElementById('key-' + id);
-          if (row) row.remove();
-
-          const tbody = document.getElementById('keys-tbody');
-          const count = tbody ? tbody.querySelectorAll('tr').length : 0;
-          const heading = document.querySelector('.card:last-of-type h3');
-          if (heading) {
-            heading.textContent = 'Existing Keys (' + count + ')';
-          }
-
-          if (count === 0) {
-            const table = document.querySelector('.keys-table');
-            if (table) {
-              table.outerHTML = '<p style="color: #9ca3af; text-align: center; padding: 20px;">No API keys yet. Create one above.</p>';
-            }
+          const badge = row.querySelector('.status-disabled');
+          if (data.enabled) {
+            row.classList.remove('agent-disabled');
+            badge.style.display = 'none';
+          } else {
+            row.classList.add('agent-disabled');
+            badge.style.display = '';
           }
         } else {
-          alert(data.error || 'Failed to delete');
+          checkbox.checked = !checkbox.checked;
+          showToast(data.error || 'Failed to toggle', 'error');
         }
       } catch (err) {
-        alert('Error: ' + err.message);
+        checkbox.checked = !checkbox.checked;
+        showToast('Network error', 'error');
       }
+      checkbox.disabled = false;
     }
-
-    // Avatar functionality
-    let currentAvatarData = null;
-
-    function showAvatarModal(btn) {
-      const id = btn.dataset.id;
-      const name = btn.dataset.name;
-      document.getElementById('avatar-agent-id').value = id;
-      document.getElementById('avatar-agent-name').textContent = name;
-      document.getElementById('avatar-file').value = '';
-      document.getElementById('avatar-upload-btn').disabled = true;
-      currentAvatarData = null;
-      
-      // Try to load existing avatar
-      const img = document.getElementById('avatar-preview-img');
-      const text = document.getElementById('avatar-preview-text');
-      img.src = '/ui/keys/avatar/' + encodeURIComponent(name) + '?t=' + Date.now();
-      img.onload = function() {
-        img.style.display = 'block';
-        text.style.display = 'none';
-        document.getElementById('avatar-delete-btn').style.display = '';
-      };
-      img.onerror = function() {
-        img.style.display = 'none';
-        text.style.display = '';
-        document.getElementById('avatar-delete-btn').style.display = 'none';
-      };
-      
-      document.getElementById('avatar-modal').classList.add('active');
-    }
-
-    function closeAvatarModal() {
-      document.getElementById('avatar-modal').classList.remove('active');
-    }
-
-    document.querySelectorAll('.avatar-clickable').forEach(el => {
-      el.addEventListener('click', () => showAvatarModal(el));
-    });
-
-    document.getElementById('avatar-file').addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-      
-      if (file.size > 500 * 1024) {
-        alert('File too large. Maximum size is 500KB.');
-        e.target.value = '';
-        return;
-      }
-      
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        currentAvatarData = event.target.result;
-        const img = document.getElementById('avatar-preview-img');
-        const text = document.getElementById('avatar-preview-text');
-        img.src = currentAvatarData;
-        img.style.display = 'block';
-        text.style.display = 'none';
-        document.getElementById('avatar-upload-btn').disabled = false;
-      };
-      reader.readAsDataURL(file);
-    });
-
-    async function uploadAvatar() {
-      if (!currentAvatarData) return;
-      
-      const id = document.getElementById('avatar-agent-id').value;
-      const btn = document.getElementById('avatar-upload-btn');
-      btn.disabled = true;
-      btn.textContent = 'Uploading...';
-      
-      try {
-        const res = await fetch('/ui/keys/' + id + '/avatar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ avatar: currentAvatarData })
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          closeAvatarModal();
-          window.location.reload();
-        } else {
-          alert(data.error || 'Failed to upload avatar');
-          btn.disabled = false;
-          btn.textContent = 'Upload';
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-        btn.disabled = false;
-        btn.textContent = 'Upload';
-      }
-    }
-
-    async function deleteAvatar() {
-      if (!confirm('Delete this avatar?')) return;
-      
-      const id = document.getElementById('avatar-agent-id').value;
-      
-      try {
-        const res = await fetch('/ui/keys/' + id + '/avatar', {
-          method: 'DELETE',
-          headers: { 'Accept': 'application/json' }
-        });
-        const data = await res.json();
-        
-        if (data.success) {
-          closeAvatarModal();
-          window.location.reload();
-        } else {
-          alert(data.error || 'Failed to delete avatar');
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
-
-    document.getElementById('avatar-modal').addEventListener('click', (e) => {
-      if (e.target.classList.contains('modal-overlay')) {
-        closeAvatarModal();
-      }
-    });
-
-    // Proxy modal functions
-    function showProxyModal(btn) {
-      document.getElementById('proxy-agent-id').value = btn.dataset.id;
-      document.getElementById('proxy-agent-name').textContent = btn.dataset.name;
-      var enabled = btn.dataset.enabled === '1';
-      document.getElementById('proxy-enabled').checked = enabled;
-      document.getElementById('proxy-url-input').value = btn.dataset.proxyUrl || '';
-      toggleProxyFields();
-      if (enabled && btn.dataset.proxyId) {
-        showProxyUrl(btn.dataset.proxyId);
-      }
-      document.getElementById('proxy-modal').classList.add('active');
-    }
-
-    function closeProxyModal() {
-      document.getElementById('proxy-modal').classList.remove('active');
-    }
-
-    function toggleProxyFields() {
-      var enabled = document.getElementById('proxy-enabled').checked;
-      document.getElementById('proxy-fields').style.display = enabled ? '' : 'none';
-    }
-
-    function showProxyUrl(proxyId) {
-      if (!proxyId) {
-        document.getElementById('proxy-url-display').style.display = 'none';
-        return;
-      }
-      var baseUrl = window.location.origin;
-      document.getElementById('proxy-full-url').textContent = baseUrl + '/px/' + proxyId + '/';
-      document.getElementById('proxy-url-display').style.display = '';
-    }
-
-    function copyProxyUrl() {
-      var url = document.getElementById('proxy-full-url').textContent;
-      navigator.clipboard.writeText(url).then(function() {
-        var btns = document.querySelectorAll('.btn-copy-sm');
-        btns.forEach(function(b) { b.textContent = 'Copied!'; });
-        setTimeout(function() { btns.forEach(function(b) { b.textContent = 'Copy'; }); }, 1500);
-      });
-    }
-
-    async function regenProxyId() {
-      if (!confirm('Regenerate proxy ID? This will break existing client connections.')) return;
-      var id = document.getElementById('proxy-agent-id').value;
-      try {
-        var res = await fetch('/ui/keys/' + id + '/regenerate-proxy', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json' }
-        });
-        var data = await res.json();
-        if (data.success) {
-          showProxyUrl(data.proxy_id);
-        } else {
-          alert(data.error || 'Failed to regenerate proxy ID');
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    }
-
-    document.getElementById('proxy-enabled').addEventListener('change', toggleProxyFields);
-
-    document.querySelectorAll('.proxy-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() { showProxyModal(btn); });
-    });
-
-    document.getElementById('proxy-form').addEventListener('submit', async function(e) {
-      e.preventDefault();
-      var id = document.getElementById('proxy-agent-id').value;
-      var enabled = document.getElementById('proxy-enabled').checked;
-      var proxyUrl = document.getElementById('proxy-url-input').value;
-
-      try {
-        var res = await fetch('/ui/keys/' + id + '/proxy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ proxy_enabled: enabled ? 'on' : '', proxy_url: proxyUrl })
-        });
-        var data = await res.json();
-        if (data.success) {
-          closeProxyModal();
-          window.location.reload();
-        } else {
-          alert(data.error || 'Failed to save proxy settings');
-        }
-      } catch (err) {
-        alert('Error: ' + err.message);
-      }
-    });
-
-    document.getElementById('proxy-modal').addEventListener('click', function(e) {
-      if (e.target.classList.contains('modal-overlay')) {
-        closeProxyModal();
-      }
-    });
   </script>
 ${socketScript()}
+${menuScript()}
 ${localizeScript()}
 </body>
 </html>`;
+}
+
+function renderAgentNotFound(id) {
+  return `<!DOCTYPE html>
+<html>
+${htmlHead('Agent Not Found', { includeSocket: true })}
+<body>
+  ${navHeader()}
+  <div class="card" style="text-align: center; padding: 40px;">
+    <h2>Agent Not Found</h2>
+    <p style="color: #9ca3af;">The agent with ID "${escapeHtml(String(id))}" does not exist.</p>
+    <a href="/ui/keys" class="btn-primary" style="display: inline-block; margin-top: 16px;">Back to Agents</a>
+  </div>
+  ${socketScript()}
+  ${menuScript()}
+  ${localizeScript()}
+</body>
+</html>`;
+}
+
+function renderAgentDetailPage(agent, counts, serviceAccess = []) {
+  return `<!DOCTYPE html>
+<html>
+${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
+<style>
+  .agent-header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+  .agent-header .avatar-large {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: #374151;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    font-weight: 600;
+    color: #9ca3af;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    overflow: hidden;
+  }
+  .agent-header .avatar-large:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+  }
+  .agent-header .avatar-large img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .agent-header h2 {
+    margin: 0;
+    flex: 1;
+  }
+  .agent-header .toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .agent-header .toggle-label {
+    font-size: 13px;
+    color: #9ca3af;
+  }
+
+  /* Toggle switch */
+  .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
+  .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+  .toggle input:checked + .toggle-slider { background-color: #10b981; }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
+  .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
+
+  .detail-section { margin-bottom: 24px; }
+  .detail-section h3 { margin: 0 0 12px 0; color: #e5e7eb; font-size: 1em; }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row .label { color: #9ca3af; font-size: 14px; }
+  .detail-row .value { color: #e5e7eb; font-family: monospace; }
+  .detail-row .value.muted { color: #6b7280; font-style: italic; font-family: inherit; }
+
+  .bio-text {
+    background: rgba(0,0,0,0.2);
+    padding: 12px;
+    border-radius: 6px;
+    color: #d1d5db;
+    white-space: pre-wrap;
+    font-size: 14px;
+  }
+
+  .config-card {
+    background: rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .config-card h4 {
+    margin: 0 0 12px 0;
+    color: #e5e7eb;
+    font-size: 0.95em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .config-card .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .config-card .status-dot.active { background: #10b981; }
+  .config-card .status-dot.inactive { background: #6b7280; }
+
+  .btn-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .danger-zone {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 24px;
+  }
+  .danger-zone h3 { color: #f87171; margin: 0 0 8px 0; }
+  .danger-zone p { color: #9ca3af; margin: 0 0 16px 0; font-size: 14px; }
+
+  .stats-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .stat-box {
+    background: rgba(0,0,0,0.2);
+    padding: 12px 16px;
+    border-radius: 6px;
+    text-align: center;
+    min-width: 80px;
+  }
+  .stat-box .stat-value { font-size: 20px; font-weight: 600; color: #e5e7eb; }
+  .stat-box .stat-label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
+  a.stat-link { text-decoration: none; transition: background 0.2s, border-color 0.2s; border: 1px solid transparent; }
+  a.stat-link:hover { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); }
+
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.active { display: flex; }
+  .modal { background: #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
+  .modal h3 { margin: 0 0 16px 0; color: #f3f4f6; }
+  .modal label { display: block; margin-bottom: 4px; color: #d1d5db; font-size: 14px; }
+  .modal input, .modal textarea { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; }
+  .modal input:focus, .modal textarea:focus { border-color: #6366f1; outline: none; }
+  .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
+  .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
+
+  .proxy-url-box { background: #111827; padding: 10px 12px; border-radius: 6px; word-break: break-all; font-size: 13px; color: #67e8f9; display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .proxy-url-box code { flex: 1; }
+  .btn-copy-sm { background: #374151; border: 1px solid #4b5563; color: #d1d5db; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-size: 14px; z-index: 1001; opacity: 0; transform: translateY(20px); transition: opacity 0.3s, transform 0.3s; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: #dc2626; }
+  .toast.success { background: #059669; }
+
+  /* Inline error */
+  .inline-error { color: #f87171; font-size: 13px; margin-top: 4px; }
+
+  /* Delete confirmation input */
+  .delete-confirm-input { border-color: #ef4444 !important; }
+  .delete-confirm-input:focus { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
+
+  /* Service access list */
+  .service-access-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .service-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); border-radius: 20px; font-size: 13px; color: #c7d2fe; text-decoration: none; transition: background 0.2s, border-color 0.2s; }
+  .service-chip:hover { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.5); }
+  .service-chip img { width: 16px; height: 16px; }
+  .service-chip .bypass-badge { font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 6px; border-radius: 8px; margin-left: 4px; }
+  .no-access { color: #9ca3af; font-style: italic; font-size: 14px; padding: 12px 0; }
+</style>
+<body>
+  ${navHeader()}
+
+  <div class="agent-header">
+    <div class="avatar-large" id="avatar-clickable" title="Click to change avatar">
+      ${renderAvatar(agent.name, { size: 64 })}
+    </div>
+    <h2>${escapeHtml(agent.name)}</h2>
+    <div class="toggle-wrapper">
+      <span class="toggle-label" id="toggle-label">${agent.enabled ? 'Enabled' : 'Disabled'}</span>
+      <label class="toggle">
+        <input type="checkbox" id="enabled-toggle" ${agent.enabled ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <a href="/ui/keys" class="btn-secondary">← Back</a>
+  </div>
+
+  <div class="stats-row">
+    <a href="/ui/messages" class="stat-box stat-link"><div class="stat-value">${counts.messages}</div><div class="stat-label">Messages</div></a>
+    <a href="/ui/queue" class="stat-box stat-link"><div class="stat-value">${counts.queueEntries}</div><div class="stat-label">Queue</div></a>
+    <a href="/ui/mementos?agent=${encodeURIComponent(agent.name)}" class="stat-box stat-link"><div class="stat-value">${counts.mementos}</div><div class="stat-label">Mementos</div></a>
+    <a href="/ui/messages" class="stat-box stat-link"><div class="stat-value">${counts.broadcasts}</div><div class="stat-label">Broadcasts</div></a>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>Service Access</h3>
+      ${serviceAccess.length === 0 ? '<p class="no-access">No services configured, or access denied to all.</p>' : `<div class="service-access-list">${serviceAccess.map(s => `<a href="/ui/services/${s.id}" class="service-chip"><img src="${getServiceIcon(s.service)}" alt="">${getServiceDisplayName(s.service)} / ${escapeHtml(s.account_name)}${s.bypass_auth ? '<span class="bypass-badge">bypass</span>' : ''}</a>`).join('')}</div>`}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>API Key</h3>
+      <div class="detail-row">
+        <span class="label">Key Prefix</span>
+        <span class="value">${escapeHtml(agent.key_prefix)}</span>
+      </div>
+      <div class="detail-row">
+        <span class="label">Created</span>
+        <span class="value">${formatDate(agent.created_at)}</span>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="regen-btn">🔄 Regenerate Key</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>Bio</h3>
+      ${agent.bio ? `<div class="bio-text">${escapeHtml(agent.bio)}</div>` : '<p class="value muted">No bio set. The agent sees this via whoami.</p>'}
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="bio-btn">Edit Bio</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>Webhook</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.webhook_url ? 'active' : 'inactive'}"></span> Webhook Notifications</h4>
+        ${agent.webhook_url ? `
+          <div class="detail-row">
+            <span class="label">URL</span>
+            <span class="value" style="font-size: 12px; word-break: break-all;">${escapeHtml(agent.webhook_url)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Token</span>
+            <span class="value">${agent.webhook_token ? '••••••••' : 'Not set'}</span>
+          </div>
+        ` : '<p class="value muted">Not configured. Webhooks notify the agent of messages and queue updates.</p>'}
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" id="webhook-btn">Configure</button>
+          ${agent.webhook_url ? '<button type="button" class="btn-secondary" id="test-webhook-btn">Test</button>' : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>Gateway Proxy</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.gateway_proxy_enabled ? 'active' : 'inactive'}"></span> Proxy</h4>
+        ${agent.gateway_proxy_enabled ? `
+          <div class="detail-row">
+            <span class="label">Internal URL</span>
+            <span class="value" style="font-size: 12px;">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
+          </div>
+          <div class="proxy-url-box">
+            <code id="proxy-url">${escapeHtml(getProxyUrl(agent.gateway_proxy_id))}</code>
+            <button type="button" class="btn-copy-sm" onclick="copyProxyUrl()">Copy</button>
+          </div>
+        ` : '<p class="value muted">Not enabled. Proxy exposes the agent\'s gateway through AgentGate.</p>'}
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" id="proxy-btn">Configure</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="danger-zone">
+    <h3>Danger Zone</h3>
+    <p>Deleting this agent will remove the API key and all associated data (${counts.messages} messages, ${counts.mementos} mementos, ${counts.queueEntries} queue entries).</p>
+    <button type="button" class="btn-danger" id="delete-btn">Delete Agent</button>
+  </div>
+
+  <!-- Bio Modal -->
+  <div id="bio-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Edit Bio</h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">Describe this agent's role. Shown via <code>whoami</code>.</p>
+      <textarea id="bio-text" rows="4" placeholder="e.g., You are a cybersecurity expert...">${escapeHtml(agent.bio || '')}</textarea>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('bio-modal')">Cancel</button>
+        <button type="button" class="btn-primary" onclick="saveBio()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Webhook Modal -->
+  <div id="webhook-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Configure Webhook</h3>
+      <label>Webhook URL</label>
+      <input type="url" id="webhook-url" value="${escapeHtml(agent.webhook_url || '')}" placeholder="https://your-agent.com/webhook">
+      <p class="help-text">Receives POST notifications for messages and queue updates</p>
+      <label>Authorization Token (optional)</label>
+      <input type="text" id="webhook-token" value="${escapeHtml(agent.webhook_token || '')}" placeholder="secret-token">
+      <p class="help-text">Sent as Bearer token in Authorization header</p>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('webhook-modal')">Cancel</button>
+        <button type="button" class="btn-primary" onclick="saveWebhook()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proxy Modal -->
+  <div id="proxy-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Configure Gateway Proxy</h3>
+      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
+        <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;">
+        <span>Enable gateway proxy</span>
+      </label>
+      <div id="proxy-fields" style="${agent.gateway_proxy_enabled ? '' : 'display: none;'}">
+        <label>Internal Gateway URL</label>
+        <input type="url" id="proxy-url-input" value="${escapeHtml(agent.gateway_proxy_url || '')}" placeholder="http://localhost:18789">
+        <p class="help-text">The internal URL of the agent's gateway</p>
+      </div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('proxy-modal')">Cancel</button>
+        <button type="button" class="btn-primary" onclick="saveProxy()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Regenerate Key Modal -->
+  <div id="regen-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>🔄 Regenerate API Key</h3>
+      <div id="regen-confirm">
+        <p style="color: #fbbf24; background: rgba(245,158,11,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245,158,11,0.3); margin-bottom: 16px;">
+          ⚠️ This will immediately invalidate the current key. The agent will lose access until updated.
+        </p>
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeModal('regen-modal')">Cancel</button>
+          <button type="button" class="btn-danger" onclick="confirmRegen()">Regenerate</button>
+        </div>
+      </div>
+      <div id="regen-success" style="display: none;">
+        <p style="color: #34d399; background: rgba(16,185,129,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.3); margin-bottom: 16px;">
+          ✅ Key regenerated! Copy it now - you won't see it again.
+        </p>
+        <div style="background: #111827; padding: 12px; border-radius: 8px; margin-bottom: 16px; word-break: break-all;">
+          <code id="new-key" style="color: #34d399;"></code>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" class="btn-primary" onclick="copyNewKey()">Copy</button>
+          <button type="button" class="btn-secondary" onclick="location.reload()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avatar Modal -->
+  <div id="avatar-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Change Avatar</h3>
+      <div style="text-align: center; margin-bottom: 16px;">
+        <div id="avatar-preview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; background: #374151; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+          ${renderAvatar(agent.name, { size: 80 })}
+        </div>
+      </div>
+      <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp">
+      <p class="help-text">PNG, JPG, GIF, WebP. Max 500KB.</p>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('avatar-modal')">Cancel</button>
+        <button type="button" class="btn-danger" id="avatar-delete-btn" onclick="deleteAvatar()" style="${agent.name ? '' : 'display:none;'}">Delete</button>
+        <button type="button" class="btn-primary" id="avatar-upload-btn" onclick="uploadAvatar()" disabled>Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="delete-modal" class="modal-overlay">
+    <div class="modal">
+      <h3 style="color: #f87171;">Delete Agent</h3>
+      <p style="color: #d1d5db; margin-bottom: 16px;">This will permanently delete <strong>${escapeHtml(agent.name)}</strong> and all associated data.</p>
+      <label>Type "<strong>${escapeHtml(agent.name)}</strong>" to confirm:</label>
+      <input type="text" id="delete-confirm-input" class="delete-confirm-input" placeholder="Enter agent name" autocomplete="off">
+      <div id="delete-error" class="inline-error" style="display: none;"></div>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('delete-modal')">Cancel</button>
+        <button type="button" class="btn-danger" id="delete-confirm-btn" onclick="confirmDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Avatar Confirmation Modal -->
+  <div id="delete-avatar-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Remove Avatar</h3>
+      <p style="color: #d1d5db; margin-bottom: 16px;">Remove the custom avatar and use the default?</p>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('delete-avatar-modal')">Cancel</button>
+        <button type="button" class="btn-danger" onclick="confirmDeleteAvatar()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    const agentId = '${agent.id}';
+    const agentName = '${escapeHtml(agent.name)}';
+
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'toast ' + type + ' show';
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+    }
+
+    function openModal(id) {
+      document.getElementById(id).classList.add('active');
+    }
+
+    document.querySelectorAll('.modal-overlay').forEach(m => {
+      m.addEventListener('click', e => {
+        if (e.target.classList.contains('modal-overlay')) closeModal(m.id);
+      });
+    });
+
+    // Bio
+    document.getElementById('bio-btn').onclick = () => openModal('bio-modal');
+    async function saveBio() {
+      const bio = document.getElementById('bio-text').value;
+      const res = await fetch('/ui/keys/' + agentId + '/bio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ bio })
+      });
+      if ((await res.json()).success) location.reload();
+    }
+
+    // Webhook
+    document.getElementById('webhook-btn').onclick = () => openModal('webhook-modal');
+    ${agent.webhook_url ? 'document.getElementById(\'test-webhook-btn\').onclick = testWebhook;' : ''}
+    async function saveWebhook() {
+      const url = document.getElementById('webhook-url').value;
+      const token = document.getElementById('webhook-token').value;
+      const res = await fetch('/ui/keys/' + agentId + '/webhook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ webhook_url: url, webhook_token: token })
+      });
+      if ((await res.json()).success) location.reload();
+    }
+    async function testWebhook() {
+      const btn = document.getElementById('test-webhook-btn');
+      btn.disabled = true; btn.textContent = 'Testing...';
+      const res = await fetch('/ui/keys/' + agentId + '/test-webhook', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      btn.disabled = false; btn.textContent = 'Test';
+      showToast(data.message, data.success ? 'success' : 'error');
+    }
+
+    // Proxy
+    document.getElementById('proxy-btn').onclick = () => openModal('proxy-modal');
+    document.getElementById('proxy-enabled').onchange = function() {
+      document.getElementById('proxy-fields').style.display = this.checked ? '' : 'none';
+    };
+    async function saveProxy() {
+      const enabled = document.getElementById('proxy-enabled').checked;
+      const url = document.getElementById('proxy-url-input').value;
+      const res = await fetch('/ui/keys/' + agentId + '/proxy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ proxy_enabled: enabled ? 'on' : '', proxy_url: url })
+      });
+      if ((await res.json()).success) location.reload();
+    }
+    function copyProxyUrl() {
+      const url = document.getElementById('proxy-url').textContent;
+      navigator.clipboard.writeText(url);
+      showToast('Copied!', 'success');
+    }
+
+    // Regen
+    document.getElementById('regen-btn').onclick = () => openModal('regen-modal');
+    async function confirmRegen() {
+      const res = await fetch('/ui/keys/' + agentId + '/regenerate', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('new-key').textContent = data.key;
+        document.getElementById('regen-confirm').style.display = 'none';
+        document.getElementById('regen-success').style.display = '';
+      }
+    }
+    function copyNewKey() {
+      navigator.clipboard.writeText(document.getElementById('new-key').textContent);
+      showToast('Copied!', 'success');
+    }
+
+    // Toggle enable/disable
+    document.getElementById('enabled-toggle').onchange = async function() {
+      const checkbox = this;
+      const label = document.getElementById('toggle-label');
+      checkbox.disabled = true;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/toggle-enabled', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          label.textContent = data.enabled ? 'Enabled' : 'Disabled';
+        } else {
+          checkbox.checked = !checkbox.checked;
+          showToast('Failed to update', 'error');
+        }
+      } catch (err) {
+        checkbox.checked = !checkbox.checked;
+        showToast('Network error', 'error');
+      }
+      checkbox.disabled = false;
+    };
+
+    // Delete
+    document.getElementById('delete-btn').onclick = () => {
+      document.getElementById('delete-confirm-input').value = '';
+      document.getElementById('delete-error').style.display = 'none';
+      openModal('delete-modal');
+    };
+    async function confirmDelete() {
+      const input = document.getElementById('delete-confirm-input');
+      const errorEl = document.getElementById('delete-error');
+      if (input.value.toLowerCase() !== agentName.toLowerCase()) {
+        errorEl.textContent = 'Name does not match';
+        errorEl.style.display = '';
+        input.focus();
+        return;
+      }
+      const res = await fetch('/ui/keys/' + agentId, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+      if ((await res.json()).success) location.href = '/ui/keys';
+    }
+
+    // Avatar
+    document.getElementById('avatar-clickable').onclick = () => openModal('avatar-modal');
+    let avatarData = null;
+    document.getElementById('avatar-file').onchange = function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (file.size > 500 * 1024) {
+        showToast('File too large. Max 500KB.', 'error');
+        e.target.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function(ev) {
+        avatarData = ev.target.result;
+        document.getElementById('avatar-preview').innerHTML = '<img src="' + avatarData + '" style="width:100%;height:100%;object-fit:cover;">';
+        document.getElementById('avatar-upload-btn').disabled = false;
+      };
+      reader.readAsDataURL(file);
+    };
+    async function uploadAvatar() {
+      if (!avatarData) return;
+      const res = await fetch('/ui/keys/' + agentId + '/avatar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ avatar: avatarData })
+      });
+      if ((await res.json()).success) location.reload();
+    }
+    function deleteAvatar() {
+      openModal('delete-avatar-modal');
+    }
+    async function confirmDeleteAvatar() {
+      const res = await fetch('/ui/keys/' + agentId + '/avatar', { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+      if ((await res.json()).success) location.reload();
+    }
+  </script>
+  ${socketScript()}
+  ${menuScript()}
+  ${localizeScript()}
+</body>
+</html>`;
+}
+
+function getProxyUrl(proxyId) {
+  if (!proxyId) return '';
+  // This will be replaced with the actual base URL on the client side
+  return '/px/' + proxyId + '/';
+}
+
+function getServiceIcon(service) {
+  const icons = {
+    github: '/public/icons/github.svg',
+    bluesky: '/public/icons/bluesky.svg',
+    mastodon: '/public/icons/mastodon.svg',
+    reddit: '/public/icons/reddit.svg',
+    google_calendar: '/public/icons/google-calendar.svg',
+    youtube: '/public/icons/youtube.svg',
+    linkedin: '/public/icons/linkedin.svg',
+    jira: '/public/icons/jira.svg',
+    fitbit: '/public/icons/fitbit.svg',
+    brave: '/public/icons/brave.svg',
+    google_search: '/public/icons/google-search.svg'
+  };
+  return icons[service] || '/public/favicon.svg';
+}
+
+function getServiceDisplayName(service) {
+  const names = {
+    github: 'GitHub',
+    bluesky: 'Bluesky',
+    mastodon: 'Mastodon',
+    reddit: 'Reddit',
+    google_calendar: 'Calendar',
+    youtube: 'YouTube',
+    linkedin: 'LinkedIn',
+    jira: 'Jira',
+    fitbit: 'Fitbit',
+    brave: 'Brave',
+    google_search: 'Google Search'
+  };
+  return names[service] || service;
 }
 
 export default router;

@@ -5,7 +5,7 @@ import {
   listAllAgentLlmModels, setAgentLlmModel, removeAgentLlmModel, listApiKeys,
   getPendingQueueCount, listPendingMessages, getMessagingMode
 } from '../../lib/db.js';
-import { htmlHead, simpleNavHeader, socketScript, localizeScript, escapeHtml } from './shared.js';
+import { htmlHead, navHeader, socketScript, localizeScript, menuScript, escapeHtml } from './shared.js';
 
 const router = Router();
 
@@ -23,45 +23,55 @@ router.get('/', (req, res) => {
 
   const providerCards = providers.map(p => {
     const icon = PROVIDER_ICONS[p.provider_type] || '⚙️';
-    const enabledStyle = p.enabled
-      ? 'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);'
-      : 'background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3);';
+    const enabledClass = p.enabled ? 'configured' : 'not-configured';
     const enabledLabel = p.enabled ? 'Enabled' : 'Disabled';
     return `
-      <div class="card" id="provider-${p.id}" style="margin-bottom: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 1.5em;">${icon}</span>
+      <div class="card provider-card" id="provider-${p.id}">
+        <div class="provider-header">
+          <div class="provider-info">
+            <span class="provider-icon">${icon}</span>
             <div>
-              <strong>${escapeHtml(p.name)}</strong>
-              <span style="margin-left: 8px; font-size: 0.85em; opacity: 0.7;">${escapeHtml(p.provider_type)}</span>
-              ${p.base_url ? `<br><span style="font-size: 0.8em; opacity: 0.6;">${escapeHtml(p.base_url)}</span>` : ''}
+              <strong class="provider-name">${escapeHtml(p.name)}</strong>
+              <span class="provider-type">${escapeHtml(p.provider_type)}</span>
+              ${p.base_url ? `<div class="provider-url">${escapeHtml(p.base_url)}</div>` : ''}
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="status" style="${enabledStyle}">${enabledLabel}</span>
-            <button class="btn-sm btn-primary" onclick="testProvider(${p.id})">Test</button>
-            <button class="btn-sm btn-primary" onclick="toggleProvider(${p.id}, ${p.enabled ? 0 : 1})">${p.enabled ? 'Disable' : 'Enable'}</button>
-            <button class="btn-sm btn-primary" onclick="editProvider(${p.id})">Edit</button>
+          <div class="provider-actions">
+            <span class="status ${enabledClass}">${enabledLabel}</span>
+            <button class="btn-sm" onclick="testProvider(${p.id})">Test</button>
+            <button class="btn-sm" onclick="toggleProvider(${p.id}, ${p.enabled ? 0 : 1})">${p.enabled ? 'Disable' : 'Enable'}</button>
+            <button class="btn-sm" onclick="editProvider(${p.id})">Edit</button>
             <button class="btn-sm btn-danger" onclick="deleteProvider(${p.id}, '${escapeHtml(p.name).replace(/'/g, "\\'")}')">Delete</button>
           </div>
         </div>
-        <div id="provider-test-${p.id}" style="margin-top: 8px;"></div>
-        <div id="provider-edit-${p.id}" style="display: none; margin-top: 12px;">
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end;">
-            <label>Name<br><input type="text" id="edit-name-${p.id}" value="${escapeHtml(p.name)}" style="width: 140px;"></label>
-            <label>Type<br>
+        <div id="provider-test-${p.id}" class="provider-test-result"></div>
+        <div id="provider-edit-${p.id}" class="provider-edit-form" style="display: none;">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="edit-name-${p.id}">Name</label>
+              <input type="text" id="edit-name-${p.id}" value="${escapeHtml(p.name)}">
+            </div>
+            <div class="form-group">
+              <label for="edit-type-${p.id}">Type</label>
               <select id="edit-type-${p.id}">
-                <option value="openai" ${p.provider_type === 'openai' ? 'selected' : ''}>openai</option>
-                <option value="anthropic" ${p.provider_type === 'anthropic' ? 'selected' : ''}>anthropic</option>
-                <option value="google" ${p.provider_type === 'google' ? 'selected' : ''}>google</option>
-                <option value="custom" ${p.provider_type === 'custom' ? 'selected' : ''}>custom</option>
+                <option value="openai" ${p.provider_type === 'openai' ? 'selected' : ''}>OpenAI</option>
+                <option value="anthropic" ${p.provider_type === 'anthropic' ? 'selected' : ''}>Anthropic</option>
+                <option value="google" ${p.provider_type === 'google' ? 'selected' : ''}>Google</option>
+                <option value="custom" ${p.provider_type === 'custom' ? 'selected' : ''}>Custom</option>
               </select>
-            </label>
-            <label>API Key (leave blank to keep)<br><input type="password" id="edit-key-${p.id}" placeholder="••••••" style="width: 200px;"></label>
-            <label>Base URL<br><input type="text" id="edit-url-${p.id}" value="${escapeHtml(p.base_url || '')}" placeholder="optional" style="width: 200px;"></label>
-            <button class="btn-sm btn-primary" onclick="saveProvider(${p.id})">Save</button>
-            <button class="btn-sm" onclick="document.getElementById('provider-edit-${p.id}').style.display='none'">Cancel</button>
+            </div>
+            <div class="form-group">
+              <label for="edit-key-${p.id}">API Key</label>
+              <input type="password" id="edit-key-${p.id}" placeholder="Leave blank to keep current">
+            </div>
+            <div class="form-group">
+              <label for="edit-url-${p.id}">Base URL (optional)</label>
+              <input type="text" id="edit-url-${p.id}" value="${escapeHtml(p.base_url || '')}" placeholder="https://api.example.com">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn-primary" onclick="saveProvider(${p.id})">Save Changes</button>
+            <button class="btn-secondary" onclick="document.getElementById('provider-edit-${p.id}').style.display='none'">Cancel</button>
           </div>
         </div>
       </div>`;
@@ -88,79 +98,197 @@ router.get('/', (req, res) => {
     .join('');
 
   const html = `${htmlHead('LLM Providers', { includeSocket: true })}
+<style>
+  /* LLM Page Styles */
+  .llm-section { margin-bottom: 32px; }
+  .llm-section > h2 { margin: 0 0 16px 0; }
+
+  /* Provider Cards */
+  .provider-card { margin-bottom: 16px; }
+  .provider-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+  .provider-info { display: flex; align-items: center; gap: 12px; }
+  .provider-icon { font-size: 2em; }
+  .provider-name { font-size: 1.1em; color: #f3f4f6; }
+  .provider-type { margin-left: 8px; font-size: 0.85em; color: #9ca3af; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; }
+  .provider-url { font-size: 0.8em; color: #6b7280; margin-top: 4px; font-family: monospace; }
+  .provider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .provider-test-result { margin-top: 12px; }
+  .provider-edit-form { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+
+  /* Form Grid - 4 columns on desktop, stacks on mobile */
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  @media (max-width: 800px) {
+    .form-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 500px) {
+    .form-grid { grid-template-columns: 1fr; }
+  }
+
+  .form-group { display: flex; flex-direction: column; }
+  .form-group label {
+    font-size: 13px;
+    color: #9ca3af;
+    font-weight: 500;
+    margin: 0 0 6px 0 !important;
+  }
+  .form-group input, .form-group select {
+    padding: 10px 12px !important;
+    margin: 0 !important;
+    background: rgba(0,0,0,0.3) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    border-radius: 6px !important;
+    color: #f3f4f6;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    height: 42px;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
+  }
+  .form-group input::placeholder { color: #6b7280; }
+
+  .form-footer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .form-footer .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #9ca3af;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .form-footer .checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+  }
+
+  .form-actions { display: flex; gap: 12px; margin-top: 16px; }
+
+  /* Models Table */
+  .models-table { width: 100%; border-collapse: collapse; }
+  .models-table th {
+    text-align: left;
+    padding: 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #9ca3af;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .models-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #e5e7eb; }
+  .models-table tr:hover { background: rgba(255,255,255,0.02); }
+  .models-table .empty-row td { color: #6b7280; font-style: italic; }
+
+  /* Empty State */
+  .empty-state-box { text-align: center; padding: 32px 20px; color: #6b7280; background: rgba(0,0,0,0.2); border-radius: 8px; margin-top: 16px; }
+
+  .form-result { margin-top: 12px; }
+  .form-result:empty { display: none; }
+</style>
 <body>
-  <div class="container">
-    ${simpleNavHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
+  ${navHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
 
-    <h2 style="margin-bottom: 16px;">🔌 LLM Providers</h2>
+  <div class="llm-section">
+    <h2>🔌 LLM Providers</h2>
 
-    <!-- Add Provider Form -->
-    <div class="card" style="margin-bottom: 20px;">
-      <h3 style="margin: 0 0 12px 0;">Add Provider</h3>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end;">
-        <label>Name<br><input type="text" id="add-name" placeholder="my-openai" style="width: 140px;"></label>
-        <label>Type<br>
-          <select id="add-type">
-            <option value="openai">openai</option>
-            <option value="anthropic">anthropic</option>
-            <option value="google">google</option>
-            <option value="custom">custom</option>
-          </select>
-        </label>
-        <label>API Key<br><input type="password" id="add-key" placeholder="sk-..." style="width: 200px;"></label>
-        <label>Base URL<br><input type="text" id="add-url" placeholder="optional" style="width: 200px;"></label>
-        <button class="btn-primary" onclick="addProvider()">Add Provider</button>
-      </div>
-      <div id="add-result" style="margin-top: 8px;"></div>
-    </div>
-
-    <!-- Provider List -->
-    <div id="providers-list">
-      ${providerCards || '<p style="opacity: 0.6;">No providers configured yet.</p>'}
-    </div>
-
-    <h2 style="margin: 32px 0 16px 0;">🎯 Agent Model Assignments</h2>
-
-    <!-- Assign Model Form -->
-    <div class="card" style="margin-bottom: 20px;">
-      <h3 style="margin: 0 0 12px 0;">Assign Model</h3>
-      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: end;">
-        <label>Agent<br>
-          <select id="assign-agent">${agentOptions}</select>
-        </label>
-        <label>Provider<br>
-          <select id="assign-provider">${providerOptions}</select>
-        </label>
-        <label>Model ID<br><input type="text" id="assign-model" placeholder="gpt-4o" style="width: 200px;"></label>
-        <label style="display: flex; align-items: center; gap: 4px; padding-bottom: 4px;">
-          <input type="checkbox" id="assign-default"> Default
-        </label>
-        <button class="btn-primary" onclick="assignModel()">Assign</button>
-      </div>
-      <div id="assign-result" style="margin-top: 8px;"></div>
-    </div>
-
-    <!-- Models Table -->
     <div class="card">
-      <table style="width: 100%; border-collapse: collapse;">
+      <h3>Add Provider</h3>
+      <p class="help">Connect an LLM provider to enable AI capabilities for agents.</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="add-name">Name</label>
+          <input type="text" id="add-name" placeholder="my-openai">
+        </div>
+        <div class="form-group">
+          <label for="add-type">Type</label>
+          <select id="add-type">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="google">Google</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="add-key">API Key</label>
+          <input type="password" id="add-key" placeholder="sk-...">
+        </div>
+        <div class="form-group">
+          <label for="add-url">Base URL (optional)</label>
+          <input type="text" id="add-url" placeholder="https://api.example.com">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="addProvider()">Add Provider</button>
+      <div id="add-result" class="form-result"></div>
+    </div>
+
+    <div id="providers-list">
+      ${providerCards || '<div class="empty-state-box">No providers configured yet.</div>'}
+    </div>
+  </div>
+
+  <div class="llm-section">
+    <h2>🎯 Agent Model Assignments</h2>
+
+    <div class="card">
+      <h3>Assign Model</h3>
+      <p class="help">Map agents to specific models. Use * as a wildcard for default assignments.</p>
+      <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="form-group">
+          <label for="assign-agent">Agent</label>
+          <select id="assign-agent">${agentOptions}</select>
+        </div>
+        <div class="form-group">
+          <label for="assign-provider">Provider</label>
+          <select id="assign-provider">${providerOptions || '<option value="">No providers</option>'}</select>
+        </div>
+        <div class="form-group">
+          <label for="assign-model">Model ID</label>
+          <input type="text" id="assign-model" placeholder="gpt-4o">
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; color: #9ca3af;">
+          <input type="checkbox" id="assign-default" style="width: 18px; height: 18px; margin: 0;">
+          Set as default
+        </label>
+        <button class="btn-primary" onclick="assignModel()">Assign Model</button>
+      </div>
+      <div id="assign-result" class="form-result"></div>
+    </div>
+
+    <div class="card">
+      <table class="models-table">
         <thead>
-          <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
-            <th style="text-align: left; padding: 8px;">Agent</th>
-            <th style="text-align: left; padding: 8px;">Model</th>
-            <th style="text-align: left; padding: 8px;">Provider</th>
-            <th style="text-align: left; padding: 8px;">Default</th>
-            <th style="padding: 8px;"></th>
+          <tr>
+            <th>Agent</th>
+            <th>Model</th>
+            <th>Provider</th>
+            <th>Default</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="models-tbody">
-          ${modelRows || '<tr><td colspan="5" style="padding: 8px; opacity: 0.6;">No model assignments yet.</td></tr>'}
+          ${modelRows || '<tr class="empty-row"><td colspan="5">No model assignments yet.</td></tr>'}
         </tbody>
       </table>
     </div>
-
   </div>
 
   ${socketScript()}
+  ${menuScript()}
   ${localizeScript()}
   <script>
     function showMsg(elId, msg, isError) {

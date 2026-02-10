@@ -712,6 +712,19 @@ export function deleteAccountById(id) {
   return db.prepare('DELETE FROM service_accounts WHERE id = ?').run(id);
 }
 
+export function getAccountById(id) {
+  const row = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts WHERE id = ?').get(id);
+  if (!row) return null;
+  return {
+    id: row.id,
+    service: row.service,
+    name: row.name,
+    credentials: row.credentials ? JSON.parse(row.credentials) : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
 // Get all accounts grouped by service (for /api/readme)
 export function getAccountsByService() {
   const rows = db.prepare('SELECT service, name FROM service_accounts ORDER BY service, name').all();
@@ -1363,7 +1376,7 @@ export function listMementos(options = {}) {
   const conditions = [];
 
   if (agentId) {
-    conditions.push('m.agent_id = ?');
+    conditions.push('LOWER(m.agent_id) = LOWER(?)');
     params.push(agentId);
   }
 
@@ -1642,6 +1655,33 @@ export function listServicesWithAccess() {
   });
 }
 
+/**
+ * Get all service accounts that an agent has access to
+ * Returns array of { id, service, account_name, bypass_auth }
+ */
+export function getAgentServiceAccess(agentName) {
+  // Get all service accounts
+  const accounts = db.prepare(`
+    SELECT id, service, name as account_name FROM service_accounts ORDER BY service, name
+  `).all();
+
+  // For each account, check if this agent has access
+  const result = [];
+  for (const acc of accounts) {
+    const access = checkServiceAccess(acc.service, acc.account_name, agentName);
+    if (access.allowed) {
+      // Check for bypass_auth
+      const bypassAuth = checkBypassAuth(acc.service, acc.account_name, agentName);
+      result.push({
+        id: acc.id,
+        service: acc.service,
+        account_name: acc.account_name,
+        bypass_auth: bypassAuth
+      });
+    }
+  }
+  return result;
+}
 
 
 // ============================================

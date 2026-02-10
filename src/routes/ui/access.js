@@ -9,7 +9,7 @@ import {
   setBypassAuth,
   checkBypassAuth
 } from '../../lib/db.js';
-import { escapeHtml, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
+import { escapeHtml, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -132,11 +132,7 @@ function renderAccessPage(services, agents) {
   
   return `<!DOCTYPE html>
 <html>
-<head>
-  <title>agentgate - Access Control</title>
-  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
-  <link rel="stylesheet" href="/public/style.css">
-  <script src="/socket.io/socket.io.js"></script>
+${htmlHead('Access Control', { includeSocket: true })}
   <style>
     .service-card { margin-bottom: 24px; }
     .service-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -169,12 +165,9 @@ function renderAccessPage(services, agents) {
     .info-box p { margin: 0; color: #9ca3af; font-size: 14px; }
     .info-box ul { margin: 8px 0 0 0; padding-left: 20px; color: #9ca3af; font-size: 14px; }
   </style>
-</head>
 <body>
-  <div>
-    ${simpleNavHeader()}
-  </div>
-  
+  ${navHeader()}
+
   <div class="info-box">
     <h4>🔐 Service Access Control</h4>
     <p>Manage which agents can access which services, and enable queue bypass for trusted agents.</p>
@@ -282,6 +275,7 @@ function renderAccessPage(services, agents) {
     });
   </script>
 ${socketScript()}
+${menuScript()}
 ${localizeScript()}
 </body>
 </html>`;

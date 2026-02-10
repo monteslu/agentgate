@@ -5,6 +5,7 @@ import {
   simpleNavHeader,
   socketScript,
   localizeScript,
+  menuScript,
   escapeHtml,
   formatDate,
   renderAvatar
@@ -143,6 +144,7 @@ router.get('/', (req, res) => {
     </div>
   </div>
   ${socketScript()}
+  ${menuScript()}
   ${localizeScript()}
   <style>
     .tag {
@@ -314,6 +316,7 @@ router.get('/:id', (req, res) => {
     </div>
   </div>
   ${socketScript()}
+  ${menuScript()}
   ${localizeScript()}
   <style>
     .tag {
