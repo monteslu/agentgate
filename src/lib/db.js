@@ -1658,6 +1658,7 @@ export function listServicesWithAccess() {
 /**
  * Get all service accounts that an agent has access to
  * Returns array of { id, service, account_name, bypass_auth }
+ * Optimized: fetches all data in 3 queries instead of N+1
  */
 export function getAgentServiceAccess(agentName) {
   // Get all service accounts
@@ -1665,18 +1666,53 @@ export function getAgentServiceAccess(agentName) {
     SELECT id, service, name as account_name FROM service_accounts ORDER BY service, name
   `).all();
 
-  // For each account, check if this agent has access
+  // Get all access modes in one query
+  const accessModes = db.prepare(`
+    SELECT service, account_name, access_mode FROM service_access
+  `).all();
+  const modeMap = new Map();
+  for (const row of accessModes) {
+    modeMap.set(`${row.service}:${row.account_name}`, row.access_mode);
+  }
+
+  // Get all agent access entries for this agent in one query (case-insensitive)
+  const agentEntries = db.prepare(`
+    SELECT service, account_name, allowed, bypass_auth FROM service_agent_access
+    WHERE LOWER(agent_name) = LOWER(?)
+  `).all(agentName);
+  const agentMap = new Map();
+  for (const row of agentEntries) {
+    agentMap.set(`${row.service}:${row.account_name}`, row);
+  }
+
+  // Process in memory
   const result = [];
   for (const acc of accounts) {
-    const access = checkServiceAccess(acc.service, acc.account_name, agentName);
-    if (access.allowed) {
-      // Check for bypass_auth
-      const bypassAuth = checkBypassAuth(acc.service, acc.account_name, agentName);
+    const key = `${acc.service}:${acc.account_name}`;
+    const accessMode = modeMap.get(key) || 'all';
+    const agentEntry = agentMap.get(key);
+
+    // Check access based on mode
+    let allowed = false;
+    if (accessMode === 'all') {
+      // All allowed unless explicitly denied
+      allowed = !agentEntry || agentEntry.allowed !== 0;
+    } else if (accessMode === 'allowlist') {
+      // Only allowed if explicitly in list with allowed=true
+      allowed = agentEntry && agentEntry.allowed === 1;
+    } else if (accessMode === 'denylist') {
+      // Allowed unless explicitly in list with allowed=false
+      allowed = !agentEntry || agentEntry.allowed !== 0;
+    } else if (accessMode === 'none') {
+      allowed = false;
+    }
+
+    if (allowed) {
       result.push({
         id: acc.id,
         service: acc.service,
         account_name: acc.account_name,
-        bypass_auth: bypassAuth
+        bypass_auth: agentEntry?.bypass_auth === 1
       });
     }
   }

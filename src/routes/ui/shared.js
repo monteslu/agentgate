@@ -91,10 +91,11 @@ export function localizeScript() {
 
 // Shared HTML head with common styles/scripts
 export function htmlHead(title, { includeSocket = false } = {}) {
+  const safeTitle = escapeHtml(title);
   return `<!DOCTYPE html>
 <html>
 <head>
-  <title>agentgate - ${title}</title>
+  <title>agentgate - ${safeTitle}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
@@ -133,6 +134,8 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       </button>
     </div>
     <div class="dropdown-menu" id="dropdown-menu">
+      <a href="/ui/access" class="dropdown-item">Access Control</a>
+      <a href="/ui/mementos" class="dropdown-item">Mementos</a>
       <a href="/ui/llm" class="dropdown-item">LLM Providers</a>
       <a href="/ui/settings" class="dropdown-item">Settings</a>
       <div class="dropdown-divider"></div>
@@ -221,6 +224,12 @@ export function copyScript() {
         setTimeout(() => btn.textContent = orig, 1500);
       });
     }
+    // Handle data-copy buttons
+    document.querySelectorAll('[data-copy]').forEach(btn => {
+      btn.addEventListener('click', function() {
+        copyText(this.dataset.copy, this);
+      });
+    });
   </script>`;
 }
 

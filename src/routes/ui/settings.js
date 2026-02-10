@@ -8,7 +8,7 @@ import {
   getPendingQueueCount, listPendingMessages
 } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../../lib/hsyncManager.js';
-import { PORT, htmlHead, navHeader, menuScript, socketScript, localizeScript, copyScript } from './shared.js';
+import { PORT, htmlHead, navHeader, menuScript, socketScript, localizeScript, copyScript, escapeHtml } from './shared.js';
 
 const router = Router();
 
@@ -109,8 +109,8 @@ ${htmlHead('Settings', { includeSocket: true })}
   <div class="card">
     <h3>hsync (Remote Access) ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</h3>
     ${hsyncConfig?.enabled ? `
-      <p>URL: <strong>${hsyncConfig?.url}</strong></p>
-      ${hsyncUrl ? `<p>Public URL: <span class="copyable">${hsyncUrl} <button type="button" class="copy-btn" onclick="copyText('${hsyncUrl}', this)">Copy</button></span></p>` : '<p class="help">Connecting... (refresh page to see URL)</p>'}
+      <p>URL: <strong>${escapeHtml(hsyncConfig?.url || '')}</strong></p>
+      ${hsyncUrl ? `<p>Public URL: <span class="copyable">${escapeHtml(hsyncUrl)} <button type="button" class="copy-btn" data-copy="${escapeHtml(hsyncUrl)}">Copy</button></span></p>` : '<p class="help">Connecting... (refresh page to see URL)</p>'}
       <form method="POST" action="/ui/hsync/delete">
         <button type="submit" class="btn-danger">Disable</button>
       </form>

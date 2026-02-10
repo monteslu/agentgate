@@ -235,9 +235,7 @@ curl -X POST http://localhost:${PORT}/api/queue/github/personal/submit \\
 function renderPage(accounts, options) {
   const { pendingQueueCount, messagingMode, pendingMessagesCount } = options;
 
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Services', { includeSocket: true })}
+  return `${htmlHead('Services', { includeSocket: true })}
 ${renderServicesStyles()}
 <body>
   ${navHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}

@@ -295,9 +295,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     `<a href="/ui/queue?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');
 
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Write Queue', { includeSocket: true })}
+  return `${htmlHead('Write Queue', { includeSocket: true })}
   <style>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: var(--gray-400); font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }

@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
 import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
-import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
+import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
 
@@ -392,9 +392,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
     </tr>
   `;
 
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Agents', { includeSocket: true })}
+  return `${htmlHead('Agents', { includeSocket: true })}
   <style>
     .add-agent-box {
       display: flex;
@@ -558,9 +556,7 @@ ${localizeScript()}
 }
 
 function renderAgentNotFound(id) {
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Agent Not Found', { includeSocket: true })}
+  return `${htmlHead('Agent Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
   <div class="card" style="text-align: center; padding: 40px;">
@@ -576,9 +572,7 @@ ${htmlHead('Agent Not Found', { includeSocket: true })}
 }
 
 function renderAgentDetailPage(agent, counts, serviceAccess = []) {
-  return `<!DOCTYPE html>
-<html>
-${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
+  return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
 <style>
   .agent-header {
     display: flex;
@@ -985,8 +979,8 @@ ${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
   <div id="toast" class="toast"></div>
 
   <script>
-    const agentId = '${agent.id}';
-    const agentName = '${escapeHtml(agent.name)}';
+    const agentId = ${JSON.stringify(agent.id)};
+    const agentName = ${JSON.stringify(agent.name)};
 
     function showToast(msg, type) {
       const t = document.getElementById('toast');
@@ -1165,8 +1159,7 @@ ${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
 
 function getProxyUrl(proxyId) {
   if (!proxyId) return '';
-  // This will be replaced with the actual base URL on the client side
-  return '/px/' + proxyId + '/';
+  return BASE_URL + '/px/' + proxyId + '/';
 }
 
 function getServiceIcon(service) {

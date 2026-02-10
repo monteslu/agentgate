@@ -129,9 +129,7 @@ router.post('/:id/access/agent/:agentName/bypass', (req, res) => {
 });
 
 function renderNotFound(id) {
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Service Not Found', { includeSocket: true })}
+  return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
   <div class="card" style="text-align: center; padding: 40px;">
@@ -196,9 +194,7 @@ function renderServiceDetail({ account, serviceInfo, serviceModule, agents, acce
     `;
   }).join('');
 
-  return `<!DOCTYPE html>
-<html>
-${htmlHead(`${displayName} - ${account.name}`, { includeSocket: true })}
+  return `${htmlHead(`${displayName} - ${account.name}`, { includeSocket: true })}
 <style>
   .service-detail-header {
     display: flex;
@@ -344,7 +340,7 @@ ${htmlHead(`${displayName} - ${account.name}`, { includeSocket: true })}
   ${menuScript()}
   ${localizeScript()}
   <script>
-    const serviceId = ${account.id};
+    const serviceId = ${JSON.stringify(account.id)};
 
     // Mode select change
     document.getElementById('access-mode').addEventListener('change', async function() {
@@ -442,9 +438,7 @@ function getServiceIcon(service) {
 }
 
 function renderServiceTypeNotFound(serviceType) {
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Service Not Found', { includeSocket: true })}
+  return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
   <div class="card" style="text-align: center; padding: 40px;">
@@ -466,9 +460,7 @@ function renderAddService(serviceModule) {
   // Get form fields based on service type
   const formFields = getServiceFormFields(serviceName);
 
-  return `<!DOCTYPE html>
-<html>
-${htmlHead(`Add ${displayName}`, { includeSocket: true })}
+  return `${htmlHead(`Add ${displayName}`, { includeSocket: true })}
 <style>
   .add-service-header {
     display: flex;

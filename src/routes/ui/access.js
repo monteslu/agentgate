@@ -130,9 +130,7 @@ function renderAccessPage(services, agents) {
     `;
   };
   
-  return `<!DOCTYPE html>
-<html>
-${htmlHead('Access Control', { includeSocket: true })}
+  return `${htmlHead('Access Control', { includeSocket: true })}
   <style>
     .service-card { margin-bottom: 24px; }
     .service-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
