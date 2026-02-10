@@ -107,13 +107,6 @@ h3 {
   box-shadow: var(--shadow), var(--shadow-glow);
   border: 1px solid rgba(99, 102, 241, 0.15);
   backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg), 0 0 60px rgba(99, 102, 241, 0.2);
-  transform: translateY(-4px);
-  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .status {
@@ -163,7 +156,7 @@ input[type="text"], input[type="password"] {
   border: 2px solid rgba(99, 102, 241, 0.2);
   border-radius: var(--radius-sm);
   font-size: 14px;
-  transition: all 0.3s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
   background: rgba(15, 15, 25, 0.6);
   color: var(--gray-100);
 }
@@ -186,7 +179,7 @@ button, input[type="submit"] {
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -201,8 +194,7 @@ button, input[type="submit"] {
 
 .btn-primary:hover {
   background: linear-gradient(135deg, #7c3aed 0%, var(--primary) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
 }
 
 .btn-secondary {
@@ -214,7 +206,6 @@ button, input[type="submit"] {
 .btn-secondary:hover {
   background: rgba(99, 102, 241, 0.2);
   border-color: var(--primary);
-  transform: translateY(-2px);
 }
 
 .btn-danger {
@@ -225,8 +216,7 @@ button, input[type="submit"] {
 
 .btn-danger:hover {
   background: linear-gradient(135deg, var(--danger-dark) 0%, var(--danger) 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
 }
 
 .btn-sm {
@@ -254,7 +244,7 @@ button, input[type="submit"] {
   font-weight: 600;
   border-radius: 10px;
   text-decoration: none;
-  transition: all 0.3s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -271,7 +261,6 @@ button, input[type="submit"] {
   background: rgba(255, 255, 255, 0.1);
   color: white;
   border-color: rgba(255, 255, 255, 0.2);
-  transform: translateY(-2px);
 }
 
 .nav-btn-primary {
@@ -282,8 +271,7 @@ button, input[type="submit"] {
 }
 
 .nav-btn-primary:hover {
-  box-shadow: 0 8px 25px rgba(99, 102, 241, 0.4);
-  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
 }
 
 .nav-btn-danger {
@@ -296,7 +284,6 @@ button, input[type="submit"] {
   background: rgba(239, 68, 68, 0.2);
   color: #fca5a5;
   border-color: rgba(239, 68, 68, 0.5);
-  transform: translateY(-2px);
 }
 
 .account-item {
@@ -308,12 +295,6 @@ button, input[type="submit"] {
   border-radius: var(--radius-sm);
   margin: 12px 0;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  transition: all 0.3s ease;
-}
-
-.account-item:hover {
-  border-color: rgba(99, 102, 241, 0.3);
-  background: rgba(99, 102, 241, 0.05);
 }
 
 .account-item span {
@@ -371,7 +352,6 @@ label {
   cursor: pointer;
   font-weight: 600;
   color: var(--primary-light);
-  transition: all 0.2s ease;
 }
 
 .copy-btn:hover {
@@ -389,7 +369,6 @@ summary {
   color: var(--primary-light);
   font-weight: 600;
   padding: 10px 0;
-  transition: color 0.2s ease;
   list-style: none;
   display: flex;
   align-items: center;
@@ -412,7 +391,6 @@ summary::before {
   font-size: 16px;
   font-weight: bold;
   color: var(--primary-light);
-  transition: all 0.3s ease;
 }
 
 details[open] summary::before {
@@ -424,10 +402,6 @@ details[open] summary::before {
 
 summary:hover {
   color: white;
-}
-
-summary:hover::before {
-  background: rgba(99, 102, 241, 0.3);
 }
 
 .service-header {
@@ -700,23 +674,8 @@ body > p:first-of-type {
   color: #818cf8;
   border: 1px solid rgba(99, 102, 241, 0.3);
   cursor: pointer;
-  transition: all 0.2s;
 }
 
 .btn-xs:hover {
   background: rgba(99, 102, 241, 0.25);
-}
-
-.btn-danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  padding: 8px 16px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-danger:hover {
-  background: rgba(239, 68, 68, 0.25);
 }

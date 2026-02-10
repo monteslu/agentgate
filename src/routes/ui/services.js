@@ -19,6 +19,8 @@ import * as mastodon from './mastodon.js';
 import * as linkedin from './linkedin.js';
 import * as jira from './jira.js';
 import * as fitbit from './fitbit.js';
+import * as brave from './brave.js';
+import * as googleSearch from './google-search.js';
 
 // Export all implemented services in display order
 export const services = [
@@ -30,59 +32,48 @@ export const services = [
   youtube,
   fitbit,
   jira,
-  linkedin
+  linkedin,
+  brave,
+  googleSearch
 ];
 
 // Full service catalog with categories — includes both implemented and coming-soon services
 export const catalog = [
   {
-    category: '📱 Social',
+    category: 'Social & Communication',
     services: [
       { id: 'bluesky', name: 'Bluesky', icon: '🦋', implemented: true },
       { id: 'mastodon', name: 'Mastodon', icon: '🐘', implemented: true },
-      { id: 'twitter', name: 'Twitter / X', icon: '🐦', implemented: false },
       { id: 'linkedin', name: 'LinkedIn', icon: '💼', implemented: true },
-      { id: 'reddit', name: 'Reddit', icon: '🤖', implemented: true }
+      { id: 'reddit', name: 'Reddit', icon: '🤖', implemented: true },
+      { id: 'twitter', name: 'Twitter / X', icon: '🐦', implemented: false },
+      { id: 'slack', name: 'Slack', icon: '💬', implemented: false },
+      { id: 'email', name: 'Email', icon: '✉️', implemented: false }
     ]
   },
   {
-    category: '💻 Dev',
+    category: 'Developer & Productivity',
     services: [
       { id: 'github', name: 'GitHub', icon: '🐙', implemented: true },
-      { id: 'jira', name: 'Jira', icon: '📋', implemented: true }
-    ]
-  },
-  {
-    category: '📅 Productivity',
-    services: [
+      { id: 'jira', name: 'Jira', icon: '📋', implemented: true },
       { id: 'calendar', name: 'Calendar', icon: '📅', implemented: true },
-      { id: 'notion', name: 'Notion', icon: '📝', implemented: false },
-      { id: 'slack', name: 'Slack', icon: '💬', implemented: false }
+      { id: 'notion', name: 'Notion', icon: '📝', implemented: false }
     ]
   },
   {
-    category: '🎵 Media',
+    category: 'Search & Media',
     services: [
+      { id: 'brave', name: 'Brave Search', icon: '🦁', implemented: true },
+      { id: 'google_search', name: 'Google Search', icon: '🔍', implemented: true },
       { id: 'youtube', name: 'YouTube', icon: '▶️', implemented: true },
       { id: 'spotify', name: 'Spotify', icon: '🎵', implemented: false }
     ]
   },
   {
-    category: '💪 Health',
+    category: 'Health & Finance',
     services: [
-      { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true }
-    ]
-  },
-  {
-    category: '💰 Finance',
-    services: [
+      { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true },
       { id: 'stripe', name: 'Stripe', icon: '💳', implemented: false }
-    ]
-  },
-  {
-    category: '📧 Communication',
-    services: [
-      { id: 'email', name: 'Email / Gmail', icon: '✉️', implemented: false }
     ]
   }
 ];
@@ -127,13 +118,13 @@ export function renderCatalog(accounts) {
         <div class="catalog-tile catalog-tile-disabled" title="${svc.name} — coming soon">
           <span class="catalog-tile-icon">${svc.icon}</span>
           <span class="catalog-tile-name">${svc.name}</span>
-          <span class="catalog-tile-badge coming-soon">Coming Soon</span>
+          <span class="catalog-tile-badge coming-soon">Soon</span>
         </div>`;
       }
 
       // Implemented service — link to its setup section
       const badge = isConfigured
-        ? '<span class="catalog-tile-badge configured">✓ Connected</span>'
+        ? '<span class="catalog-tile-badge configured">✓</span>'
         : '';
       return `
         <a href="#service-${svc.id}" class="catalog-tile" onclick="openServiceCard('${svc.id}')">

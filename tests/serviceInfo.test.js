@@ -7,6 +7,8 @@ import { serviceInfo as youtubeInfo } from '../src/routes/youtube.js';
 import { serviceInfo as linkedinInfo } from '../src/routes/linkedin.js';
 import { serviceInfo as jiraInfo } from '../src/routes/jira.js';
 import { serviceInfo as fitbitInfo } from '../src/routes/fitbit.js';
+import { serviceInfo as braveInfo } from '../src/routes/brave.js';
+import { serviceInfo as googleSearchInfo } from '../src/routes/google-search.js';
 
 const allServices = [
   githubInfo,
@@ -17,7 +19,9 @@ const allServices = [
   youtubeInfo,
   linkedinInfo,
   jiraInfo,
-  fitbitInfo
+  fitbitInfo,
+  braveInfo,
+  googleSearchInfo
 ];
 
 describe('Service Info Exports', () => {

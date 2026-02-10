@@ -16,6 +16,8 @@ import linkedinRoutes from './routes/linkedin.js';
 import youtubeRoutes from './routes/youtube.js';
 import jiraRoutes from './routes/jira.js';
 import fitbitRoutes from './routes/fitbit.js';
+import braveRoutes from './routes/brave.js';
+import googleSearchRoutes from './routes/google-search.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
@@ -67,6 +69,8 @@ app.use('/api/linkedin', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('linked
 app.use('/api/youtube', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('youtube'), youtubeRoutes);
 app.use('/api/jira', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('jira'), jiraRoutes);
 app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('fitbit'), fitbitRoutes);
+app.use('/api/brave', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('brave'), braveRoutes);
+app.use('/api/google_search', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('google_search'), googleSearchRoutes);
 
 // Service access management - admin API (requires auth)
 app.use('/api/services', apiKeyAuth, servicesRoutes);

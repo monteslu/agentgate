@@ -44,56 +44,56 @@ function renderHead() {
   <script src="/socket.io/socket.io.js"></script>
   <style>
     /* ===== Services Catalog Styles ===== */
-    .catalog-category { margin-bottom: 10px; }
+    .catalog-category { margin-bottom: 16px; }
+    .catalog-category:last-child { margin-bottom: 0; }
     .catalog-category-title {
-      margin: 0 0 6px 0;
-      font-size: 0.8em;
-      color: #9ca3af;
+      margin: 0 0 8px 0;
+      font-size: 0.7em;
+      color: #6b7280;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
     .catalog-grid {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 8px;
     }
     .catalog-tile {
       display: inline-flex;
       align-items: center;
-      gap: 5px;
-      padding: 5px 10px;
+      gap: 6px;
+      padding: 6px 12px;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 6px;
       text-decoration: none;
-      color: #f3f4f6;
-      transition: background 0.15s, border-color 0.15s;
+      color: #e5e7eb;
       cursor: pointer;
-      white-space: nowrap;
     }
     .catalog-tile:hover {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(129,140,248,0.4);
+      background: rgba(99,102,241,0.12);
+      border-color: rgba(99,102,241,0.4);
     }
     .catalog-tile-disabled {
-      opacity: 0.45;
+      opacity: 0.4;
       cursor: default;
       pointer-events: none;
     }
     .catalog-tile-icon { font-size: 16px; }
     .catalog-tile-name { font-size: 0.8em; font-weight: 500; }
     .catalog-tile-badge {
-      font-size: 0.6em;
-      padding: 1px 5px;
+      font-size: 0.55em;
+      padding: 2px 5px;
       border-radius: 3px;
       font-weight: 600;
     }
     .catalog-tile-badge.configured {
-      background: rgba(16,185,129,0.15);
+      background: rgba(16,185,129,0.25);
       color: #34d399;
     }
     .catalog-tile-badge.coming-soon {
-      background: rgba(156,163,175,0.15);
-      color: #9ca3af;
+      color: #6b7280;
     }
     .services-section { margin-top: 20px; }
     .services-section h3 {
