@@ -240,7 +240,7 @@ function toolError(message) {
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ error: message }, null, 2)
+        text: JSON.stringify({ via: 'agentgate', error: message }, null, 2)
       }
     ],
     isError: true

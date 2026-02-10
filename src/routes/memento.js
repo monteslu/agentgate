@@ -15,18 +15,18 @@ router.post('/', (req, res) => {
   const agentId = req.apiKeyName;
 
   if (!content) {
-    return res.status(400).json({ error: 'Missing "content" field' });
+    return res.status(400).json({ via: 'agentgate', error: 'Missing "content" field' });
   }
 
   if (!keywords || !Array.isArray(keywords)) {
-    return res.status(400).json({ error: 'Missing or invalid "keywords" field (must be an array)' });
+    return res.status(400).json({ via: 'agentgate', error: 'Missing or invalid "keywords" field (must be an array)' });
   }
 
   try {
     const memento = createMemento(agentId, content, keywords, { model, role });
     return res.status(201).json({ via: 'agentgate', ...memento });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    return res.status(400).json({ via: 'agentgate', error: err.message });
   }
 });
 
@@ -44,14 +44,14 @@ router.get('/search', (req, res) => {
   const { keywords, limit } = req.query;
 
   if (!keywords) {
-    return res.status(400).json({ error: 'Missing "keywords" query parameter' });
+    return res.status(400).json({ via: 'agentgate', error: 'Missing "keywords" query parameter' });
   }
 
   // Parse keywords (comma-separated)
   const keywordList = keywords.split(',').map(k => k.trim()).filter(k => k);
 
   if (keywordList.length === 0) {
-    return res.status(400).json({ error: 'No valid keywords provided' });
+    return res.status(400).json({ via: 'agentgate', error: 'No valid keywords provided' });
   }
 
   const options = {};
@@ -92,11 +92,11 @@ router.get('/:ids', (req, res) => {
   const idList = ids.split(',').map(id => id.trim()).filter(id => id);
 
   if (idList.length === 0) {
-    return res.status(400).json({ error: 'No valid IDs provided' });
+    return res.status(400).json({ via: 'agentgate', error: 'No valid IDs provided' });
   }
 
   if (idList.length > 20) {
-    return res.status(400).json({ error: 'Cannot fetch more than 20 mementos at once' });
+    return res.status(400).json({ via: 'agentgate', error: 'Cannot fetch more than 20 mementos at once' });
   }
 
   const mementos = getMementosById(agentId, idList);

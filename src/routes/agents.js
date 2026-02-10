@@ -26,16 +26,20 @@ router.post('/message', async (req, res) => {
   const fromAgent = req.apiKeyName; // Set by apiKeyAuth middleware
 
   if (!targetAgent) {
-    return res.status(400).json({ error: 'Missing "to_agent" field (recipient agent name)' });
+    return res.status(400).json({
+      via: 'agentgate',
+      error: 'Missing recipient: provide "to_agent" (preferred) or "to"'
+    });
   }
 
   if (!message) {
-    return res.status(400).json({ error: 'Missing "message" field' });
+    return res.status(400).json({ via: 'agentgate', error: 'Missing "message" field' });
   }
 
   // Check message length
   if (message.length > MAX_MESSAGE_LENGTH) {
     return res.status(400).json({
+      via: 'agentgate',
       error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`,
       length: message.length,
       max: MAX_MESSAGE_LENGTH
@@ -46,6 +50,7 @@ router.post('/message', async (req, res) => {
 
   if (mode === 'off') {
     return res.status(403).json({
+      via: 'agentgate',
       error: 'Agent messaging is disabled',
       hint: 'Admin can enable messaging in the agentgate UI'
     });
@@ -54,7 +59,7 @@ router.post('/message', async (req, res) => {
   // Validate recipient exists (case-insensitive lookup)
   const recipient = getApiKeyByName(targetAgent);
   if (!recipient) {
-    return res.status(404).json({ error: `Agent "${targetAgent}" not found` });
+    return res.status(404).json({ via: 'agentgate', error: `Agent "${targetAgent}" not found` });
   }
 
   // Use canonical name from database
@@ -62,7 +67,7 @@ router.post('/message', async (req, res) => {
 
   // Can't message yourself (case-insensitive)
   if (recipientName.toLowerCase() === fromAgent.toLowerCase()) {
-    return res.status(400).json({ error: 'Cannot send message to yourself' });
+    return res.status(400).json({ via: 'agentgate', error: 'Cannot send message to yourself' });
   }
 
   try {
@@ -94,7 +99,7 @@ router.post('/message', async (req, res) => {
       });
     }
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ via: 'agentgate', error: err.message });
   }
 });
 
@@ -107,6 +112,7 @@ router.get('/messages', async (req, res) => {
 
   if (mode === 'off') {
     return res.status(403).json({
+      via: 'agentgate',
       error: 'Agent messaging is disabled',
       hint: 'Admin can enable messaging in the agentgate UI'
     });
@@ -135,13 +141,13 @@ router.post('/messages/:id/read', async (req, res) => {
   const mode = getMessagingMode();
 
   if (mode === 'off') {
-    return res.status(403).json({ error: 'Agent messaging is disabled' });
+    return res.status(403).json({ via: 'agentgate', error: 'Agent messaging is disabled' });
   }
 
   const result = markMessageRead(id, agentName);
 
   if (result.changes === 0) {
-    return res.status(404).json({ error: 'Message not found or already read' });
+    return res.status(404).json({ via: 'agentgate', error: 'Message not found or already read' });
   }
 
   return res.json({ success: true, via: 'agentgate' });
@@ -178,6 +184,7 @@ router.get('/messageable', async (req, res) => {
 
   if (mode === 'off') {
     return res.status(403).json({
+      via: 'agentgate',
       error: 'Agent messaging is disabled',
       agents: []
     });
@@ -207,18 +214,19 @@ router.post('/broadcast', async (req, res) => {
   const fromAgent = req.apiKeyName || 'admin';
 
   if (!message) {
-    return res.status(400).json({ error: 'Missing "message" field' });
+    return res.status(400).json({ via: 'agentgate', error: 'Missing "message" field' });
   }
 
   if (message.length > MAX_MESSAGE_LENGTH) {
     return res.status(400).json({
+      via: 'agentgate',
       error: `Message too long. Maximum ${MAX_MESSAGE_LENGTH} bytes allowed.`
     });
   }
 
   const mode = getMessagingMode();
   if (mode === 'off') {
-    return res.status(403).json({ error: 'Agent messaging is disabled' });
+    return res.status(403).json({ via: 'agentgate', error: 'Agent messaging is disabled' });
   }
 
   // Get all agents with webhooks (excluding sender)
@@ -290,7 +298,7 @@ router.post('/broadcast', async (req, res) => {
 router.get('/broadcasts', (req, res) => {
   const mode = getMessagingMode();
   if (mode === 'off') {
-    return res.status(403).json({ error: 'Agent messaging is disabled' });
+    return res.status(403).json({ via: 'agentgate', error: 'Agent messaging is disabled' });
   }
 
   const limit = parseInt(req.query.limit) || 50;
@@ -302,12 +310,12 @@ router.get('/broadcasts', (req, res) => {
 router.get('/broadcasts/:id', (req, res) => {
   const mode = getMessagingMode();
   if (mode === 'off') {
-    return res.status(403).json({ error: 'Agent messaging is disabled' });
+    return res.status(403).json({ via: 'agentgate', error: 'Agent messaging is disabled' });
   }
 
   const broadcast = getBroadcast(req.params.id);
   if (!broadcast) {
-    return res.status(404).json({ error: 'Broadcast not found' });
+    return res.status(404).json({ via: 'agentgate', error: 'Broadcast not found' });
   }
   return res.json({ via: 'agentgate', ...broadcast });
 });
