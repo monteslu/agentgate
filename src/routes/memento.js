@@ -24,7 +24,7 @@ router.post('/', (req, res) => {
 
   try {
     const memento = createMemento(agentId, content, keywords, { model, role });
-    return res.status(201).json(memento);
+    return res.status(201).json({ via: 'agentgate', ...memento });
   } catch (err) {
     return res.status(400).json({ error: err.message });
   }
@@ -35,7 +35,7 @@ router.get('/keywords', (req, res) => {
   const agentId = req.apiKeyName;
 
   const keywords = getMementoKeywords(agentId);
-  return res.json({ keywords });
+  return res.json({ via: 'agentgate', keywords });
 });
 
 // GET /api/agents/memento/search - Search mementos by keyword
@@ -63,7 +63,7 @@ router.get('/search', (req, res) => {
   }
 
   const matches = searchMementos(agentId, keywordList, options);
-  return res.json({ matches });
+  return res.json({ via: 'agentgate', matches });
 });
 
 // GET /api/agents/memento/recent - Get recent mementos
@@ -80,7 +80,7 @@ router.get('/recent', (req, res) => {
   }
 
   const mementos = getRecentMementos(agentId, parsedLimit);
-  return res.json({ mementos });
+  return res.json({ via: 'agentgate', mementos });
 });
 
 // GET /api/agents/memento/:ids - Fetch full content by IDs
@@ -100,7 +100,7 @@ router.get('/:ids', (req, res) => {
   }
 
   const mementos = getMementosById(agentId, idList);
-  return res.json({ mementos });
+  return res.json({ via: 'agentgate', mementos });
 });
 
 export default router;

@@ -21,11 +21,12 @@ const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 
 // POST /api/agents/message - Send a message to another agent
 router.post('/message', async (req, res) => {
-  const { to, message } = req.body;
+  const { to_agent, to, message } = req.body;
+  const targetAgent = to_agent || to; // Prefer to_agent, fall back to to for backwards compatibility
   const fromAgent = req.apiKeyName; // Set by apiKeyAuth middleware
 
-  if (!to) {
-    return res.status(400).json({ error: 'Missing "to" field (recipient agent name)' });
+  if (!targetAgent) {
+    return res.status(400).json({ error: 'Missing "to_agent" field (recipient agent name)' });
   }
 
   if (!message) {
@@ -51,9 +52,9 @@ router.post('/message', async (req, res) => {
   }
 
   // Validate recipient exists (case-insensitive lookup)
-  const recipient = getApiKeyByName(to);
+  const recipient = getApiKeyByName(targetAgent);
   if (!recipient) {
-    return res.status(404).json({ error: `Agent "${to}" not found` });
+    return res.status(404).json({ error: `Agent "${targetAgent}" not found` });
   }
 
   // Use canonical name from database
@@ -75,7 +76,9 @@ router.post('/message', async (req, res) => {
       return res.json({
         id: result.id,
         status: 'pending',
-        message: 'Message queued for human approval'
+        to: recipientName,
+        message: 'Message queued for human approval',
+        via: 'agentgate'
       });
     } else {
       // open mode - notify recipient immediately
@@ -85,7 +88,9 @@ router.post('/message', async (req, res) => {
       return res.json({
         id: result.id,
         status: 'delivered',
-        message: 'Message delivered'
+        to: recipientName,
+        message: 'Message delivered',
+        via: 'agentgate'
       });
     }
   } catch (err) {
@@ -110,6 +115,7 @@ router.get('/messages', async (req, res) => {
   const messages = getMessagesForAgent(agentName, unreadOnly);
 
   return res.json({
+    via: 'agentgate',
     mode,
     messages: messages.map(m => ({
       id: m.id,
@@ -138,7 +144,7 @@ router.post('/messages/:id/read', async (req, res) => {
     return res.status(404).json({ error: 'Message not found or already read' });
   }
 
-  return res.json({ success: true });
+  return res.json({ success: true, via: 'agentgate' });
 });
 
 // GET /api/agents/status - Get messaging status and mode
@@ -148,6 +154,7 @@ router.get('/status', async (req, res) => {
 
   if (mode === 'off') {
     return res.json({
+      via: 'agentgate',
       mode: 'off',
       enabled: false,
       message: 'Agent messaging is disabled'
@@ -157,6 +164,7 @@ router.get('/status', async (req, res) => {
   const messages = getMessagesForAgent(agentName, true);
 
   return res.json({
+    via: 'agentgate',
     mode,
     enabled: true,
     unread_count: messages.length
@@ -186,6 +194,7 @@ router.get('/messageable', async (req, res) => {
     }));
 
   return res.json({
+    via: 'agentgate',
     mode,
     agents
   });
@@ -219,7 +228,7 @@ router.post('/broadcast', async (req, res) => {
   );
 
   if (recipients.length === 0) {
-    return res.json({ broadcast_id: null, delivered: [], failed: [], total: 0 });
+    return res.json({ via: 'agentgate', broadcast_id: null, delivered: [], failed: [], total: 0 });
   }
 
   // Create broadcast record
@@ -274,7 +283,7 @@ router.post('/broadcast', async (req, res) => {
     }
   }));
 
-  return res.json({ broadcast_id: broadcastId, delivered, failed, total: recipients.length });
+  return res.json({ via: 'agentgate', broadcast_id: broadcastId, delivered, failed, total: recipients.length });
 });
 
 // GET /api/agents/broadcasts - List broadcast history
@@ -286,7 +295,7 @@ router.get('/broadcasts', (req, res) => {
 
   const limit = parseInt(req.query.limit) || 50;
   const broadcasts = listBroadcastsWithRecipients(Math.min(limit, 100));
-  return res.json({ broadcasts });
+  return res.json({ via: 'agentgate', broadcasts });
 });
 
 // GET /api/agents/broadcasts/:id - Get specific broadcast
@@ -300,7 +309,7 @@ router.get('/broadcasts/:id', (req, res) => {
   if (!broadcast) {
     return res.status(404).json({ error: 'Broadcast not found' });
   }
-  return res.json(broadcast);
+  return res.json({ via: 'agentgate', ...broadcast });
 });
 
 export default router;

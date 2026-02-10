@@ -257,39 +257,39 @@ router.get('/', (req, res) => {
           sendMessage: {
             method: 'POST',
             path: '/api/agents/message',
-            body: { to: 'recipient_agent_name', message: 'Your message content' },
+            body: { to_agent: 'recipient_agent_name', message: 'Your message content' },
             response: mode === 'supervised'
-              ? '{ id, status: "pending", message: "Message queued for human approval" }'
-              : '{ id, status: "delivered", message: "Message delivered" }'
+              ? '{ id, status: "pending", to: "recipient", message: "Message queued for human approval", via: "agentgate" }'
+              : '{ id, status: "delivered", to: "recipient", message: "Message delivered", via: "agentgate" }'
           },
           getMessages: {
             method: 'GET',
             path: '/api/agents/messages',
             queryParams: { unread: 'true (optional) - only return unread messages' },
-            response: '{ mode, messages: [{ id, from, message, created_at, read }, ...] }'
+            response: '{ via: "agentgate", mode, messages: [{ id, from, message, created_at, read }, ...] }'
           },
           markRead: {
             method: 'POST',
             path: '/api/agents/messages/:id/read',
-            response: '{ success: true }'
+            response: '{ success: true, via: "agentgate" }'
           },
           status: {
             method: 'GET',
             path: '/api/agents/status',
-            response: '{ mode, enabled, unread_count }'
+            response: '{ via: "agentgate", mode, enabled, unread_count }'
           },
           discoverAgents: {
             method: 'GET',
             path: '/api/agents/messageable',
             description: 'Discover which agents you can message',
-            response: '{ mode, agents: [{ name }, ...] }'
+            response: '{ via: "agentgate", mode, agents: [{ name, enabled }, ...] }'
           },
           broadcast: {
             method: 'POST',
             path: '/api/agents/broadcast',
             description: 'Send a message to ALL agents with webhooks (excluding yourself)',
             body: { message: 'Your broadcast message' },
-            response: '{ delivered: ["Agent1", "Agent2"], failed: [{ name: "Agent3", error: "HTTP 500" }], total: 3 }',
+            response: '{ via: "agentgate", broadcast_id, delivered: ["Agent1", "Agent2"], failed: [{ name: "Agent3", error: "HTTP 500" }], total: 3 }',
             notes: [
               'Broadcasts are stored in the database and appear in message history',
               'Sender is automatically excluded from recipients',
@@ -312,7 +312,9 @@ router.get('/', (req, res) => {
         notes: [
           'Agent names are case-insensitive (e.g., "WorkBot" and "workbot" are the same)',
           'Agents cannot message themselves',
-          'Maximum message length is 10KB'
+          'Maximum message length is 10KB',
+          'All responses include "via": "agentgate" to distinguish from other messaging systems',
+          'Use "to_agent" field (not sessionKey, label, or other identifiers from different systems)'
         ]
       };
     })(),
