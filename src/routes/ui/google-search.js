@@ -3,11 +3,11 @@ import { escapeHtml } from './shared.js';
 
 export function registerRoutes(router) {
   router.post('/google_search/setup', (req, res) => {
-    const { accountName, api_key, cx } = req.body;
-    if (!accountName || !api_key || !cx) {
+    const { accountName, apiKey, cx } = req.body;
+    if (!accountName || !apiKey || !cx) {
       return res.status(400).send('Account name, API key, and Search Engine ID (cx) required');
     }
-    setAccountCredentials('google_search', accountName, { api_key, cx });
+    setAccountCredentials('google_search', accountName, { api_key: apiKey, cx });
     res.redirect('/ui');
   });
 
@@ -52,7 +52,7 @@ export function renderCard(accounts, _baseUrl) {
           <label>Account Name</label>
           <input type="text" name="accountName" placeholder="default, work, etc." required>
           <label>API Key</label>
-          <input type="password" name="api_key" placeholder="AIza..." required>
+          <input type="password" name="apiKey" placeholder="AIza..." required>
           <label>Search Engine ID (cx)</label>
           <input type="text" name="cx" placeholder="abc123..." required>
           <button type="submit" class="btn-primary">Add Account</button>
