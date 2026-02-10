@@ -37,13 +37,11 @@ router.get('/:accountName/search', async (req, res) => {
       });
     }
 
-    const params = new URLSearchParams({
-      key: creds.api_key,
-      cx: creds.cx,
-      q,
-      ...otherParams
-    });
-
+    const params = new URLSearchParams(otherParams);
+    // Set these after otherParams to prevent user override of credentials
+    params.set('key', creds.api_key);
+    params.set('cx', creds.cx);
+    params.set('q', q);
     if (searchType) params.set('searchType', searchType);
     if (start) params.set('start', start);
     if (num) params.set('num', num);

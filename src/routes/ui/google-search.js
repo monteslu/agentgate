@@ -1,4 +1,5 @@
 import { setAccountCredentials, deleteAccount } from '../../lib/db.js';
+import { escapeHtml } from './shared.js';
 
 export function registerRoutes(router) {
   router.post('/google_search/setup', (req, res) => {
@@ -24,9 +25,9 @@ export function renderCard(accounts, _baseUrl) {
     if (serviceAccounts.length === 0) return '';
     return serviceAccounts.map(acc => `
       <div class="account-item">
-        <span><strong>${acc.name}</strong></span>
+        <span><strong>${escapeHtml(acc.name)}</strong></span>
         <form method="POST" action="/ui/google_search/delete" style="margin:0;">
-          <input type="hidden" name="accountName" value="${acc.name}">
+          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}">
           <button type="submit" class="btn-sm btn-danger">Remove</button>
         </form>
       </div>
