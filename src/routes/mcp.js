@@ -1,6 +1,8 @@
-// MCP (Model Context Protocol) route handler
+// MCP (Model Context Protocol) route handler — Streamable HTTP transport
+import { randomUUID } from 'node:crypto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import {
   submitWriteRequest,
@@ -34,7 +36,7 @@ import {
   createAgentMessage
 } from '../lib/db.js';
 import { notifyAgent } from '../lib/agentNotifier.js';
-import { SERVICE_READERS } from '../lib/serviceRegistry.js';
+import { SERVICE_READERS, SERVICE_CATEGORIES } from '../lib/serviceRegistry.js';
 
 const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
@@ -50,68 +52,100 @@ setInterval(() => {
   for (const [sessionId, session] of activeSessions) {
     if (now - session.lastSeen > SESSION_TTL_MS) {
       console.log(`Cleaning up stale MCP session: ${sessionId}`);
+      session.transport.close().catch(() => {});
       activeSessions.delete(sessionId);
     }
   }
 }, 60 * 1000); // Check every minute
 
 /**
- * Create MCP SSE handler for GET requests (establish SSE connection)
+ * Create MCP POST handler — handles initialization and all subsequent messages.
+ * Per the Streamable HTTP spec (2025-11-25), POST is the primary transport method.
  */
-export function createMCPSSEHandler() {
+export function createMCPPostHandler() {
   return async (req, res) => {
     const agentName = req.apiKeyInfo?.name;
-
     if (!agentName) {
       return res.status(401).json({ error: 'API key authentication required' });
     }
 
+    const sessionId = req.headers['mcp-session-id'];
+
     try {
-      // Check session limit
-      if (activeSessions.size >= MAX_SESSIONS) {
-        console.warn(`MCP session limit reached (${MAX_SESSIONS}), rejecting new connection`);
-        return res.status(503).json({ error: 'Too many active sessions' });
+      if (sessionId) {
+        // Existing session — route message to its transport
+        const session = activeSessions.get(sessionId);
+        if (!session) {
+          return res.status(404).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Session not found or expired' },
+            id: null
+          });
+        }
+
+        if (agentName !== session.agentName) {
+          return res.status(403).json({ error: 'Session belongs to different agent' });
+        }
+
+        session.lastSeen = Date.now();
+        await session.transport.handleRequest(req, res, req.body);
+      } else if (isInitializeRequest(req.body)) {
+        // New session initialization
+        if (activeSessions.size >= MAX_SESSIONS) {
+          console.warn(`MCP session limit reached (${MAX_SESSIONS}), rejecting new connection`);
+          return res.status(503).json({ error: 'Too many active sessions' });
+        }
+
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (sid) => {
+            activeSessions.set(sid, { transport, server, agentName, lastSeen: Date.now() });
+          }
+        });
+
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid) activeSessions.delete(sid);
+        };
+
+        const server = createMCPServer(agentName);
+        await server.connect(transport);
+        await transport.handleRequest(req, res, req.body);
+      } else {
+        // No session ID and not an initialization request
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Bad Request: No valid session ID provided' },
+          id: null
+        });
       }
-
-      // Create transport and server for this session
-      const transport = new SSEServerTransport('/mcp', res);
-      const server = createMCPServer(agentName);
-
-      // Store session for POST message handling
-      const sessionId = transport.sessionId;
-      activeSessions.set(sessionId, { transport, server, agentName, lastSeen: Date.now() });
-
-      // Connect server to transport
-      await server.connect(transport);
-
-      // Handle transport errors
-      transport.onerror = (error) => {
-        console.error('[MCP] Transport error:', error);
-      };
-
-      // Cleanup on close - just remove from sessions, don't call server.close()
-      // as that can cause infinite recursion when the transport is already closing
-      transport.onclose = () => {
-        activeSessions.delete(sessionId);
-      };
     } catch (error) {
-      console.error('[MCP] Error in SSE handler:', error);
+      console.error('[MCP] Error in POST handler:', error);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'MCP server error', message: error.message });
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'Internal server error' },
+          id: null
+        });
       }
     }
   };
 }
 
 /**
- * Create MCP POST handler for incoming messages
+ * Create MCP GET handler — opens an SSE stream for server-initiated notifications.
+ * Optional per the Streamable HTTP spec; clients that need server push use this.
  */
-export function createMCPMessageHandler() {
+export function createMCPGetHandler() {
   return async (req, res) => {
-    const sessionId = req.query.sessionId;
+    const agentName = req.apiKeyInfo?.name;
+    if (!agentName) {
+      return res.status(401).json({ error: 'API key authentication required' });
+    }
 
+    const sessionId = req.headers['mcp-session-id'];
     if (!sessionId) {
-      return res.status(400).json({ error: 'Missing sessionId query parameter' });
+      return res.status(400).json({ error: 'Missing MCP-Session-Id header' });
     }
 
     const session = activeSessions.get(sessionId);
@@ -119,23 +153,46 @@ export function createMCPMessageHandler() {
       return res.status(404).json({ error: 'Session not found or expired' });
     }
 
-    // Validate the API key matches the session's agent
-    const agentName = req.apiKeyInfo?.name;
-    if (!agentName || agentName !== session.agentName) {
+    if (agentName !== session.agentName) {
       return res.status(403).json({ error: 'Session belongs to different agent' });
     }
 
-    // Update last seen timestamp
     session.lastSeen = Date.now();
+    await session.transport.handleRequest(req, res);
+  };
+}
 
-    // Let the transport handle the POST message
+/**
+ * Create MCP DELETE handler — terminates a session.
+ * Per the Streamable HTTP spec, clients send DELETE to cleanly end a session.
+ */
+export function createMCPDeleteHandler() {
+  return async (req, res) => {
+    const agentName = req.apiKeyInfo?.name;
+    if (!agentName) {
+      return res.status(401).json({ error: 'API key authentication required' });
+    }
+
+    const sessionId = req.headers['mcp-session-id'];
+    if (!sessionId) {
+      return res.status(400).json({ error: 'Missing MCP-Session-Id header' });
+    }
+
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found or expired' });
+    }
+
+    if (agentName !== session.agentName) {
+      return res.status(403).json({ error: 'Session belongs to different agent' });
+    }
+
     try {
-      await session.transport.handlePostMessage(req, res, req.body);
-    } catch (err) {
-      console.error(`MCP message handling error for session ${sessionId}:`, err.message);
-      // Only send error if response hasn't been sent
+      await session.transport.handleRequest(req, res);
+    } catch (error) {
+      console.error('[MCP] Error handling session termination:', error);
       if (!res.headersSent) {
-        res.status(500).json({ error: 'Failed to process MCP message' });
+        res.status(500).json({ error: 'Error processing session termination' });
       }
     }
   };
@@ -158,20 +215,13 @@ function createMCPServer(agentName) {
     }
   );
 
-  // Register queue tool
+  // Register queue tool (management only — writes are submitted via category tools)
   server.registerTool('queue', {
-    description: 'Queue write operations (POST/PUT/DELETE) to external services. Actions: submit, list, status, withdraw, warn, get_warnings',
+    description: 'Manage queued write requests. Actions: list, status, withdraw, warn, get_warnings',
     inputSchema: {
-      action: z.enum(['submit', 'list', 'status', 'withdraw', 'warn', 'get_warnings']).describe('Operation to perform'),
-      service: z.string().optional().describe('Required for submit/status/withdraw/warn/get_warnings'),
-      account: z.string().optional().describe('Required for submit/status/withdraw/warn/get_warnings'),
-      requests: z.array(z.object({
-        method: z.enum(['POST', 'PUT', 'PATCH', 'DELETE']),
-        path: z.string(),
-        body: z.any().optional(),
-        headers: z.record(z.string(), z.string()).optional()
-      })).optional().describe('Array of write requests (required for submit)'),
-      comment: z.string().optional(),
+      action: z.enum(['list', 'status', 'withdraw', 'warn', 'get_warnings']).describe('Operation to perform'),
+      service: z.string().optional().describe('Optional filter for list; required for status/withdraw/warn/get_warnings'),
+      account: z.string().optional().describe('Optional filter for list; required for status/withdraw/warn/get_warnings'),
       queue_id: z.string().optional().describe('Required for status/withdraw/warn/get_warnings'),
       reason: z.string().optional(),
       message: z.string().optional().describe('Warning message (required for warn)')
@@ -212,19 +262,64 @@ function createMCPServer(agentName) {
     return await handleMementosAction(agentName, args);
   });
 
-  // Register services tool
+  // Register services tool (meta/discovery only — reads go through category tools)
   server.registerTool('services', {
-    description: 'Read from connected services (GitHub, Bluesky, Mastodon, etc.). Actions: whoami, list, list_detail (with docs/examples), read',
+    description: 'Identity and service discovery. Actions: whoami, list, list_detail (with docs/examples)',
     inputSchema: {
-      action: z.enum(['whoami', 'list', 'list_detail', 'read']).describe('Operation to perform'),
-      service: z.string().optional().describe('Required for read; optional filter for list_detail'),
-      account: z.string().optional().describe('Required for read; optional filter for list_detail'),
-      path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")'),
-      raw: z.boolean().optional().describe('Override raw/simplified response. If omitted, uses agent raw_results setting (default: simplified)')
+      action: z.enum(['whoami', 'list', 'list_detail']).describe('Operation to perform'),
+      service: z.string().optional().describe('Optional filter for list_detail'),
+      account: z.string().optional().describe('Optional filter for list_detail')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
   });
+
+  // Register category tools dynamically based on agent's accessible services
+  const accessibleServices = listAccessibleServices(agentName);
+
+  for (const [category, catInfo] of Object.entries(SERVICE_CATEGORIES)) {
+    // Filter to services in this category that the agent can access
+    const categoryServices = accessibleServices.filter(svc =>
+      catInfo.services.includes(svc.service)
+    );
+
+    // Skip if agent has no access to any service in this category
+    if (categoryServices.length === 0) continue;
+
+    // Build dynamic account list for description
+    const accountList = categoryServices
+      .map(svc => `${svc.service}: ${svc.account_name}`)
+      .join(', ');
+
+    const actions = catInfo.hasWrite ? ['read', 'write'] : ['read'];
+    const actionDesc = catInfo.hasWrite ? 'Read and write' : 'Search';
+    const serviceNames = [...new Set(categoryServices.map(svc => svc.service))].join(', ');
+
+    const schemaFields = {
+      action: z.enum(actions).describe('Operation to perform'),
+      service: z.string().describe(`Service: ${serviceNames}`),
+      account: z.string().describe('Account name'),
+      path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")'),
+      raw: z.boolean().optional().describe('Override raw/simplified response')
+    };
+
+    // Add write fields for categories that support writes
+    if (catInfo.hasWrite) {
+      schemaFields.requests = z.array(z.object({
+        method: z.enum(['POST', 'PUT', 'PATCH', 'DELETE']),
+        path: z.string(),
+        body: z.any().optional(),
+        headers: z.record(z.string(), z.string()).optional()
+      })).optional().describe('Write requests array (required for write)');
+      schemaFields.comment = z.string().optional().describe('Explain what you are doing and why (required for write)');
+    }
+
+    const allowedServiceKeys = catInfo.services;
+    server.registerTool(category, {
+      description: `${actionDesc} — ${catInfo.description}. Accounts: ${accountList}`,
+      inputSchema: schemaFields
+    }, createCategoryHandler(agentName, category, allowedServiceKeys, catInfo.hasWrite));
+  }
 
   return server;
 }
@@ -259,25 +354,6 @@ async function handleQueueAction(agentName, args) {
 
   try {
     switch (action) {
-    case 'submit': {
-      const result = await submitWriteRequest(
-        agentName,
-        args.service,
-        args.account,
-        args.requests,
-        args.comment,
-        { emitEvents: false }
-      );
-
-      return toolResponse({
-        id: result.id,
-        status: result.status,
-        message: result.message,
-        bypassed: result.bypassed,
-        results: result.results
-      });
-    }
-
     case 'list': {
       const result = listQueueEntries(agentName, args.service || null, args.account || null);
       return toolResponse(result);
@@ -624,7 +700,102 @@ async function handleMementosAction(agentName, args) {
   }
 }
 
-// Services action handler
+// Category tool handler factory
+function createCategoryHandler(agentName, categoryName, allowedServices, hasWrite) {
+  return async (args) => {
+    // Validate service is in this category
+    if (!allowedServices.includes(args.service)) {
+      return toolError(`Service "${args.service}" is not in the ${categoryName} category. Allowed: ${allowedServices.join(', ')}`);
+    }
+
+    try {
+      switch (args.action) {
+      case 'read':
+        return await handleServiceRead(agentName, args);
+      case 'write':
+        if (!hasWrite) return toolError('This category does not support writes');
+        return await handleServiceWrite(agentName, args);
+      default:
+        return toolError(`Unknown action: ${args.action}`);
+      }
+    } catch (error) {
+      return toolError(error.message);
+    }
+  };
+}
+
+// Shared read handler for category tools
+async function handleServiceRead(agentName, args) {
+  const { service, account, path } = args;
+  if (!service || !account || !path) {
+    return toolError('service, account, and path are required for read');
+  }
+
+  const access = checkServiceAccess(service, account, agentName);
+  if (!access || !access.allowed) {
+    return toolError(`Access denied to ${service}/${account}: ${access?.reason || 'no access object'} (agent: ${agentName})`);
+  }
+
+  const reader = SERVICE_READERS[service];
+  if (!reader) {
+    return toolError(`Unknown service: ${service}`);
+  }
+
+  try {
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    const [pathPart, qs] = cleanPath.split('?');
+    const query = Object.fromEntries(new URLSearchParams(qs || ''));
+
+    const agent = getApiKeyByName(agentName);
+    const raw = args.raw !== undefined ? !!args.raw : !!(agent?.raw_results);
+    const result = await reader(account, pathPart, { query, raw });
+
+    if (result.status >= 400) {
+      return toolError(`Service returned ${result.status}: ${JSON.stringify(result.data)}`);
+    }
+
+    return toolResponse(result.data);
+  } catch (error) {
+    return toolError(`Failed to read from service: ${error.message}`);
+  }
+}
+
+// Shared write handler for category tools — submits to approval queue
+async function handleServiceWrite(agentName, args) {
+  const { service, account, requests, comment } = args;
+  if (!service || !account) {
+    return toolError('service and account are required for write');
+  }
+  if (!requests || !Array.isArray(requests) || requests.length === 0) {
+    return toolError('requests array is required and must not be empty for write');
+  }
+  if (!comment) {
+    return toolError('comment is required for write — explain what you are doing and why');
+  }
+
+  try {
+    const result = await submitWriteRequest(
+      agentName,
+      service,
+      account,
+      requests,
+      comment,
+      { emitEvents: false }
+    );
+
+    return toolResponse({
+      id: result.id,
+      status: result.status,
+      message: result.message,
+      bypassed: result.bypassed,
+      results: result.results
+    });
+  } catch (error) {
+    return toolError(error.message);
+  }
+}
+
+// Services action handler (meta/discovery only)
 async function handleServicesAction(agentName, args) {
   const { action } = args;
 
@@ -677,43 +848,6 @@ async function handleServicesAction(agentName, args) {
         }
       }
       return toolResponse({ services });
-    }
-
-    case 'read': {
-      const { service, account, path } = args;
-      if (!service || !account || !path) {
-        return toolError('service, account, and path are required');
-      }
-
-      // Check if agent has access to this service
-      const access = checkServiceAccess(service, account, agentName);
-      if (!access || !access.allowed) {
-        return toolError(`Access denied to ${service}/${account}: ${access?.reason || 'no access object'} (agent: ${agentName}, access: ${JSON.stringify(access)})`);
-      }
-
-      const reader = SERVICE_READERS[service];
-      if (!reader) {
-        return toolError(`Unknown service: ${service}`);
-      }
-
-      try {
-        // Parse query params from path (MCP passes "/search?q=hello" as path)
-        const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-        const [pathPart, qs] = cleanPath.split('?');
-        const query = Object.fromEntries(new URLSearchParams(qs || ''));
-
-        const agent = getApiKeyByName(agentName);
-        const raw = args.raw !== undefined ? !!args.raw : !!(agent?.raw_results);
-        const result = await reader(account, pathPart, { query, raw });
-
-        if (result.status >= 400) {
-          return toolError(`Service returned ${result.status}: ${JSON.stringify(result.data)}`);
-        }
-
-        return toolResponse(result.data);
-      } catch (error) {
-        return toolError(`Failed to read from service: ${error.message}`);
-      }
     }
 
     default:

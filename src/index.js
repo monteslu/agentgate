@@ -28,7 +28,7 @@ import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
 import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
 import llmRoutes from './routes/llm.js';
-import { createMCPSSEHandler, createMCPMessageHandler } from './routes/mcp.js';
+import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -93,14 +93,20 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 // LLM proxy - require auth, no read-only enforcement (POST for completions)
 app.use('/api/llm', apiKeyAuth, llmRoutes);
 
-// MCP server - SSE transport (requires auth)
-// GET establishes SSE connection, POST receives messages
-app.get('/mcp', apiKeyAuth, createMCPSSEHandler());
-app.post('/mcp', apiKeyAuth, createMCPMessageHandler());
+// MCP server - Streamable HTTP transport (requires auth)
+// POST handles initialization + messages, GET opens optional SSE stream, DELETE terminates session
+app.post('/mcp', apiKeyAuth, createMCPPostHandler());
+app.get('/mcp', apiKeyAuth, createMCPGetHandler());
+app.delete('/mcp', apiKeyAuth, createMCPDeleteHandler());
 
 // Readme and skill endpoints - require auth
 app.use('/api/readme', apiKeyAuth, readmeRoutes);
-app.use('/api/skill', apiKeyAuth, skillRoutes);
+// Skill setup script is public (no auth) so users can: curl $AGENT_GATE_URL/api/skill/setup | node
+// The script itself uses AGENT_GATE_TOKEN env var to call back to /api/skill
+app.use('/api/skill', (req, res, next) => {
+  if (req.path === '/setup') return next();
+  return apiKeyAuth(req, res, next);
+}, skillRoutes);
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
