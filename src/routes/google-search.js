@@ -4,6 +4,19 @@ import { getAccountCredentials } from '../lib/db.js';
 const router = Router();
 const GOOGLE_SEARCH_API = 'https://www.googleapis.com/customsearch/v1';
 
+// Simplify search results to just title, url, description (like Claude's WebSearch)
+function simplifyResults(data) {
+  if (!data?.items) return { results: [] };
+  return {
+    query: data.queries?.request?.[0]?.searchTerms || '',
+    results: data.items.map(r => ({
+      title: r.title,
+      url: r.link,
+      description: r.snippet || ''
+    }))
+  };
+}
+
 // Service metadata - exported for /api/readme and /api/skill
 export const serviceInfo = {
   key: 'google_search',
@@ -50,7 +63,14 @@ router.get('/:accountName/search', async (req, res) => {
 
     const response = await fetch(url);
     const data = await response.json();
-    res.status(response.status).json(data);
+
+    // Return simplified results by default, raw if requested
+    const raw = req.query.raw === 'true';
+    if (!raw && response.ok) {
+      res.status(response.status).json(simplifyResults(data));
+    } else {
+      res.status(response.status).json(data);
+    }
   } catch (error) {
     res.status(500).json({ error: 'Google Search API request failed', message: error.message });
   }
