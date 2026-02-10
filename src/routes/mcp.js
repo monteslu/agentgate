@@ -159,20 +159,20 @@ function createMCPServer(agentName) {
 
   // Register queue tool
   server.registerTool('queue', {
-    description: 'AgentGate approval queue: request write operations (POST, PUT, DELETE) to external services. Credentials never leave the gateway. Writes are either queued for human approval or auto-approved (if bypass enabled), but always logged. Actions: submit, list, status, withdraw, warn, get_warnings',
+    description: 'Queue write operations (POST/PUT/DELETE) to external services. Actions: submit, list, status, withdraw, warn, get_warnings',
     inputSchema: {
       action: z.enum(['submit', 'list', 'status', 'withdraw', 'warn', 'get_warnings']).describe('Operation to perform'),
-      service: z.string().optional().describe('Service name (required for submit/status/withdraw/warn/get_warnings)'),
-      account: z.string().optional().describe('Account name (required for submit/status/withdraw/warn/get_warnings)'),
+      service: z.string().optional().describe('Required for submit/status/withdraw/warn/get_warnings'),
+      account: z.string().optional().describe('Required for submit/status/withdraw/warn/get_warnings'),
       requests: z.array(z.object({
         method: z.enum(['POST', 'PUT', 'PATCH', 'DELETE']),
         path: z.string(),
         body: z.any().optional(),
         headers: z.record(z.string(), z.string()).optional()
       })).optional().describe('Array of write requests (required for submit)'),
-      comment: z.string().optional().describe('Comment for submit action'),
-      queue_id: z.string().optional().describe('Queue entry ID (required for status/withdraw/warn/get_warnings)'),
-      reason: z.string().optional().describe('Withdrawal reason (optional for withdraw)'),
+      comment: z.string().optional(),
+      queue_id: z.string().optional().describe('Required for status/withdraw/warn/get_warnings'),
+      reason: z.string().optional(),
       message: z.string().optional().describe('Warning message (required for warn)')
     }
   }, async (args) => {
@@ -181,15 +181,15 @@ function createMCPServer(agentName) {
 
   // Register messages tool
   server.registerTool('messages', {
-    description: 'AgentGate inter-agent messaging: coordinate with other agents on this gateway (e.g., a coding agent and a social media agent working together). Actions: send, get, mark_read, list_agents, status, broadcast, list_broadcasts, get_broadcast',
+    description: 'Inter-agent messaging. Actions: send, get, mark_read, list_agents, status, broadcast, list_broadcasts, get_broadcast',
     inputSchema: {
       action: z.enum(['send', 'get', 'mark_read', 'list_agents', 'status', 'broadcast', 'list_broadcasts', 'get_broadcast']).describe('Operation to perform'),
-      to_agent: z.string().optional().describe('Recipient agent name (required for send)'),
-      message: z.string().optional().describe('Message content (required for send/broadcast)'),
-      unread_only: z.boolean().optional().default(false).describe('Only return unread messages (optional for get)'),
-      message_id: z.string().optional().describe('Message ID to mark as read (required for mark_read)'),
-      limit: z.number().optional().default(50).describe('Maximum broadcasts to return (optional for list_broadcasts)'),
-      broadcast_id: z.string().optional().describe('Broadcast ID (required for get_broadcast)')
+      to_agent: z.string().optional().describe('Required for send'),
+      message: z.string().optional().describe('Required for send/broadcast'),
+      unread_only: z.boolean().optional().default(false),
+      message_id: z.string().optional().describe('Required for mark_read'),
+      limit: z.number().optional().default(50),
+      broadcast_id: z.string().optional().describe('Required for get_broadcast')
     }
   }, async (args) => {
     return await handleMessagesAction(agentName, args);
@@ -197,15 +197,15 @@ function createMCPServer(agentName) {
 
   // Register mementos tool
   server.registerTool('mementos', {
-    description: 'AgentGate persistent memory: store and retrieve notes across sessions using keywords. Useful for remembering context, decisions, or information between conversations. Actions: save, search, keywords, recent, get_by_ids',
+    description: 'Persistent memory: store and retrieve notes across sessions using keywords. Actions: save, search, keywords, recent, get_by_ids',
     inputSchema: {
       action: z.enum(['save', 'search', 'keywords', 'recent', 'get_by_ids']).describe('Operation to perform'),
-      content: z.string().optional().describe('Content to store (required for save)'),
-      keywords: z.array(z.string()).optional().describe('Keywords for save/search (required for save/search)'),
-      model: z.string().optional().describe('Model identifier (optional for save)'),
-      role: z.string().optional().describe('Role: user, assistant, system (optional for save)'),
-      limit: z.number().optional().default(10).describe('Maximum results (optional for search/recent)'),
-      ids: z.array(z.string()).optional().describe('Memento IDs to fetch (required for get_by_ids)')
+      content: z.string().optional().describe('Required for save'),
+      keywords: z.array(z.string()).optional().describe('Required for save/search'),
+      model: z.string().optional(),
+      role: z.string().optional().describe('user, assistant, or system'),
+      limit: z.number().optional().default(10),
+      ids: z.array(z.string()).optional().describe('Required for get_by_ids')
     }
   }, async (args) => {
     return await handleMementosAction(agentName, args);
@@ -213,12 +213,12 @@ function createMCPServer(agentName) {
 
   // Register services tool
   server.registerTool('services', {
-    description: 'AgentGate secure service access: read from connected services (GitHub, Bluesky, Mastodon, etc.) without ever seeing credentials - they stay on the gateway. Actions: whoami (your identity and bio), list (available services with bypass_auth status), read (fetch data from a service endpoint)',
+    description: 'Read from connected services (GitHub, Bluesky, Mastodon, etc.). Actions: whoami, list, list_detail (with docs/examples), read',
     inputSchema: {
-      action: z.enum(['whoami', 'list', 'read']).describe('Operation to perform'),
-      service: z.string().optional().describe('Service name for read action (e.g., "github", "brave", "bluesky")'),
-      account: z.string().optional().describe('Account name for read action'),
-      path: z.string().optional().describe('API path for read action (e.g., "/web/search?q=hello")')
+      action: z.enum(['whoami', 'list', 'list_detail', 'read']).describe('Operation to perform'),
+      service: z.string().optional().describe('Required for read; optional filter for list_detail'),
+      account: z.string().optional().describe('Required for read; optional filter for list_detail'),
+      path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
@@ -640,13 +640,7 @@ async function handleServicesAction(agentName, args) {
       const response = {
         name: agent.name,
         enabled: !!agent.enabled,
-        accessible_services_count: services.length,
-        security_note: 'Credentials for connected services never leave this gateway. You can read data and request writes, but tokens are never exposed to you.',
-        capabilities: {
-          read: 'You can read from any service in your access list via the REST API (e.g., GET /api/github/{account}/user)',
-          write: 'Write requests go through the gateway. Depending on config, they are either queued for human approval or auto-approved with bypass - but always logged.',
-          memory: 'Use the mementos tool to persist notes across sessions'
-        }
+        accessible_services_count: services.length
       };
 
       // Include bio if configured
@@ -663,7 +657,23 @@ async function handleServicesAction(agentName, args) {
     }
 
     case 'list': {
-      const services = listAccessibleServices(agentName, { includeDocs: true });
+      const services = listAccessibleServices(agentName).map(svc => ({
+        service: svc.service,
+        account: svc.account_name,
+        base_path: `/api/${svc.service}/${svc.account_name}`,
+        bypass_auth: svc.bypass_auth
+      }));
+      return toolResponse({ services });
+    }
+
+    case 'list_detail': {
+      let services = listAccessibleServices(agentName, { includeDocs: true });
+      if (args.service) {
+        services = services.filter(svc => svc.service === args.service);
+        if (args.account) {
+          services = services.filter(svc => svc.account_name === args.account);
+        }
+      }
       return toolResponse({ services });
     }
 
