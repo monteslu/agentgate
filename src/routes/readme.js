@@ -244,11 +244,16 @@ router.get('/', (req, res) => {
       }
     },
     skill: {
-      description: 'Generate a SKILL.md file for OpenClaw/AgentSkills compatible systems',
-      endpoint: 'GET /api/skill',
+      description: 'Generate category-based OpenClaw skills. GET /api/skill returns agent-specific skills as JSON. GET /api/skill/setup returns a setup script.',
+      endpoints: {
+        skills: 'GET /api/skill (requires auth) — returns { skills: { "agentgate": "...", "agentgate-code": "...", ... } }',
+        setup: 'GET /api/skill/setup (no auth) — returns a Node.js script that writes skills to ~/.openclaw/skills/'
+      },
+      quickStart: 'curl -s $AGENT_GATE_URL/api/skill/setup | node',
       docs: 'https://docs.openclaw.ai/tools/skills',
-      queryParams: {
-        base_url: 'Override the base URL in the generated skill (optional)'
+      envVars: {
+        AGENT_GATE_URL: 'Base URL of the agentgate server',
+        AGENT_GATE_TOKEN: 'API key for authentication'
       }
     },
     agentMessaging: (() => {

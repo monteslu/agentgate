@@ -5,7 +5,7 @@ const router = Router();
 const GOOGLE_API = 'https://www.googleapis.com/calendar/v3';
 const GOOGLE_AUTH = 'https://oauth2.googleapis.com';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'calendar',
   name: 'Google Calendar',

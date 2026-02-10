@@ -50,4 +50,24 @@ export const SERVICE_READERS = {
   [googleSearchInfo.key]: googleSearchRead
 };
 
+// Category mapping for MCP tool registration
+export const SERVICE_CATEGORIES = {
+  search:   { name: 'Search',   description: 'Web, news, and image search', services: ['brave', 'google_search'], hasWrite: false },
+  social:   { name: 'Social',   description: 'Social networks — posts, profiles, timelines', services: ['bluesky', 'mastodon', 'reddit', 'linkedin'], hasWrite: true },
+  code:     { name: 'Code',     description: 'Code repos, issues, PRs, projects', services: ['github', 'jira'], hasWrite: true },
+  personal: { name: 'Personal', description: 'Health, calendar, and media', services: ['fitbit', 'calendar', 'google_calendar', 'youtube'], hasWrite: true }
+};
+
+/**
+ * Get the category name for a given service key
+ * @param {string} serviceKey - Service key (e.g., 'github', 'brave')
+ * @returns {string|null} Category name or null if not categorized
+ */
+export function getServiceCategory(serviceKey) {
+  for (const [cat, info] of Object.entries(SERVICE_CATEGORIES)) {
+    if (info.services.includes(serviceKey)) return cat;
+  }
+  return null;
+}
+
 export default SERVICE_REGISTRY;

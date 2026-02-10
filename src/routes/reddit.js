@@ -5,7 +5,7 @@ const router = Router();
 const REDDIT_API = 'https://oauth.reddit.com';
 const REDDIT_AUTH = 'https://www.reddit.com/api/v1';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'reddit',
   name: 'Reddit',

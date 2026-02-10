@@ -17,7 +17,7 @@ function simplifyResults(data) {
   };
 }
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'google_search',
   name: 'Google Search',

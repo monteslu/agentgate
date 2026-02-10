@@ -3,7 +3,7 @@ import { getAccountCredentials } from '../lib/db.js';
 
 const router = Router();
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'jira',
   name: 'Jira',
