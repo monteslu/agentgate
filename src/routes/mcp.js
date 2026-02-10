@@ -220,7 +220,7 @@ function createMCPServer(agentName) {
       service: z.string().optional().describe('Required for read; optional filter for list_detail'),
       account: z.string().optional().describe('Required for read; optional filter for list_detail'),
       path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")'),
-      raw: z.boolean().optional().describe('Get raw upstream response without simplification')
+      raw: z.boolean().optional().describe('Override raw/simplified response. If omitted, uses agent raw_results setting (default: simplified)')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
