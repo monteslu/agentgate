@@ -712,6 +712,19 @@ export function deleteAccountById(id) {
   return db.prepare('DELETE FROM service_accounts WHERE id = ?').run(id);
 }
 
+export function getAccountById(id) {
+  const row = db.prepare('SELECT id, service, name, credentials, created_at, updated_at FROM service_accounts WHERE id = ?').get(id);
+  if (!row) return null;
+  return {
+    id: row.id,
+    service: row.service,
+    name: row.name,
+    credentials: row.credentials ? JSON.parse(row.credentials) : null,
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
 // Get all accounts grouped by service (for /api/readme)
 export function getAccountsByService() {
   const rows = db.prepare('SELECT service, name FROM service_accounts ORDER BY service, name').all();
@@ -1363,7 +1376,7 @@ export function listMementos(options = {}) {
   const conditions = [];
 
   if (agentId) {
-    conditions.push('m.agent_id = ?');
+    conditions.push('LOWER(m.agent_id) = LOWER(?)');
     params.push(agentId);
   }
 
@@ -1642,6 +1655,69 @@ export function listServicesWithAccess() {
   });
 }
 
+/**
+ * Get all service accounts that an agent has access to
+ * Returns array of { id, service, account_name, bypass_auth }
+ * Optimized: fetches all data in 3 queries instead of N+1
+ */
+export function getAgentServiceAccess(agentName) {
+  // Get all service accounts
+  const accounts = db.prepare(`
+    SELECT id, service, name as account_name FROM service_accounts ORDER BY service, name
+  `).all();
+
+  // Get all access modes in one query
+  const accessModes = db.prepare(`
+    SELECT service, account_name, access_mode FROM service_access
+  `).all();
+  const modeMap = new Map();
+  for (const row of accessModes) {
+    modeMap.set(`${row.service}:${row.account_name}`, row.access_mode);
+  }
+
+  // Get all agent access entries for this agent in one query (case-insensitive)
+  const agentEntries = db.prepare(`
+    SELECT service, account_name, allowed, bypass_auth FROM service_agent_access
+    WHERE LOWER(agent_name) = LOWER(?)
+  `).all(agentName);
+  const agentMap = new Map();
+  for (const row of agentEntries) {
+    agentMap.set(`${row.service}:${row.account_name}`, row);
+  }
+
+  // Process in memory
+  const result = [];
+  for (const acc of accounts) {
+    const key = `${acc.service}:${acc.account_name}`;
+    const accessMode = modeMap.get(key) || 'all';
+    const agentEntry = agentMap.get(key);
+
+    // Check access based on mode
+    let allowed = false;
+    if (accessMode === 'all') {
+      // All allowed unless explicitly denied
+      allowed = !agentEntry || agentEntry.allowed !== 0;
+    } else if (accessMode === 'allowlist') {
+      // Only allowed if explicitly in list with allowed=true
+      allowed = agentEntry && agentEntry.allowed === 1;
+    } else if (accessMode === 'denylist') {
+      // Allowed unless explicitly in list with allowed=false
+      allowed = !agentEntry || agentEntry.allowed !== 0;
+    } else if (accessMode === 'none') {
+      allowed = false;
+    }
+
+    if (allowed) {
+      result.push({
+        id: acc.id,
+        service: acc.service,
+        account_name: acc.account_name,
+        bypass_auth: agentEntry?.bypass_auth === 1
+      });
+    }
+  }
+  return result;
+}
 
 
 // ============================================

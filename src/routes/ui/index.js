@@ -12,6 +12,7 @@ import settingsRouter from './settings.js';
 import homeRouter from './home.js';
 import accessRouter from './access.js';
 import llmRouter from './llm.js';
+import serviceDetailRouter from './service-detail.js';
 
 // Create the main UI router
 const router = Router();
@@ -43,7 +44,11 @@ router.use('/access', accessRouter);
 // LLM provider management: /llm/providers, /llm/models
 router.use('/llm', llmRouter);
 
-// Settings routes: /hsync/*, /messaging/*, /queue/settings/* (mounted at root)
+// Service detail pages: /services/:id
+router.use('/services', serviceDetailRouter);
+
+// Settings page: /settings
+// Also handles POST routes: /hsync/*, /messaging/*, /queue/settings/*
 router.use('/', settingsRouter);
 
 // Re-export auth utilities for external use

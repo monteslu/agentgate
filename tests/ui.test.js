@@ -33,6 +33,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   setAccountCredentials: jest.fn(),
   deleteAccount: jest.fn(),
   deleteAccountById: jest.fn(),
+  getAccountById: jest.fn(),
   listAccounts: jest.fn(() => []),
   
   // Queue functions
@@ -71,6 +72,8 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   setServiceAgentAccess: jest.fn(),
   setBypassAuth: jest.fn(),
   checkBypassAuth: jest.fn(() => false),
+  checkServiceAccess: jest.fn(() => ({ allowed: true, reason: 'all' })),
+  getAgentServiceAccess: jest.fn(() => []),
   
   // Messaging functions
   getMessagingMode: jest.fn(() => 'open'),
@@ -164,6 +167,12 @@ jest.unstable_mockModule('../src/lib/socketManager.js', () => ({
 // Mock queueExecutor
 jest.unstable_mockModule('../src/lib/queueExecutor.js', () => ({
   executeQueueEntry: jest.fn(() => Promise.resolve({ success: true }))
+}));
+
+// Mock serviceRegistry
+jest.unstable_mockModule('../src/lib/serviceRegistry.js', () => ({
+  default: {},
+  getServiceInfo: jest.fn()
 }));
 
 describe('UI Routes Integration', () => {

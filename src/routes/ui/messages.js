@@ -9,7 +9,7 @@ import {
 } from '../../lib/db.js';
 import { notifyAgentMessage, notifyMessageRejected } from '../../lib/agentNotifier.js';
 import { emitCountUpdate } from '../../lib/socketManager.js';
-import { escapeHtml, statusBadge, formatDate, simpleNavHeader, socketScript, localizeScript, renderAvatar } from './shared.js';
+import { escapeHtml, statusBadge, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -324,13 +324,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     `<a href="/ui/messages?filter=${f}" class="filter-link ${filter === f ? 'active' : ''}">${f}${counts[f] > 0 ? ` (${counts[f]})` : ''}</a>`
   ).join('');
 
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <title>agentgate - Agent Messages</title>
-  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
-  <link rel="stylesheet" href="/public/style.css">
-  <script src="/socket.io/socket.io.js"></script>
+  return `${htmlHead('Agent Messages', { includeSocket: true })}
   <style>
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: #9ca3af; font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
@@ -354,9 +348,8 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     .reject-input::placeholder { color: #6b7280; }
     .mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
   </style>
-</head>
 <body>
-  ${simpleNavHeader()}
+  ${navHeader()}
   <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
     <h2 style="margin: 0;">Agent Messages</h2>
     <span class="mode-badge">Mode: ${mode}</span>
@@ -559,6 +552,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     }
   </script>
 ${socketScript()}
+${menuScript()}
 ${localizeScript()}
 </body>
 </html>`;

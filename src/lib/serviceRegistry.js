@@ -25,4 +25,13 @@ const SERVICE_REGISTRY = {
   [googleSearchInfo.key]: googleSearchInfo
 };
 
+/**
+ * Get service info by key
+ * @param {string} key - Service key (e.g., 'github', 'bluesky')
+ * @returns {object|null} Service info object or null if not found
+ */
+export function getServiceInfo(key) {
+  return SERVICE_REGISTRY[key] || null;
+}
+
 export default SERVICE_REGISTRY;
