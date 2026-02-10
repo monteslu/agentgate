@@ -638,7 +638,6 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     font-size: 13px;
     color: #9ca3af;
   }
-
   /* Toggle switch */
   .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
   .toggle input { opacity: 0; width: 0; height: 0; }
@@ -779,7 +778,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       </label>
     </div>
     <div class="toggle-wrapper">
-      <span class="toggle-label" id="raw-results-label">${agent.raw_results ? 'Raw Results' : 'Simplified Results'}</span>
+      <span class="toggle-label" id="raw-results-label">Raw Results <span class="help-hint" title="When enabled, this agent receives full upstream API responses by default. When disabled, responses are simplified to save tokens. Per-request override is still available via the raw parameter (MCP) or X-Agentgate-Raw header (REST).">?</span></span>
       <label class="toggle">
         <input type="checkbox" id="raw-results-toggle" ${agent.raw_results ? 'checked' : ''}>
         <span class="toggle-slider"></span>
@@ -916,12 +915,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       <h3>Configure Gateway Proxy</h3>
       <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
         <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;">
-        <span>Enable gateway proxy</span>
+        <span>Enable gateway proxy <span class="help-hint" title="When enabled, this agent's own gateway becomes accessible through AgentGate via a proxy URL. Other agents can call this agent's gateway without direct network access.">?</span></span>
       </label>
       <div id="proxy-fields" style="${agent.gateway_proxy_enabled ? '' : 'display: none;'}">
         <label>Internal Gateway URL</label>
         <input type="url" id="proxy-url-input" value="${escapeHtml(agent.gateway_proxy_url || '')}" placeholder="http://localhost:18789">
-        <p class="help-text">The internal URL of the agent's gateway</p>
+        <p class="help-text">The internal URL of the agent's gateway <span class="help-hint" title="The URL where this agent's gateway is running locally, e.g. http://localhost:18789. AgentGate will forward proxy requests to this address.">?</span></p>
       </div>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('proxy-modal')">Cancel</button>
@@ -1126,14 +1125,11 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     // Toggle raw results
     document.getElementById('raw-results-toggle').onchange = async function() {
       const checkbox = this;
-      const label = document.getElementById('raw-results-label');
       checkbox.disabled = true;
       try {
         const res = await fetch('/ui/keys/' + agentId + '/toggle-raw-results', { method: 'POST', headers: { 'Accept': 'application/json' } });
         const data = await res.json();
-        if (data.success) {
-          label.textContent = data.raw_results ? 'Raw Results' : 'Simplified Results';
-        } else {
+        if (!data.success) {
           checkbox.checked = !checkbox.checked;
           showToast('Failed to update', 'error');
         }

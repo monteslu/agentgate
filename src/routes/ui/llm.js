@@ -65,7 +65,7 @@ router.get('/', (req, res) => {
               <input type="password" id="edit-key-${p.id}" placeholder="Leave blank to keep current">
             </div>
             <div class="form-group">
-              <label for="edit-url-${p.id}">Base URL (optional)</label>
+              <label for="edit-url-${p.id}">Base URL (optional) <span class="help-hint" title="Only needed for self-hosted or custom API endpoints (e.g. local LLM servers, Azure OpenAI). Leave blank for standard providers like OpenAI, Anthropic, or Google.">?</span></label>
               <input type="text" id="edit-url-${p.id}" value="${escapeHtml(p.base_url || '')}" placeholder="https://api.example.com">
             </div>
           </div>
@@ -226,7 +226,7 @@ router.get('/', (req, res) => {
           <input type="password" id="add-key" placeholder="sk-...">
         </div>
         <div class="form-group">
-          <label for="add-url">Base URL (optional)</label>
+          <label for="add-url">Base URL (optional) <span class="help-hint" title="Only needed for self-hosted or custom API endpoints (e.g. local LLM servers, Azure OpenAI). Leave blank for standard providers like OpenAI, Anthropic, or Google.">?</span></label>
           <input type="text" id="add-url" placeholder="https://api.example.com">
         </div>
       </div>
@@ -244,7 +244,7 @@ router.get('/', (req, res) => {
 
     <div class="card">
       <h3>Assign Model</h3>
-      <p class="help">Map agents to specific models. Use * as a wildcard for default assignments.</p>
+      <p class="help">Map agents to specific models. Use * as a wildcard for default assignments. <span class="help-hint" title="Assign a model to a specific agent, or use * to set a fallback model for all agents without their own assignment. Specific agent assignments always override the * wildcard.">?</span></p>
       <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
         <div class="form-group">
           <label for="assign-agent">Agent</label>
@@ -262,7 +262,7 @@ router.get('/', (req, res) => {
       <div style="display: flex; align-items: center; gap: 16px;">
         <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; color: #9ca3af;">
           <input type="checkbox" id="assign-default" style="width: 18px; height: 18px; margin: 0;">
-          Set as default
+          Set as default <span class="help-hint" title="When checked, this becomes the agent's default model. If another model was previously the default for this agent, it will be replaced.">?</span>
         </label>
         <button class="btn-primary" onclick="assignModel()">Assign Model</button>
       </div>
