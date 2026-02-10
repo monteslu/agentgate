@@ -732,8 +732,8 @@ async function handleServiceRead(agentName, args) {
   }
 
   const access = checkServiceAccess(service, account, agentName);
-  if (!access || !access.allowed) {
-    return toolError(`Access denied to ${service}/${account}: ${access?.reason || 'no access object'} (agent: ${agentName})`);
+  if (!access.allowed) {
+    return toolError(`Access denied to ${service}/${account}: ${access.reason} (agent: ${agentName})`);
   }
 
   const reader = SERVICE_READERS[service];

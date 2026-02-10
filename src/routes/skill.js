@@ -97,7 +97,7 @@ Statuses: \`pending\` → \`approved\` → \`executing\` → \`completed\` (or \
 
 **Withdraw a pending request:**
 \`\`\`
-POST $AGENT_GATE_URL/api/queue/{service}/{accountName}/withdraw/{id}
+DELETE $AGENT_GATE_URL/api/queue/{service}/{accountName}/status/{id}
 { "reason": "No longer needed" }
 \`\`\`
 
