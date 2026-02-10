@@ -41,6 +41,7 @@ export const SERVICE_READERS = {
   [mastodonInfo.key]: mastodonRead,
   [redditInfo.key]: redditRead,
   [calendarInfo.key]: calendarRead,
+  [calendarInfo.dbKey]: calendarRead, // alias: google_calendar -> calendar
   [youtubeInfo.key]: youtubeRead,
   [linkedinInfo.key]: linkedinRead,
   [jiraInfo.key]: jiraRead,

@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -233,6 +233,27 @@ router.post('/:id/toggle-enabled', (req, res) => {
     return res.json({ success: true, enabled: newEnabled === 1, keys });
   }
   res.redirect('/ui/agents');
+});
+
+// Toggle agent raw_results setting
+router.post('/:id/toggle-raw-results', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  const newRawResults = agent.raw_results ? 0 : 1;
+  setAgentRawResults(id, newRawResults);
+
+  if (wantsJson) {
+    return res.json({ success: true, raw_results: newRawResults === 1 });
+  }
+  res.redirect('/ui/keys/' + id);
 });
 
 // Avatar routes
@@ -757,6 +778,13 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
         <span class="toggle-slider"></span>
       </label>
     </div>
+    <div class="toggle-wrapper">
+      <span class="toggle-label" id="raw-results-label">${agent.raw_results ? 'Raw Results' : 'Simplified Results'}</span>
+      <label class="toggle">
+        <input type="checkbox" id="raw-results-toggle" ${agent.raw_results ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
     <a href="/ui/keys" class="btn-secondary">← Back</a>
   </div>
 
@@ -1084,6 +1112,27 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
         const data = await res.json();
         if (data.success) {
           label.textContent = data.enabled ? 'Enabled' : 'Disabled';
+        } else {
+          checkbox.checked = !checkbox.checked;
+          showToast('Failed to update', 'error');
+        }
+      } catch (err) {
+        checkbox.checked = !checkbox.checked;
+        showToast('Network error', 'error');
+      }
+      checkbox.disabled = false;
+    };
+
+    // Toggle raw results
+    document.getElementById('raw-results-toggle').onchange = async function() {
+      const checkbox = this;
+      const label = document.getElementById('raw-results-label');
+      checkbox.disabled = true;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/toggle-raw-results', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          label.textContent = data.raw_results ? 'Raw Results' : 'Simplified Results';
         } else {
           checkbox.checked = !checkbox.checked;
           showToast('Failed to update', 'error');

@@ -82,7 +82,7 @@ async function getAccessToken(accountName) {
 }
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw: _raw = false } = {}) {
   const accessToken = await getAccessToken(accountName);
   if (!accessToken) {
     return { status: 401, data: { error: 'Reddit account not configured', message: `Set up Reddit account "${accountName}" in the admin UI` } };
@@ -111,7 +111,7 @@ export async function readService(accountName, path, { query = {}, raw = false }
 // Proxy GET requests to Reddit API
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const raw = req.headers['x-agentgate-raw'] === 'true' || !!(req.apiKeyInfo?.raw_results);
     const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
     res.status(result.status).json(result.data);
   } catch (error) {

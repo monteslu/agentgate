@@ -702,7 +702,9 @@ async function handleServicesAction(agentName, args) {
         const [pathPart, qs] = cleanPath.split('?');
         const query = Object.fromEntries(new URLSearchParams(qs || ''));
 
-        const result = await reader(account, pathPart, { query, raw: !!args.raw });
+        const agent = getApiKeyByName(agentName);
+        const raw = args.raw !== undefined ? !!args.raw : !!(agent?.raw_results);
+        const result = await reader(account, pathPart, { query, raw });
 
         if (result.status >= 400) {
           return toolError(`Service returned ${result.status}: ${JSON.stringify(result.data)}`);
