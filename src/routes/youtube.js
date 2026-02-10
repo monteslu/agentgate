@@ -73,32 +73,34 @@ async function getAccessToken(accountName) {
   }
 }
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw: _raw = false } = {}) {
+  const accessToken = await getAccessToken(accountName);
+  if (!accessToken) {
+    return { status: 401, data: { error: 'YouTube account not configured', message: `Set up YouTube account "${accountName}" in the admin UI` } };
+  }
+
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${YOUTUBE_API}/${path}${queryString ? '?' + queryString : ''}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+  return { status: response.status, data };
+}
+
 // Proxy GET requests to YouTube API
-// Route: /api/youtube/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const accessToken = await getAccessToken(accountName);
-    if (!accessToken) {
-      return res.status(401).json({
-        error: 'YouTube account not configured',
-        message: `Set up YouTube account "${accountName}" in the admin UI`
-      });
-    }
-
-    const path = req.params[0] || '';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${YOUTUBE_API}/${path}${queryString ? '?' + queryString : ''}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'YouTube API request failed', message: error.message });
   }

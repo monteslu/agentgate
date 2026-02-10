@@ -32,45 +32,46 @@ export const serviceInfo = {
   ]
 };
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const { q, searchType, start, num, ...otherParams } = query;
+
+  if (!q) {
+    return { status: 400, data: { error: 'Missing required "q" query parameter' } };
+  }
+
+  const creds = getAccountCredentials('google_search', accountName);
+  if (!creds?.api_key || !creds?.cx) {
+    return { status: 401, data: { error: 'Google Search credentials not configured', hint: `Configure API key and Search Engine ID for account "${accountName}" in the AgentGate UI` } };
+  }
+
+  const params = new URLSearchParams(otherParams);
+  params.set('key', creds.api_key);
+  params.set('cx', creds.cx);
+  params.set('q', q);
+  if (searchType) params.set('searchType', searchType);
+  if (start) params.set('start', start);
+  if (num) params.set('num', num);
+
+  const url = `${GOOGLE_SEARCH_API}?${params.toString()}`;
+
+  const response = await fetch(url);
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    data = simplifyResults(data);
+  }
+
+  return { status: response.status, data };
+}
+
 // Search endpoint
 router.get('/:accountName/search', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const { q, searchType, start, num, ...otherParams } = req.query;
-
-    if (!q) {
-      return res.status(400).json({ error: 'Missing required "q" query parameter' });
-    }
-
-    const creds = getAccountCredentials('google_search', accountName);
-    if (!creds?.api_key || !creds?.cx) {
-      return res.status(401).json({
-        error: 'Google Search credentials not configured',
-        hint: `Configure API key and Search Engine ID for account "${accountName}" in the AgentGate UI`
-      });
-    }
-
-    const params = new URLSearchParams(otherParams);
-    // Set these after otherParams to prevent user override of credentials
-    params.set('key', creds.api_key);
-    params.set('cx', creds.cx);
-    params.set('q', q);
-    if (searchType) params.set('searchType', searchType);
-    if (start) params.set('start', start);
-    if (num) params.set('num', num);
-
-    const url = `${GOOGLE_SEARCH_API}?${params.toString()}`;
-
-    const response = await fetch(url);
-    const data = await response.json();
-
-    // Return simplified results by default, raw if requested
-    const raw = req.query.raw === 'true';
-    if (!raw && response.ok) {
-      res.status(response.status).json(simplifyResults(data));
-    } else {
-      res.status(response.status).json(data);
-    }
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
+    const result = await readService(req.params.accountName, 'search', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Google Search API request failed', message: error.message });
   }

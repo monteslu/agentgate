@@ -60,11 +60,11 @@ ${htmlHead('Settings', { includeSocket: true })}
       </label>
       <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
         <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''}>
-        <span>Supervised</span>
+        <span>Supervised <span class="help-hint" title="Agent messages are held for admin approval before delivery. Safer but slower — you review every message.">?</span></span>
       </label>
       <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
         <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''}>
-        <span>Open</span>
+        <span>Open <span class="help-hint" title="Agent messages are delivered immediately without approval. Faster but agents can communicate freely without oversight.">?</span></span>
       </label>
       <button type="submit" class="btn-primary btn-sm">Save</button>
     </form>
@@ -81,7 +81,7 @@ ${htmlHead('Settings', { includeSocket: true })}
     <div style="margin-bottom: 16px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div>
-          <strong style="color: #f3f4f6;">Shared Queue Visibility</strong>
+          <strong style="color: #f3f4f6;">Shared Queue Visibility <span class="help-hint" title="When enabled, agents can view all pending queue items from other agents (read-only — they cannot modify items they don't own). Enable for transparency between agents, disable for privacy.">?</span></strong>
           <p class="help" style="margin: 4px 0 0 0;">When enabled, agents can see ALL queue items, not just their own.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/shared-visibility" style="margin: 0;">
@@ -94,7 +94,7 @@ ${htmlHead('Settings', { includeSocket: true })}
     <div style="padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
       <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div>
-          <strong style="color: #f3f4f6;">Agent Withdraw</strong>
+          <strong style="color: #f3f4f6;">Agent Withdraw <span class="help-hint" title="When enabled, agents can cancel their own pending queue requests before an admin approves or rejects them. Disable to require admin review of all submissions.">?</span></strong>
           <p class="help" style="margin: 4px 0 0 0;">Allow agents to withdraw their own pending queue submissions.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/agent-withdraw" style="margin: 0;">
@@ -107,7 +107,7 @@ ${htmlHead('Settings', { includeSocket: true })}
 
   <!-- hsync Remote Access -->
   <div class="card">
-    <h3>hsync (Remote Access) ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</h3>
+    <h3>hsync (Remote Access) <span class="help-hint" title="hsync creates a secure tunnel so remote agents can reach this gateway without opening firewall ports. Think of it like ngrok for your agent gateway.">?</span> ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</h3>
     ${hsyncConfig?.enabled ? `
       <p>URL: <strong>${escapeHtml(hsyncConfig?.url || '')}</strong></p>
       ${hsyncUrl ? `<p>Public URL: <span class="copyable">${escapeHtml(hsyncUrl)} <button type="button" class="copy-btn" data-copy="${escapeHtml(hsyncUrl)}">Copy</button></span></p>` : '<p class="help">Connecting... (refresh page to see URL)</p>'}

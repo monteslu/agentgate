@@ -58,6 +58,14 @@ router.get('/', (req, res) => {
       type: 'bearer',
       header: 'Authorization: Bearer {your_api_key}'
     },
+    responseSimplification: {
+      description: 'Service responses are simplified by default to reduce token usage (e.g., GitHub user profiles omit _url fields, Fitbit profiles omit badge images). Admins can enable raw_results per agent in the UI so that agent always gets raw responses. Per-request override: set header X-Agentgate-Raw: true/false (REST) or raw: true/false param (MCP) to override the agent default.',
+      header: 'X-Agentgate-Raw: true|false',
+      agentSetting: 'raw_results (per-agent toggle in admin UI, default: off)',
+      default: 'Simplified (token-optimized)',
+      precedence: 'Per-request param/header > agent raw_results setting > simplified default',
+      services: ['brave', 'bluesky', 'github', 'mastodon', 'fitbit', 'jira', 'google_search']
+    },
     writeQueue: {
       description: 'For write operations (POST/PUT/DELETE), you must submit requests to the write queue. A human will review and approve or reject your request. You cannot execute write operations directly.',
       workflow: [

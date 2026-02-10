@@ -483,6 +483,14 @@ try {
         db.exec('ALTER TABLE api_keys ADD COLUMN bio TEXT;');
         console.log('Bio column added.');
       }
+
+      // Check if we need to add raw_results column (per-agent raw results default)
+      const hasRawResults = tableInfo.some(col => col.name === 'raw_results');
+      if (!hasRawResults) {
+        console.log('Adding raw_results column to api_keys table...');
+        db.exec('ALTER TABLE api_keys ADD COLUMN raw_results INTEGER DEFAULT 0;');
+        console.log('Raw results column added.');
+      }
     }
   }
 } catch (err) {
@@ -544,16 +552,16 @@ export async function regenerateApiKey(id) {
 }
 
 export function listApiKeys() {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys').all();
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at FROM api_keys').all();
 }
 
 export function getApiKeyByName(name) {
   // Case-insensitive lookup
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
 }
 
 export function getApiKeyById(id) {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, created_at FROM api_keys WHERE id = ?').get(id);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at FROM api_keys WHERE id = ?').get(id);
 }
 
 // Get counts of all data associated with an agent (for delete warning)
@@ -609,6 +617,10 @@ export function setAgentEnabled(id, enabled) {
   return db.prepare('UPDATE api_keys SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
 }
 
+export function setAgentRawResults(id, enabled) {
+  return db.prepare('UPDATE api_keys SET raw_results = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+}
+
 export function updateAgentBio(id, bio) {
   return db.prepare('UPDATE api_keys SET bio = ? WHERE id = ?').run(bio || null, id);
 }
@@ -653,7 +665,7 @@ export async function validateApiKey(key) {
   for (const row of allKeys) {
     const match = await bcrypt.compare(key, row.key_hash);
     if (match) {
-      return { id: row.id, name: row.name, webhookUrl: row.webhook_url, webhookToken: row.webhook_token, enabled: row.enabled !== 0 };
+      return { id: row.id, name: row.name, webhookUrl: row.webhook_url, webhookToken: row.webhook_token, enabled: row.enabled !== 0, raw_results: !!row.raw_results };
     }
   }
   return null;

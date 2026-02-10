@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -233,6 +233,27 @@ router.post('/:id/toggle-enabled', (req, res) => {
     return res.json({ success: true, enabled: newEnabled === 1, keys });
   }
   res.redirect('/ui/agents');
+});
+
+// Toggle agent raw_results setting
+router.post('/:id/toggle-raw-results', (req, res) => {
+  const { id } = req.params;
+  const wantsJson = req.headers.accept?.includes('application/json');
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return wantsJson
+      ? res.status(404).json({ error: 'Agent not found' })
+      : res.status(404).send('Agent not found');
+  }
+
+  const newRawResults = agent.raw_results ? 0 : 1;
+  setAgentRawResults(id, newRawResults);
+
+  if (wantsJson) {
+    return res.json({ success: true, raw_results: newRawResults === 1 });
+  }
+  res.redirect('/ui/keys/' + id);
 });
 
 // Avatar routes
@@ -617,7 +638,6 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     font-size: 13px;
     color: #9ca3af;
   }
-
   /* Toggle switch */
   .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
   .toggle input { opacity: 0; width: 0; height: 0; }
@@ -757,6 +777,13 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
         <span class="toggle-slider"></span>
       </label>
     </div>
+    <div class="toggle-wrapper">
+      <span class="toggle-label" id="raw-results-label">Raw Results <span class="help-hint" title="When enabled, this agent receives full upstream API responses by default. When disabled, responses are simplified to save tokens. Per-request override is still available via the raw parameter (MCP) or X-Agentgate-Raw header (REST).">?</span></span>
+      <label class="toggle">
+        <input type="checkbox" id="raw-results-toggle" ${agent.raw_results ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
     <a href="/ui/keys" class="btn-secondary">← Back</a>
   </div>
 
@@ -888,12 +915,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       <h3>Configure Gateway Proxy</h3>
       <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
         <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;">
-        <span>Enable gateway proxy</span>
+        <span>Enable gateway proxy <span class="help-hint" title="When enabled, this agent's own gateway becomes accessible through AgentGate via a proxy URL. Other agents can call this agent's gateway without direct network access.">?</span></span>
       </label>
       <div id="proxy-fields" style="${agent.gateway_proxy_enabled ? '' : 'display: none;'}">
         <label>Internal Gateway URL</label>
         <input type="url" id="proxy-url-input" value="${escapeHtml(agent.gateway_proxy_url || '')}" placeholder="http://localhost:18789">
-        <p class="help-text">The internal URL of the agent's gateway</p>
+        <p class="help-text">The internal URL of the agent's gateway <span class="help-hint" title="The URL where this agent's gateway is running locally, e.g. http://localhost:18789. AgentGate will forward proxy requests to this address.">?</span></p>
       </div>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('proxy-modal')">Cancel</button>
@@ -1085,6 +1112,24 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
         if (data.success) {
           label.textContent = data.enabled ? 'Enabled' : 'Disabled';
         } else {
+          checkbox.checked = !checkbox.checked;
+          showToast('Failed to update', 'error');
+        }
+      } catch (err) {
+        checkbox.checked = !checkbox.checked;
+        showToast('Network error', 'error');
+      }
+      checkbox.disabled = false;
+    };
+
+    // Toggle raw results
+    document.getElementById('raw-results-toggle').onchange = async function() {
+      const checkbox = this;
+      checkbox.disabled = true;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/toggle-raw-results', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (!data.success) {
           checkbox.checked = !checkbox.checked;
           showToast('Failed to update', 'error');
         }

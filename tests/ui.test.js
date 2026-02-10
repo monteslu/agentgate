@@ -12,6 +12,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getApiKeyByName: jest.fn(),
   updateAgentWebhook: jest.fn(),
   setAgentEnabled: jest.fn(),
+  setAgentRawResults: jest.fn(),
   updateAgentBio: jest.fn(),
   updateGatewayProxy: jest.fn(),
   regenerateProxyId: jest.fn(),

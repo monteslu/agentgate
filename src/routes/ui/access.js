@@ -107,11 +107,14 @@ function renderAccessPage(services, agents) {
       <div class="card service-card" data-service="${escapeHtml(svc.service)}" data-account="${escapeHtml(svc.account_name)}">
         <div class="service-header">
           <h3>${escapeHtml(svc.service)} / ${escapeHtml(svc.account_name)}</h3>
-          <select class="mode-select" data-service="${escapeHtml(svc.service)}" data-account="${escapeHtml(svc.account_name)}">
-            <option value="all" ${access.access_mode === 'all' ? 'selected' : ''}>All agents</option>
-            <option value="allowlist" ${access.access_mode === 'allowlist' ? 'selected' : ''}>Allowlist only</option>
-            <option value="none" ${access.access_mode === 'none' ? 'selected' : ''}>No agents</option>
-          </select>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <select class="mode-select" data-service="${escapeHtml(svc.service)}" data-account="${escapeHtml(svc.account_name)}">
+              <option value="all" ${access.access_mode === 'all' ? 'selected' : ''}>All agents</option>
+              <option value="allowlist" ${access.access_mode === 'allowlist' ? 'selected' : ''}>Allowlist only</option>
+              <option value="none" ${access.access_mode === 'none' ? 'selected' : ''}>No agents</option>
+            </select>
+            <span class="help-hint" title="All agents: every agent can access this service. Allowlist only: only agents checked below have access. No agents: nobody can access this service.">?</span>
+          </div>
         </div>
         
         <table class="access-table">
@@ -119,7 +122,7 @@ function renderAccessPage(services, agents) {
             <tr>
               <th>Agent</th>
               <th>Access</th>
-              <th>Bypass Queue</th>
+              <th>Bypass Queue <span class="help-hint" title="CAUTION: When enabled, this agent's write requests (POST/PUT/DELETE) execute immediately without admin approval. Only enable for agents you fully trust with unsupervised access.">?</span></th>
             </tr>
           </thead>
           <tbody>

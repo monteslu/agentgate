@@ -29,34 +29,97 @@ function getJiraConfig(accountName) {
   return creds;
 }
 
+// Simplify Jira user - drop duplicate avatar sizes
+function simplifyUser(data) {
+  if (!data?.accountId) return data;
+  return {
+    accountId: data.accountId,
+    displayName: data.displayName,
+    emailAddress: data.emailAddress,
+    active: data.active,
+    timeZone: data.timeZone,
+    locale: data.locale
+  };
+}
+
+// Simplify issue
+function simplifyIssue(data) {
+  if (!data?.fields) return data;
+  const f = data.fields;
+  return {
+    key: data.key,
+    id: data.id,
+    summary: f.summary,
+    status: f.status?.name,
+    priority: f.priority?.name,
+    assignee: f.assignee?.displayName,
+    reporter: f.reporter?.displayName,
+    issuetype: f.issuetype?.name,
+    project: f.project?.key,
+    created: f.created,
+    updated: f.updated,
+    description: f.description,
+    labels: f.labels
+  };
+}
+
+// Simplify search results
+function simplifySearch(data) {
+  if (!data?.issues) return data;
+  return {
+    total: data.total,
+    startAt: data.startAt,
+    maxResults: data.maxResults,
+    issues: data.issues.map(simplifyIssue)
+  };
+}
+
+// Match path to simplifier
+function getSimplifier(path) {
+  if (/^myself$/.test(path)) return simplifyUser;
+  if (/^issue\/[^/]+$/.test(path)) return simplifyIssue;
+  if (/^search/.test(path)) return simplifySearch;
+  return null;
+}
+
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const config = getJiraConfig(accountName);
+  if (!config) {
+    return { status: 401, data: { error: 'Jira account not configured', message: `Set up Jira account "${accountName}" in the admin UI` } };
+  }
+
+  const queryString = new URLSearchParams(query).toString();
+  const url = `https://${config.domain}/rest/api/3/${path}${queryString ? '?' + queryString : ''}`;
+
+  const basicAuth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Basic ${basicAuth}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    const simplifier = getSimplifier(path);
+    if (simplifier) {
+      data = simplifier(data);
+    }
+  }
+
+  return { status: response.status, data };
+}
+
 // Proxy GET requests to Jira API
-// Route: /api/jira/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const config = getJiraConfig(accountName);
-    if (!config) {
-      return res.status(401).json({
-        error: 'Jira account not configured',
-        message: `Set up Jira account "${accountName}" in the admin UI`
-      });
-    }
-
-    const path = req.params[0] || '';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `https://${config.domain}/rest/api/3/${path}${queryString ? '?' + queryString : ''}`;
-
-    const basicAuth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Basic ${basicAuth}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Jira API request failed', message: error.message });
   }
