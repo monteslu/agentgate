@@ -240,7 +240,7 @@ function toolError(message) {
     content: [
       {
         type: 'text',
-        text: JSON.stringify({ error: message }, null, 2)
+        text: JSON.stringify({ via: 'agentgate', error: message }, null, 2)
       }
     ],
     isError: true
@@ -367,7 +367,8 @@ async function handleMessagesAction(agentName, args) {
         to: recipientName,
         message: msg.status === 'pending'
           ? 'Message queued for human approval'
-          : 'Message delivered'
+          : 'Message delivered',
+        via: 'agentgate'
       });
     }
 
@@ -381,6 +382,7 @@ async function handleMessagesAction(agentName, args) {
       const messages = getMessagesForAgent(agentName, unreadOnly);
 
       return toolResponse({
+        via: 'agentgate',
         mode,
         messages: messages.map(m => ({
           id: m.id,
@@ -408,7 +410,7 @@ async function handleMessagesAction(agentName, args) {
         return toolError('Message not found or already read');
       }
 
-      return toolResponse({ success: true });
+      return toolResponse({ success: true, via: 'agentgate' });
     }
 
     case 'list_agents': {
@@ -425,7 +427,7 @@ async function handleMessagesAction(agentName, args) {
           enabled: !!k.enabled
         }));
 
-      return toolResponse({ mode, agents });
+      return toolResponse({ via: 'agentgate', mode, agents });
     }
 
     case 'status': {
@@ -433,6 +435,7 @@ async function handleMessagesAction(agentName, args) {
 
       if (mode === 'off') {
         return toolResponse({
+          via: 'agentgate',
           mode: 'off',
           enabled: false,
           message: 'Agent messaging is disabled'
@@ -442,6 +445,7 @@ async function handleMessagesAction(agentName, args) {
       const messages = getMessagesForAgent(agentName, true);
 
       return toolResponse({
+        via: 'agentgate',
         mode,
         enabled: true,
         unread_count: messages.length
@@ -470,6 +474,8 @@ async function handleMessagesAction(agentName, args) {
 
       if (recipients.length === 0) {
         return toolResponse({
+          via: 'agentgate',
+          broadcast_id: null,
           delivered: [],
           failed: [],
           total: 0,
@@ -527,6 +533,7 @@ async function handleMessagesAction(agentName, args) {
       }));
 
       return toolResponse({
+        via: 'agentgate',
         broadcast_id: broadcastId,
         delivered,
         failed,
@@ -543,7 +550,7 @@ async function handleMessagesAction(agentName, args) {
       const limit = args.limit || 50;
       const broadcasts = listBroadcastsWithRecipients(Math.min(limit, 100));
 
-      return toolResponse({ broadcasts });
+      return toolResponse({ via: 'agentgate', broadcasts });
     }
 
     case 'get_broadcast': {
@@ -561,7 +568,7 @@ async function handleMessagesAction(agentName, args) {
         return toolError('Broadcast not found');
       }
 
-      return toolResponse(broadcast);
+      return toolResponse({ via: 'agentgate', ...broadcast });
     }
 
     default:
@@ -580,27 +587,27 @@ async function handleMementosAction(agentName, args) {
     switch (action) {
     case 'save': {
       const memento = saveMemento(agentName, args.content, args.keywords, args.model, args.role);
-      return toolResponse(memento);
+      return toolResponse({ via: 'agentgate', ...memento });
     }
 
     case 'search': {
       const matches = searchMementosByKeywords(agentName, args.keywords, args.limit || 10);
-      return toolResponse({ matches });
+      return toolResponse({ via: 'agentgate', matches });
     }
 
     case 'keywords': {
       const keywords = listMementoKeywords(agentName);
-      return toolResponse({ keywords });
+      return toolResponse({ via: 'agentgate', keywords });
     }
 
     case 'recent': {
       const mementos = listRecentMementos(agentName, args.limit || 5);
-      return toolResponse({ mementos });
+      return toolResponse({ via: 'agentgate', mementos });
     }
 
     case 'get_by_ids': {
       const mementos = getMementosByIds(agentName, args.ids);
-      return toolResponse({ mementos });
+      return toolResponse({ via: 'agentgate', mementos });
     }
 
     default:
