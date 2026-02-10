@@ -18,7 +18,8 @@ import {
   getMementosByIds
 } from '../services/mementoService.js';
 import {
-  listAccessibleServices
+  listAccessibleServices,
+  getServiceAccess
 } from '../services/serviceService.js';
 import {
   getMessagesForAgent,
@@ -212,9 +213,12 @@ function createMCPServer(agentName) {
 
   // Register services tool
   server.registerTool('services', {
-    description: 'AgentGate secure service access: read from connected services (GitHub, Bluesky, Mastodon, etc.) without ever seeing credentials - they stay on the gateway. Actions: whoami (your identity and bio), list (available services with bypass_auth status)',
+    description: 'AgentGate secure service access: read from connected services (GitHub, Bluesky, Mastodon, etc.) without ever seeing credentials - they stay on the gateway. Actions: whoami (your identity and bio), list (available services with bypass_auth status), read (fetch data from a service endpoint)',
     inputSchema: {
-      action: z.enum(['whoami', 'list']).describe('Operation to perform')
+      action: z.enum(['whoami', 'list', 'read']).describe('Operation to perform'),
+      service: z.string().optional().describe('Service name for read action (e.g., "github", "brave", "bluesky")'),
+      account: z.string().optional().describe('Account name for read action'),
+      path: z.string().optional().describe('API path for read action (e.g., "/web/search?q=hello")')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
@@ -661,6 +665,48 @@ async function handleServicesAction(agentName, args) {
     case 'list': {
       const services = listAccessibleServices(agentName, { includeDocs: true });
       return toolResponse({ services });
+    }
+
+    case 'read': {
+      const { service, account, path } = args;
+      if (!service || !account || !path) {
+        return toolError('service, account, and path are required');
+      }
+
+      // Check if agent has access to this service
+      const access = getServiceAccess(agentName, service, account);
+      if (!access.allowed) {
+        return toolError(`Access denied to ${service}/${account}: ${access.reason}`);
+      }
+
+      // Make internal request to the service endpoint
+      const PORT = process.env.PORT || 3050;
+      const url = `http://localhost:${PORT}/api/${service}/${account}${path.startsWith('/') ? path : '/' + path}`;
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            'X-MCP-Internal': 'true',
+            'X-Agent-Name': agentName
+          }
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        let data;
+        if (contentType.includes('application/json')) {
+          data = await response.json();
+        } else {
+          data = await response.text();
+        }
+
+        if (!response.ok) {
+          return toolError(`Service returned ${response.status}: ${JSON.stringify(data)}`);
+        }
+
+        return toolResponse(data);
+      } catch (error) {
+        return toolError(`Failed to read from service: ${error.message}`);
+      }
     }
 
     default:
