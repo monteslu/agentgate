@@ -34,14 +34,26 @@ GitHub, Bluesky, Mastodon, Reddit, Google Calendar, YouTube, LinkedIn, Jira, Fit
 
 ## Features
 
-| Feature | Description | Docs |
-|---------|-------------|------|
-| **Write Queue** | All writes require human approval | [details](docs/write-queue.md) |
-| **MCP Server** | Works with Claude Code and other MCP clients | [details](docs/mcp.md) |
-| **Agent Messaging** | Agents can message each other | [details](docs/messaging.md) |
-| **Mementos** | Persistent memory with keyword tagging | [details](docs/memento.md) |
-| **Access Control** | Per-service allowlist/denylist | [details](docs/access-control.md) |
-| **Webhooks** | Notify agents when requests complete | [details](docs/webhooks.md) |
+### Write Queue
+All writes require human approval before execution. Agents submit requests with a comment explaining why, you approve or reject in the UI. [Details →](docs/write-queue.md)
+
+### Skills
+Generate a skill file for [OpenClaw](https://openclaw.ai) or [ClawdBot](https://clawdbot.com) with one curl. Drop it in your skills folder and your agent has secure access to all your services. [Details →](docs/skills.md)
+
+### MCP Server
+Works with Claude Code and other MCP clients. Your agent gets tools for services, queue, messaging, and mementos without seeing your credentials. [Details →](docs/mcp.md)
+
+### Agent Messaging
+Agents can message each other for multi-agent coordination. Run in supervised mode (you approve messages) or open mode (instant delivery). [Details →](docs/messaging.md)
+
+### Mementos
+Persistent memory storage with keyword tagging. Agents can save context and retrieve it later across sessions. [Details →](docs/memento.md)
+
+### Access Control
+Control which agents can access which services. Allowlist, denylist, or allow all. [Details →](docs/access-control.md)
+
+### Webhooks
+Get notified when requests are approved or completed. Works with OpenClaw's webhook system. [Details →](docs/webhooks.md)
 
 ## Security
 
