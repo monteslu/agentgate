@@ -2,75 +2,57 @@
 
 agentgate works great with [OpenClaw](https://openclaw.ai) and [ClawdBot](https://clawdbot.com) - agents that use skills to interact with the world.
 
-Skills teach agents how to use tools. Each skill is a `SKILL.md` file with YAML frontmatter and instructions. agentgate generates a complete skill file tailored to your agent's access.
+Skills teach agents how to use tools. Each skill is a `SKILL.md` file with YAML frontmatter and instructions. agentgate generates category-based skills so agents only load what's relevant to the task at hand.
 
-## Generate a Skill File
+## OpenClaw Setup
+
+1. In agentgate Admin UI (`/ui`), create an API key for your agent
+2. Add environment variables to your OpenClaw agent config:
+   - `AGENT_GATE_URL` — your agentgate URL (e.g., `https://your-server.com`)
+   - `AGENT_GATE_TOKEN` — the API key from step 1
+3. Tell the agent: **"Install agentgate skills by running: `curl -s $AGENT_GATE_URL/api/skill/setup | node`"**
+4. Start a new conversation — OpenClaw loads skills per-session, so the agent needs a fresh session to pick them up
+
+The setup script writes skill files to `~/.openclaw/skills/` where OpenClaw's file watcher detects them automatically. Re-run the command anytime to update skills after adding new services.
+
+## Generated Skills
+
+The setup script creates multiple focused skills instead of one monolithic file:
+
+| Skill | Always generated | Content |
+|---|---|---|
+| `agentgate` | Yes | Auth, service discovery, queue management, bypass info |
+| `agentgate-messages` | Yes | Agent-to-agent messaging and broadcasts |
+| `agentgate-mementos` | Yes | Persistent memory with keyword search |
+| `agentgate-search` | If search services configured | Brave Search, Google Search |
+| `agentgate-social` | If social services configured | Bluesky, Mastodon, Reddit, LinkedIn |
+| `agentgate-code` | If code services configured | GitHub, Jira |
+| `agentgate-personal` | If personal services configured | Fitbit, Calendar, YouTube |
+
+OpenClaw reads one skill at a time based on the task, so category skills keep token usage efficient — a search task only loads the search skill, not all of agentgate.
+
+## Manual Setup
+
+If you prefer to manage skill files yourself:
 
 ```bash
-curl -H "Authorization: Bearer rms_your_key" \
-  https://your-server.com/api/skill > SKILL.md
+# Fetch all skills as JSON
+curl -H "Authorization: Bearer $AGENT_GATE_TOKEN" \
+  $AGENT_GATE_URL/api/skill | jq .
 ```
 
-Drop this in your agent's skills folder:
-- **OpenClaw**: `~/.openclaw/skills/agentgate/SKILL.md` (shared) or `<workspace>/skills/agentgate/SKILL.md` (per-agent)
-- **ClawdBot**: Your configured skills directory
-
-The generated skill includes:
-- All services your agent can access
-- Endpoint patterns and examples
-- Write queue instructions
-- Messaging and memento APIs
-
-## What's in the Skill File
-
-```markdown
----
-name: agentgate
-description: API gateway for personal data with human-in-the-loop write approval
----
-
-## Authentication
-Bearer token: Use Authorization header with your API key
-
-## Services
-- GitHub: /api/github/{account}/...
-- Bluesky: /api/bluesky/{account}/...
-...
-
-## Write Queue
-POST /api/queue/{service}/{account}/submit
-{ "requests": [...], "comment": "why" }
-
-## Agent Messaging
-POST /api/agents/message
-{ "to_agent": "OtherBot", "message": "..." }
-
-## Mementos
-POST /api/agents/memento
-{ "content": "...", "keywords": ["..."] }
-```
+The `/api/skill` endpoint returns `{ skills: { "agentgate": "...", "agentgate-search": "...", ... } }`. Write each value to `~/.openclaw/skills/{name}/SKILL.md`.
 
 ## Dynamic Documentation
 
 Agents can also fetch live API docs at runtime:
 
 ```bash
-GET /api/readme
-Authorization: Bearer rms_your_key
+GET /api/agent_start_here
+Authorization: Bearer $AGENT_GATE_TOKEN
 ```
 
-Returns full documentation for all endpoints. Useful for agents that build tools dynamically or need to discover available services.
-
-## Multi-Agent Setup
-
-Each agent gets their own API key, so each agent's skill file reflects only what they can access. A "SocialBot" might only see Bluesky and Mastodon, while "DevBot" sees GitHub and Jira.
-
-Generate separate skill files for each agent:
-
-```bash
-curl -H "Authorization: Bearer rms_socialbot_key" .../api/skill > socialbot-agentgate.md
-curl -H "Authorization: Bearer rms_devbot_key" .../api/skill > devbot-agentgate.md
-```
+Returns full endpoint documentation filtered to the agent's accessible services.
 
 ## Webhook Notifications
 

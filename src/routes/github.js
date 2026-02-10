@@ -4,7 +4,7 @@ import { getAccountCredentials } from '../lib/db.js';
 const router = Router();
 const GITHUB_API = 'https://api.github.com';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'github',
   name: 'GitHub',

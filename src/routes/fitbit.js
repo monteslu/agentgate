@@ -5,7 +5,7 @@ const router = Router();
 const FITBIT_API = 'https://api.fitbit.com';
 const FITBIT_AUTH = 'https://api.fitbit.com/oauth2/token';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'fitbit',
   name: 'Fitbit',

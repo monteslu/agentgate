@@ -4,7 +4,7 @@ import { getAccountCredentials, setAccountCredentials } from '../lib/db.js';
 const router = Router();
 const BSKY_API = 'https://bsky.social/xrpc';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'bluesky',
   name: 'Bluesky',

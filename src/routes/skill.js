@@ -81,7 +81,7 @@ ${serviceList || '_No services configured yet_'}
 
 For complete endpoint documentation:
 \`\`\`
-GET $AGENT_GATE_URL/api/readme
+GET $AGENT_GATE_URL/api/agent_start_here
 \`\`\`
 
 ## Write Queue Management

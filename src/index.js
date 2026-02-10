@@ -100,7 +100,7 @@ app.get('/mcp', apiKeyAuth, createMCPGetHandler());
 app.delete('/mcp', apiKeyAuth, createMCPDeleteHandler());
 
 // Readme and skill endpoints - require auth
-app.use('/api/readme', apiKeyAuth, readmeRoutes);
+app.use('/api/agent_start_here', apiKeyAuth, readmeRoutes);
 // Skill setup script is public (no auth) so users can: curl $AGENT_GATE_URL/api/skill/setup | node
 // The script itself uses AGENT_GATE_TOKEN env var to call back to /api/skill
 app.use('/api/skill', (req, res, next) => {

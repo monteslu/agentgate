@@ -4,7 +4,7 @@ import { getAccountCredentials, setAccountCredentials } from '../lib/db.js';
 const router = Router();
 const LINKEDIN_API = 'https://api.linkedin.com/v2';
 
-// Service metadata - exported for /api/readme and /api/skill
+// Service metadata - exported for /api/agent_start_here and /api/skill
 export const serviceInfo = {
   key: 'linkedin',
   name: 'LinkedIn',

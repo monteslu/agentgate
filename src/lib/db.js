@@ -737,7 +737,7 @@ export function getAccountById(id) {
   };
 }
 
-// Get all accounts grouped by service (for /api/readme)
+// Get all accounts grouped by service (for /api/agent_start_here)
 export function getAccountsByService() {
   const rows = db.prepare('SELECT service, name FROM service_accounts ORDER BY service, name').all();
   const grouped = {};
