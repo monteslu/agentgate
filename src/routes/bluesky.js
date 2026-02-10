@@ -179,10 +179,8 @@ router.get('/:accountName/*', async (req, res) => {
       }
     }
 
-    const raw = req.query.raw === 'true';
-    const queryParams = { ...req.query };
-    delete queryParams.raw;
-    const queryString = new URLSearchParams(queryParams).toString();
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const queryString = new URLSearchParams(req.query).toString();
     const url = `${BSKY_API}/${path}${queryString ? '?' + queryString : ''}`;
 
     const response = await fetch(url, {

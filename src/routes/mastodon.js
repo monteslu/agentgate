@@ -34,6 +34,64 @@ function getMastodonConfig(accountName) {
   return creds;
 }
 
+// Simplify account/credentials - drop duplicate HTML fields, source echo, role
+function simplifyAccount(data) {
+  if (!data?.id) return data;
+  return {
+    id: data.id,
+    username: data.username,
+    acct: data.acct,
+    display_name: data.display_name,
+    note: data.source?.note || data.note,
+    url: data.url,
+    avatar: data.avatar,
+    followers_count: data.followers_count,
+    following_count: data.following_count,
+    statuses_count: data.statuses_count,
+    created_at: data.created_at,
+    last_status_at: data.last_status_at,
+    fields: data.source?.fields || data.fields
+  };
+}
+
+// Simplify timeline statuses
+function simplifyStatus(status) {
+  return {
+    id: status.id,
+    created_at: status.created_at,
+    content: status.content,
+    account: {
+      acct: status.account?.acct,
+      display_name: status.account?.display_name
+    },
+    reblogs_count: status.reblogs_count,
+    favourites_count: status.favourites_count,
+    replies_count: status.replies_count,
+    reblog: status.reblog ? { id: status.reblog.id, account: status.reblog.account?.acct, content: status.reblog.content } : undefined,
+    media_attachments: status.media_attachments?.map(m => ({ type: m.type, url: m.url, description: m.description }))
+  };
+}
+
+// Simplify notifications
+function simplifyNotification(n) {
+  return {
+    id: n.id,
+    type: n.type,
+    created_at: n.created_at,
+    account: { acct: n.account?.acct, display_name: n.account?.display_name },
+    status: n.status ? simplifyStatus(n.status) : undefined
+  };
+}
+
+// Match path to simplifier
+function getSimplifier(path) {
+  if (/api\/v1\/accounts\/verify_credentials/.test(path)) return simplifyAccount;
+  if (/api\/v1\/timelines\//.test(path)) return data => Array.isArray(data) ? data.map(simplifyStatus) : data;
+  if (/api\/v1\/notifications/.test(path)) return data => Array.isArray(data) ? data.map(simplifyNotification) : data;
+  if (/api\/v1\/accounts\/\d+$/.test(path)) return simplifyAccount;
+  return null;
+}
+
 // Proxy GET requests to Mastodon API
 // Route: /api/mastodon/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
@@ -59,6 +117,7 @@ router.get('/:accountName/*', async (req, res) => {
       }
     }
 
+    const raw = req.headers['x-agentgate-raw'] === 'true';
     const queryString = new URLSearchParams(req.query).toString();
     const url = `https://${config.instance}/${path}${queryString ? '?' + queryString : ''}`;
 
@@ -70,6 +129,14 @@ router.get('/:accountName/*', async (req, res) => {
     });
 
     const data = await response.json();
+
+    if (!raw && response.ok) {
+      const simplifier = getSimplifier(path);
+      if (simplifier) {
+        return res.status(response.status).json(simplifier(data));
+      }
+    }
+
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: 'Mastodon API request failed', message: error.message });

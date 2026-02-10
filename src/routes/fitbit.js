@@ -79,6 +79,70 @@ async function getAccessToken(accountName) {
 // Export for queue executor
 export { getAccessToken };
 
+// Simplify profile - strip badge images, marketing copy, unit settings
+function simplifyProfile(data) {
+  if (!data?.user) return data;
+  const u = data.user;
+  return {
+    user: {
+      displayName: u.displayName,
+      fullName: u.fullName,
+      age: u.age,
+      gender: u.gender,
+      height: u.height,
+      weight: u.weight,
+      averageDailySteps: u.averageDailySteps,
+      memberSince: u.memberSince,
+      timezone: u.timezone,
+      country: u.country,
+      state: u.state
+    }
+  };
+}
+
+// Simplify activities
+function simplifyActivities(data) {
+  if (!data?.summary) return data;
+  return {
+    summary: {
+      steps: data.summary.steps,
+      caloriesOut: data.summary.caloriesOut,
+      distances: data.summary.distances,
+      activeMinutes: data.summary.fairlyActiveMinutes + data.summary.veryActiveMinutes,
+      sedentaryMinutes: data.summary.sedentaryMinutes,
+      floors: data.summary.floors,
+      elevation: data.summary.elevation
+    },
+    goals: data.goals
+  };
+}
+
+// Simplify sleep
+function simplifySleep(data) {
+  if (!data?.sleep) return data;
+  return {
+    summary: data.summary,
+    sleep: data.sleep.map(s => ({
+      dateOfSleep: s.dateOfSleep,
+      duration: s.duration,
+      efficiency: s.efficiency,
+      startTime: s.startTime,
+      endTime: s.endTime,
+      minutesAsleep: s.minutesAsleep,
+      minutesAwake: s.minutesAwake,
+      type: s.type
+    }))
+  };
+}
+
+// Match path to simplifier
+function getSimplifier(path) {
+  if (/1\/user\/-\/profile\.json/.test(path)) return simplifyProfile;
+  if (/1\/user\/-\/activities\/date\//.test(path)) return simplifyActivities;
+  if (/1\/user\/-\/sleep\/date\//.test(path)) return simplifySleep;
+  return null;
+}
+
 // Proxy GET requests to Fitbit API
 // Route: /api/fitbit/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
@@ -93,6 +157,7 @@ router.get('/:accountName/*', async (req, res) => {
     }
 
     const path = req.params[0] || '';
+    const raw = req.headers['x-agentgate-raw'] === 'true';
     const queryString = new URLSearchParams(req.query).toString();
     const url = `${FITBIT_API}/${path}${queryString ? '?' + queryString : ''}`;
 
@@ -104,6 +169,14 @@ router.get('/:accountName/*', async (req, res) => {
     });
 
     const data = await response.json();
+
+    if (!raw && response.ok) {
+      const simplifier = getSimplifier(path);
+      if (simplifier) {
+        return res.status(response.status).json(simplifier(data));
+      }
+    }
+
     res.status(response.status).json(data);
   } catch (error) {
     res.status(500).json({ error: 'Fitbit API request failed', message: error.message });

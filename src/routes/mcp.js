@@ -218,7 +218,8 @@ function createMCPServer(agentName) {
       action: z.enum(['whoami', 'list', 'list_detail', 'read']).describe('Operation to perform'),
       service: z.string().optional().describe('Required for read; optional filter for list_detail'),
       account: z.string().optional().describe('Required for read; optional filter for list_detail'),
-      path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")')
+      path: z.string().optional().describe('API path for read (e.g., "/web/search?q=hello")'),
+      raw: z.boolean().optional().describe('Get raw upstream response without simplification')
     }
   }, async (args) => {
     return await handleServicesAction(agentName, args);
@@ -694,12 +695,14 @@ async function handleServicesAction(agentName, args) {
       const url = `http://localhost:${PORT}/api/${service}/${account}${path.startsWith('/') ? path : '/' + path}`;
 
       try {
-        const response = await fetch(url, {
-          headers: {
-            'X-MCP-Internal': 'true',
-            'X-Agent-Name': agentName
-          }
-        });
+        const headers = {
+          'X-MCP-Internal': 'true',
+          'X-Agent-Name': agentName
+        };
+        if (args.raw) {
+          headers['X-Agentgate-Raw'] = 'true';
+        }
+        const response = await fetch(url, { headers });
 
         const contentType = response.headers.get('content-type') || '';
         let data;

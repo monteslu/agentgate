@@ -65,7 +65,7 @@ router.get('/:accountName/search', async (req, res) => {
     const data = await response.json();
 
     // Return simplified results by default, raw if requested
-    const raw = req.query.raw === 'true';
+    const raw = req.headers['x-agentgate-raw'] === 'true';
     if (!raw && response.ok) {
       res.status(response.status).json(simplifyResults(data));
     } else {

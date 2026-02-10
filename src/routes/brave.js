@@ -63,10 +63,8 @@ function simplifyImageResults(data) {
 async function proxyBraveRequest(req, res, endpoint, simplifyFn = null) {
   try {
     const { accountName } = req.params;
-    const raw = req.query.raw === 'true';
-    const queryParams = { ...req.query };
-    delete queryParams.raw;
-    const queryString = new URLSearchParams(queryParams).toString();
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const queryString = new URLSearchParams(req.query).toString();
     const url = `${BRAVE_API}/${endpoint}${queryString ? '?' + queryString : ''}`;
 
     const creds = getAccountCredentials('brave', accountName);
