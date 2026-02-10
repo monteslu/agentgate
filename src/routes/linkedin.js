@@ -119,7 +119,8 @@ export async function readService(accountName, path, { query = {}, raw: _raw = f
 // Proxy GET requests to LinkedIn API
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const raw = req.headers['x-agentgate-raw'] === 'true' || !!(req.apiKeyInfo?.raw_results);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
     const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
     res.status(result.status).json(result.data);
   } catch (error) {

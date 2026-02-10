@@ -98,7 +98,8 @@ export async function readService(accountName, path, { query = {}, raw = false }
 // Web search
 router.get('/:accountName/web/search', async (req, res) => {
   try {
-    const raw = req.headers['x-agentgate-raw'] === 'true' || !!(req.apiKeyInfo?.raw_results);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
     const result = await readService(req.params.accountName, 'web/search', { query: req.query, raw });
     res.status(result.status).json(result.data);
   } catch (error) {
@@ -109,7 +110,8 @@ router.get('/:accountName/web/search', async (req, res) => {
 // Image search
 router.get('/:accountName/images/search', async (req, res) => {
   try {
-    const raw = req.headers['x-agentgate-raw'] === 'true' || !!(req.apiKeyInfo?.raw_results);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
     const result = await readService(req.params.accountName, 'images/search', { query: req.query, raw });
     res.status(result.status).json(result.data);
   } catch (error) {
@@ -120,7 +122,8 @@ router.get('/:accountName/images/search', async (req, res) => {
 // News search
 router.get('/:accountName/news/search', async (req, res) => {
   try {
-    const raw = req.headers['x-agentgate-raw'] === 'true' || !!(req.apiKeyInfo?.raw_results);
+    const rawHeader = req.headers['x-agentgate-raw'];
+    const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
     const result = await readService(req.params.accountName, 'news/search', { query: req.query, raw });
     res.status(result.status).json(result.data);
   } catch (error) {
