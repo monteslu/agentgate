@@ -7,6 +7,8 @@ import { serviceInfo as linkedinInfo } from '../routes/linkedin.js';
 import { serviceInfo as youtubeInfo } from '../routes/youtube.js';
 import { serviceInfo as jiraInfo } from '../routes/jira.js';
 import { serviceInfo as fitbitInfo } from '../routes/fitbit.js';
+import { serviceInfo as braveInfo } from '../routes/brave.js';
+import { serviceInfo as googleSearchInfo } from '../routes/google-search.js';
 
 // Aggregate service metadata from all routes
 const SERVICE_REGISTRY = {
@@ -18,7 +20,9 @@ const SERVICE_REGISTRY = {
   [youtubeInfo.key]: youtubeInfo,
   [linkedinInfo.key]: linkedinInfo,
   [jiraInfo.key]: jiraInfo,
-  [fitbitInfo.key]: fitbitInfo
+  [fitbitInfo.key]: fitbitInfo,
+  [braveInfo.key]: braveInfo,
+  [googleSearchInfo.key]: googleSearchInfo
 };
 
 export default SERVICE_REGISTRY;
