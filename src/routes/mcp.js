@@ -18,10 +18,10 @@ import {
   getMementosByIds
 } from '../services/mementoService.js';
 import {
-  listAccessibleServices,
-  getServiceAccess
+  listAccessibleServices
 } from '../services/serviceService.js';
 import {
+  checkServiceAccess,
   getMessagesForAgent,
   getMessagingMode,
   getApiKeyByName,
@@ -674,9 +674,9 @@ async function handleServicesAction(agentName, args) {
       }
 
       // Check if agent has access to this service
-      const access = getServiceAccess(agentName, service, account);
-      if (!access.allowed) {
-        return toolError(`Access denied to ${service}/${account}: ${access.reason}`);
+      const access = checkServiceAccess(service, account, agentName);
+      if (!access || !access.allowed) {
+        return toolError(`Access denied to ${service}/${account}: ${access?.reason || 'no access object'} (agent: ${agentName}, access: ${JSON.stringify(access)})`);
       }
 
       // Make internal request to the service endpoint
