@@ -3,11 +3,11 @@ import { escapeHtml } from './shared.js';
 
 export function registerRoutes(router) {
   router.post('/brave/setup', (req, res) => {
-    const { accountName, api_key } = req.body;
-    if (!accountName || !api_key) {
+    const { accountName, apiKey } = req.body;
+    if (!accountName || !apiKey) {
       return res.status(400).send('Account name and API key required');
     }
-    setAccountCredentials('brave', accountName, { api_key });
+    setAccountCredentials('brave', accountName, { api_key: apiKey });
     res.redirect('/ui');
   });
 
@@ -49,7 +49,7 @@ export function renderCard(accounts, _baseUrl) {
           <label>Account Name</label>
           <input type="text" name="accountName" placeholder="default, work, etc." required>
           <label>API Key</label>
-          <input type="password" name="api_key" placeholder="BSA..." required>
+          <input type="password" name="apiKey" placeholder="BSA..." required>
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
