@@ -7,7 +7,13 @@
 </p>
 
 <p align="center">
-  <a href="https://agentgate.org/">Website</a> ·
+  <a href="https://github.com/monteslu/agentgate/actions/workflows/ci.yml"><img src="https://github.com/monteslu/agentgate/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/agentgate"><img src="https://img.shields.io/npm/v/agentgate.svg" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/agentgate"><img src="https://img.shields.io/npm/dm/agentgate.svg" alt="npm downloads"></a>
+</p>
+
+<p align="center">
+  <a href="https://agentgate.org/">AgentGate.org</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="docs/">Documentation</a>
 </p>
@@ -23,10 +29,10 @@ flowchart LR
 ## Quick Start
 
 ```bash
-npm install && npm start
+npx agentgate
 ```
 
-Open http://localhost:3050/ui, create a password, add services, create agent API keys. Done.
+Open http://localhost:3050, create a password, add services, create agent API keys.
 
 ## Supported Services
 
