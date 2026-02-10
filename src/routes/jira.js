@@ -82,43 +82,43 @@ function getSimplifier(path) {
   return null;
 }
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const config = getJiraConfig(accountName);
+  if (!config) {
+    return { status: 401, data: { error: 'Jira account not configured', message: `Set up Jira account "${accountName}" in the admin UI` } };
+  }
+
+  const queryString = new URLSearchParams(query).toString();
+  const url = `https://${config.domain}/rest/api/3/${path}${queryString ? '?' + queryString : ''}`;
+
+  const basicAuth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Basic ${basicAuth}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    const simplifier = getSimplifier(path);
+    if (simplifier) {
+      data = simplifier(data);
+    }
+  }
+
+  return { status: response.status, data };
+}
+
 // Proxy GET requests to Jira API
-// Route: /api/jira/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const config = getJiraConfig(accountName);
-    if (!config) {
-      return res.status(401).json({
-        error: 'Jira account not configured',
-        message: `Set up Jira account "${accountName}" in the admin UI`
-      });
-    }
-
-    const path = req.params[0] || '';
     const raw = req.headers['x-agentgate-raw'] === 'true';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `https://${config.domain}/rest/api/3/${path}${queryString ? '?' + queryString : ''}`;
-
-    const basicAuth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Basic ${basicAuth}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-
-    if (!raw && response.ok) {
-      const simplifier = getSimplifier(path);
-      if (simplifier) {
-        return res.status(response.status).json(simplifier(data));
-      }
-    }
-
-    res.status(response.status).json(data);
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Jira API request failed', message: error.message });
   }

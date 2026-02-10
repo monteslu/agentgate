@@ -154,56 +154,50 @@ async function getAccessToken(accountName) {
   }
 }
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const accessToken = await getAccessToken(accountName);
+  if (!accessToken) {
+    return { status: 401, data: { error: 'Bluesky account not configured', message: `Set up Bluesky account "${accountName}" in the admin UI` } };
+  }
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(path)) {
+      return { status: 403, data: { error: 'Route blocked', message: 'This endpoint is blocked for privacy (DMs/chat)' } };
+    }
+  }
+
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${BSKY_API}/${path}${queryString ? '?' + queryString : ''}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    if (path === 'app.bsky.feed.getTimeline' || path === 'app.bsky.feed.getAuthorFeed') {
+      data = simplifyFeed(data);
+    } else if (path === 'app.bsky.actor.getProfile') {
+      data = simplifyProfile(data);
+    } else if (path === 'app.bsky.feed.getPostThread') {
+      data = simplifyThread(data);
+    }
+  }
+
+  return { status: response.status, data };
+}
+
 // Proxy GET requests to Bluesky API
-// Route: /api/bluesky/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const accessToken = await getAccessToken(accountName);
-    if (!accessToken) {
-      return res.status(401).json({
-        error: 'Bluesky account not configured',
-        message: `Set up Bluesky account "${accountName}" in the admin UI`
-      });
-    }
-
-    const path = req.params[0] || '';
-
-    // Check blocked routes
-    for (const pattern of BLOCKED_PATTERNS) {
-      if (pattern.test(path)) {
-        return res.status(403).json({
-          error: 'Route blocked',
-          message: 'This endpoint is blocked for privacy (DMs/chat)'
-        });
-      }
-    }
-
     const raw = req.headers['x-agentgate-raw'] === 'true';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${BSKY_API}/${path}${queryString ? '?' + queryString : ''}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    let data = await response.json();
-
-    // Simplify responses by default unless raw=true
-    if (!raw && response.ok) {
-      if (path === 'app.bsky.feed.getTimeline' || path === 'app.bsky.feed.getAuthorFeed') {
-        data = simplifyFeed(data);
-      } else if (path === 'app.bsky.actor.getProfile') {
-        data = simplifyProfile(data);
-      } else if (path === 'app.bsky.feed.getPostThread') {
-        data = simplifyThread(data);
-      }
-    }
-
-    res.status(response.status).json(data);
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Bluesky API request failed', message: error.message });
   }

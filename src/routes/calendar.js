@@ -74,32 +74,33 @@ async function getAccessToken(accountName) {
   }
 }
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const accessToken = await getAccessToken(accountName);
+  if (!accessToken) {
+    return { status: 401, data: { error: 'Google Calendar account not configured', message: `Set up Google Calendar account "${accountName}" in the admin UI` } };
+  }
+
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${GOOGLE_API}/${path}${queryString ? '?' + queryString : ''}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Accept': 'application/json'
+    }
+  });
+
+  const data = await response.json();
+  return { status: response.status, data };
+}
+
 // Proxy GET requests to Google Calendar API
-// Route: /api/calendar/:accountName/*
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const accessToken = await getAccessToken(accountName);
-    if (!accessToken) {
-      return res.status(401).json({
-        error: 'Google Calendar account not configured',
-        message: `Set up Google Calendar account "${accountName}" in the admin UI`
-      });
-    }
-
-    const path = req.params[0] || '';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${GOOGLE_API}/${path}${queryString ? '?' + queryString : ''}`;
-
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    const data = await response.json();
-    res.status(response.status).json(data);
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Google Calendar API request failed', message: error.message });
   }

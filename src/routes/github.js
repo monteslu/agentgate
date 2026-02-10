@@ -91,40 +91,40 @@ function getSimplifier(path) {
   return null;
 }
 
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${GITHUB_API}/${path}${queryString ? '?' + queryString : ''}`;
+
+  const headers = {
+    'Accept': 'application/vnd.github+json',
+    'User-Agent': 'agentgate-gateway'
+  };
+
+  const creds = getAccountCredentials('github', accountName);
+  if (creds?.token) {
+    headers['Authorization'] = `Bearer ${creds.token}`;
+  }
+
+  const response = await fetch(url, { headers });
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    const simplifier = getSimplifier(path);
+    if (simplifier) {
+      data = simplifier(data);
+    }
+  }
+
+  return { status: response.status, data };
+}
+
 // Proxy all GET requests to GitHub API
-// Route: /api/github/:accountName/*
-// Uses PAT if configured (5000 req/hr), falls back to unauthenticated (60 req/hr)
 router.get('/:accountName/*', async (req, res) => {
   try {
-    const { accountName } = req.params;
-    const path = req.params[0] || '';
     const raw = req.headers['x-agentgate-raw'] === 'true';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${GITHUB_API}/${path}${queryString ? '?' + queryString : ''}`;
-
-    const headers = {
-      'Accept': 'application/vnd.github+json',
-      'User-Agent': 'agentgate-gateway'
-    };
-
-    // Add auth if configured for this account
-    const creds = getAccountCredentials('github', accountName);
-    if (creds?.token) {
-      headers['Authorization'] = `Bearer ${creds.token}`;
-    }
-
-    const response = await fetch(url, { headers });
-
-    const data = await response.json();
-
-    if (!raw && response.ok) {
-      const simplifier = getSimplifier(path);
-      if (simplifier) {
-        return res.status(response.status).json(simplifier(data));
-      }
-    }
-
-    res.status(response.status).json(data);
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'GitHub API request failed', message: error.message });
   }

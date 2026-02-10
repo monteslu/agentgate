@@ -34,6 +34,7 @@ import {
   createAgentMessage
 } from '../lib/db.js';
 import { notifyAgent } from '../lib/agentNotifier.js';
+import { SERVICE_READERS } from '../lib/serviceRegistry.js';
 
 const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
@@ -690,33 +691,24 @@ async function handleServicesAction(agentName, args) {
         return toolError(`Access denied to ${service}/${account}: ${access?.reason || 'no access object'} (agent: ${agentName}, access: ${JSON.stringify(access)})`);
       }
 
-      // Make internal request to the service endpoint
-      const PORT = process.env.PORT || 3050;
-      const url = `http://localhost:${PORT}/api/${service}/${account}${path.startsWith('/') ? path : '/' + path}`;
+      const reader = SERVICE_READERS[service];
+      if (!reader) {
+        return toolError(`Unknown service: ${service}`);
+      }
 
       try {
-        const headers = {
-          'X-MCP-Internal': 'true',
-          'X-Agent-Name': agentName
-        };
-        if (args.raw) {
-          headers['X-Agentgate-Raw'] = 'true';
-        }
-        const response = await fetch(url, { headers });
+        // Parse query params from path (MCP passes "/search?q=hello" as path)
+        const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+        const [pathPart, qs] = cleanPath.split('?');
+        const query = Object.fromEntries(new URLSearchParams(qs || ''));
 
-        const contentType = response.headers.get('content-type') || '';
-        let data;
-        if (contentType.includes('application/json')) {
-          data = await response.json();
-        } else {
-          data = await response.text();
+        const result = await reader(account, pathPart, { query, raw: !!args.raw });
+
+        if (result.status >= 400) {
+          return toolError(`Service returned ${result.status}: ${JSON.stringify(result.data)}`);
         }
 
-        if (!response.ok) {
-          return toolError(`Service returned ${response.status}: ${JSON.stringify(data)}`);
-        }
-
-        return toolResponse(data);
+        return toolResponse(result.data);
       } catch (error) {
         return toolError(`Failed to read from service: ${error.message}`);
       }

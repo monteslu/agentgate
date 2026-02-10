@@ -59,54 +59,73 @@ function simplifyImageResults(data) {
   };
 }
 
-// Generic proxy handler for all Brave Search endpoints
-async function proxyBraveRequest(req, res, endpoint, simplifyFn = null) {
-  try {
-    const { accountName } = req.params;
-    const raw = req.headers['x-agentgate-raw'] === 'true';
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${BRAVE_API}/${endpoint}${queryString ? '?' + queryString : ''}`;
+// Endpoint to simplifier mapping
+const BRAVE_SIMPLIFIERS = {
+  'web/search': simplifyWebResults,
+  'images/search': simplifyImageResults,
+  'news/search': simplifyNewsResults
+};
 
-    const creds = getAccountCredentials('brave', accountName);
-    if (!creds?.api_key) {
-      return res.status(401).json({
-        error: 'Brave Search API key not configured',
-        hint: `Configure API key for account "${accountName}" in the AgentGate UI`
-      });
-    }
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const creds = getAccountCredentials('brave', accountName);
+  if (!creds?.api_key) {
+    return { status: 401, data: { error: 'Brave Search API key not configured', hint: `Configure API key for account "${accountName}" in the AgentGate UI` } };
+  }
 
-    const headers = {
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${BRAVE_API}/${path}${queryString ? '?' + queryString : ''}`;
+
+  const response = await fetch(url, {
+    headers: {
       'Accept': 'application/json',
       'X-Subscription-Token': creds.api_key
-    };
-
-    const response = await fetch(url, { headers });
-    const data = await response.json();
-
-    // Return simplified results by default, raw if requested
-    if (!raw && simplifyFn && response.ok) {
-      res.status(response.status).json(simplifyFn(data));
-    } else {
-      res.status(response.status).json(data);
     }
-  } catch (error) {
-    res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
+  });
+
+  let data = await response.json();
+
+  if (!raw && response.ok) {
+    const simplifyFn = BRAVE_SIMPLIFIERS[path];
+    if (simplifyFn) {
+      data = simplifyFn(data);
+    }
   }
+
+  return { status: response.status, data };
 }
 
 // Web search
-router.get('/:accountName/web/search', (req, res) => {
-  proxyBraveRequest(req, res, 'web/search', simplifyWebResults);
+router.get('/:accountName/web/search', async (req, res) => {
+  try {
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const result = await readService(req.params.accountName, 'web/search', { query: req.query, raw });
+    res.status(result.status).json(result.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
+  }
 });
 
 // Image search
-router.get('/:accountName/images/search', (req, res) => {
-  proxyBraveRequest(req, res, 'images/search', simplifyImageResults);
+router.get('/:accountName/images/search', async (req, res) => {
+  try {
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const result = await readService(req.params.accountName, 'images/search', { query: req.query, raw });
+    res.status(result.status).json(result.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
+  }
 });
 
 // News search
-router.get('/:accountName/news/search', (req, res) => {
-  proxyBraveRequest(req, res, 'news/search', simplifyNewsResults);
+router.get('/:accountName/news/search', async (req, res) => {
+  try {
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const result = await readService(req.params.accountName, 'news/search', { query: req.query, raw });
+    res.status(result.status).json(result.data);
+  } catch (error) {
+    res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
+  }
 });
 
 // Account info endpoint

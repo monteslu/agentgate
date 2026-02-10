@@ -87,57 +87,42 @@ async function getAccessToken(accountName) {
   }
 }
 
-// Proxy GET requests to LinkedIn API
-// Route: /api/linkedin/:accountName/*
-router.get('/:accountName/*', async (req, res) => {
-  try {
-    const { accountName } = req.params;
-    console.log(`[LinkedIn] GET request for account: ${accountName}, path: ${req.params[0]}`);
-    
-    const accessToken = await getAccessToken(accountName);
-    if (!accessToken) {
-      return res.status(401).json({
-        error: 'LinkedIn account not configured',
-        message: `Set up LinkedIn account "${accountName}" in the admin UI`
-      });
+// Core read function - used by both Express routes and MCP
+export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+  const accessToken = await getAccessToken(accountName);
+  if (!accessToken) {
+    return { status: 401, data: { error: 'LinkedIn account not configured', message: `Set up LinkedIn account "${accountName}" in the admin UI` } };
+  }
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(path)) {
+      return { status: 403, data: { error: 'Route blocked', message: 'This endpoint is blocked for privacy (messaging)' } };
     }
+  }
 
-    const path = req.params[0] || '';
+  const queryString = new URLSearchParams(query).toString();
+  const url = `${LINKEDIN_API}/${path}${queryString ? '?' + queryString : ''}`;
 
-    // Check blocked routes
-    for (const pattern of BLOCKED_PATTERNS) {
-      if (pattern.test(path)) {
-        return res.status(403).json({
-          error: 'Route blocked',
-          message: 'This endpoint is blocked for privacy (messaging)'
-        });
-      }
-    }
-
-    const queryString = new URLSearchParams(req.query).toString();
-    const url = `${LINKEDIN_API}/${path}${queryString ? '?' + queryString : ''}`;
-
-    const headers = {
+  const response = await fetch(url, {
+    headers: {
       'Authorization': `Bearer ${accessToken}`,
       'LinkedIn-Version': '202401',
       'X-Restli-Protocol-Version': '2.0.0',
       'Accept': 'application/json'
-    };
-
-    console.log(`[LinkedIn] Calling URL: ${url}`);
-    console.log(`[LinkedIn] Headers (sans auth): LinkedIn-Version=${headers['LinkedIn-Version']}, X-Restli-Protocol-Version=${headers['X-Restli-Protocol-Version']}`);
-
-    const response = await fetch(url, { headers });
-
-    const data = await response.json();
-    console.log(`[LinkedIn] Response status: ${response.status}`);
-    if (response.status !== 200) {
-      console.log('[LinkedIn] Error response:', JSON.stringify(data));
     }
-    
-    res.status(response.status).json(data);
+  });
+
+  const data = await response.json();
+  return { status: response.status, data };
+}
+
+// Proxy GET requests to LinkedIn API
+router.get('/:accountName/*', async (req, res) => {
+  try {
+    const raw = req.headers['x-agentgate-raw'] === 'true';
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    res.status(result.status).json(result.data);
   } catch (error) {
-    console.error('[LinkedIn] API request failed:', error);
     res.status(500).json({ error: 'LinkedIn API request failed', message: error.message });
   }
 });
