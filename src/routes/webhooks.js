@@ -2,17 +2,17 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import {
   getWebhookSecret, listApiKeys,
-  getWebhookConfigBySource, logWebhookDelivery
+  getWebhookConfigBySource, logWebhookDelivery,
+  isWebhookDeliveryDuplicate
 } from '../lib/db.js';
 
 const router = Router();
 
+// Default max payload size (1MB) if not configured
+const DEFAULT_MAX_PAYLOAD_SIZE = 1048576;
+
 /**
  * Verify GitHub webhook signature (HMAC SHA256)
- * @param {string} payload - Raw request body
- * @param {string} signature - X-Hub-Signature-256 header
- * @param {string} secret - Webhook secret
- * @returns {boolean}
  */
 function verifyGitHubSignature(payload, signature, secret) {
   if (!signature || !secret) return false;
@@ -161,23 +161,37 @@ function parseGitHubEvent(eventType, payload) {
  */
 function isEventEnabled(config, eventType) {
   if (!config || !config.events || config.events.length === 0) {
-    // No config or no event filter = accept all
-    return true;
+    return true; // No filter = accept all
   }
-  // Check if base event type is in the list (e.g., 'pull_request' matches 'pull_request.opened')
   return config.events.some(e => eventType === e || eventType.startsWith(e + '.'));
 }
 
 /**
- * Broadcast webhook event to all agents with webhooks configured
+ * Filter agents by assignment list
+ * If assignedAgents is null/empty, returns all agents with webhook_url
+ * Otherwise, returns only agents in the assignment list
  */
-async function broadcastToAgents(event) {
-  const agents = listApiKeys();
-  const results = { delivered: [], failed: [] };
+function filterAgentsByAssignment(agents, assignedAgents) {
+  if (!assignedAgents || assignedAgents.length === 0) {
+    return agents; // No filter = all agents
+  }
+  const assignedSet = new Set(assignedAgents.map(a => a.toLowerCase()));
+  return agents.filter(a => assignedSet.has(a.name.toLowerCase()) || assignedSet.has(String(a.id)));
+}
+
+/**
+ * Broadcast webhook event to agents with webhooks configured
+ * Respects agent assignment filtering from webhook config
+ */
+async function broadcastToAgents(event, assignedAgents = null) {
+  let agents = listApiKeys().filter(a => a.webhook_url);
+  
+  // Filter by assignment if specified
+  agents = filterAgentsByAssignment(agents, assignedAgents);
+  
+  const results = { delivered: [], failed: [], skipped: [] };
 
   for (const agent of agents) {
-    if (!agent.webhook_url) continue;
-
     try {
       const response = await fetch(agent.webhook_url, {
         method: 'POST',
@@ -205,7 +219,6 @@ async function broadcastToAgents(event) {
 }
 
 // POST /webhooks/github - Receive GitHub webhooks
-// NOTE: This route does NOT use apiKeyAuth - it uses signature verification instead
 router.post('/github', async (req, res) => {
   const signature = req.headers['x-hub-signature-256'];
   const eventType = req.headers['x-github-event'];
@@ -216,15 +229,43 @@ router.post('/github', async (req, res) => {
     return res.status(400).json({ error: 'Missing X-GitHub-Event header' });
   }
 
-  // Get webhook config for filtering
+  // Get webhook config
   const webhookConfig = getWebhookConfigBySource('github');
+  const maxPayloadSize = webhookConfig?.maxPayloadSize || DEFAULT_MAX_PAYLOAD_SIZE;
+
+  // Security: Check payload size limit
+  const rawBody = req.rawBody;
+  if (rawBody && rawBody.length > maxPayloadSize) {
+    console.error(`GitHub webhook payload too large: ${rawBody.length} > ${maxPayloadSize}`);
+    logWebhookDelivery({
+      configId: webhookConfig?.id,
+      source: 'github',
+      eventType,
+      deliveryId,
+      repo,
+      payload: { error: 'Payload truncated - too large', size: rawBody.length },
+      success: false,
+      broadcastResult: { error: 'Payload exceeds size limit' }
+    });
+    return res.status(413).json({ error: 'Payload too large' });
+  }
+
+  // Security: Replay protection - check for duplicate delivery
+  if (deliveryId && isWebhookDeliveryDuplicate('github', deliveryId)) {
+    console.log('GitHub webhook replay detected:', deliveryId);
+    return res.json({
+      ok: true,
+      duplicate: true,
+      delivery_id: deliveryId,
+      message: 'Delivery already processed'
+    });
+  }
 
   // Get stored webhook secret
   const secret = getWebhookSecret('github');
 
   // Verify signature if secret is configured
   if (secret) {
-    const rawBody = req.rawBody;
     if (!rawBody) {
       console.error('GitHub webhook missing raw body - cannot verify signature');
       logWebhookDelivery({
@@ -255,7 +296,7 @@ router.post('/github', async (req, res) => {
     }
   }
 
-  // Handle ping event (GitHub sends this when webhook is first configured)
+  // Handle ping event
   if (eventType === 'ping') {
     console.log('GitHub webhook ping received:', req.body.zen);
     logWebhookDelivery({
@@ -295,8 +336,8 @@ router.post('/github', async (req, res) => {
     });
   }
 
-  // Broadcast to agents
-  const results = await broadcastToAgents(event);
+  // Broadcast to agents (respecting assignment filter)
+  const results = await broadcastToAgents(event, webhookConfig?.assignedAgents);
   console.log('Webhook broadcast:', results.delivered.length, 'delivered,', results.failed.length, 'failed');
 
   // Log the delivery
