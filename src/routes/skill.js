@@ -481,7 +481,7 @@ Option 2: Manual TOOLS.md update
 Instead of running a script, you can manually update your TOOLS.md:
 
 1. Fetch the service list:
-   curl -s ${baseUrl}/api/agent_start_here -H "Authorization: Bearer \$AGENT_GATE_TOKEN"
+   curl -s ${baseUrl}/api/agent_start_here -H "Authorization: Bearer $AGENT_GATE_TOKEN"
 
 2. Add the agentgate section to your TOOLS.md with the services listed.
 
