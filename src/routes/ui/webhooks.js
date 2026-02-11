@@ -479,7 +479,7 @@ ${renderStyles()}
 function renderWebhookDetailPage(config, deliveries, alerts = {}) {
   const source = WEBHOOK_SOURCES[config.source] || { name: config.source, icon: '/public/favicon.svg', events: [] };
   const secret = getWebhookSecret(config.source) || config.secret || 'Not configured';
-  const webhookUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/webhooks/${config.source}`;
+  const webhookPath = `/webhooks/${config.source}`;
   
   const eventCheckboxes = source.events.map(e => {
     const checked = (config.events || []).includes(e.id) ? 'checked' : '';
@@ -523,8 +523,12 @@ ${renderStyles()}
   <div class="card">
     <h3>Webhook Endpoint</h3>
     <p class="help">Configure your ${source.name} repository to send webhooks to this URL:</p>
-    <div class="endpoint-url">${escapeHtml(webhookUrl)}</div>
+    <div class="endpoint-url" id="webhook-url" data-path="${escapeHtml(webhookPath)}"></div>
   </div>
+  <script>
+    // Set webhook URL using client-side origin (handles reverse proxies correctly)
+    document.getElementById('webhook-url').textContent = window.location.origin + document.getElementById('webhook-url').dataset.path;
+  </script>
   
   <div class="card">
     <h3>Webhook Secret</h3>
