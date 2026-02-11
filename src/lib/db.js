@@ -445,51 +445,52 @@ try {
       `);
       console.log('Migration complete.');
     } else {
-      // Check if we need to add webhook columns (v2 -> v3 migration)
-      const hasWebhookUrl = tableInfo.some(col => col.name === 'webhook_url');
-      if (!hasWebhookUrl) {
-        console.log('Adding webhook columns to api_keys table...');
-        db.exec(`
-          ALTER TABLE api_keys ADD COLUMN webhook_url TEXT;
-          ALTER TABLE api_keys ADD COLUMN webhook_token TEXT;
-        `);
-        console.log('Webhook columns added.');
-      }
+      // Run each migration in its own try/catch so one failure doesn't skip the rest
+      const migrations = [
+        {
+          name: 'webhook columns (v2 -> v3)',
+          check: () => !tableInfo.some(col => col.name === 'webhook_url'),
+          run: () => db.exec(`
+            ALTER TABLE api_keys ADD COLUMN webhook_url TEXT;
+            ALTER TABLE api_keys ADD COLUMN webhook_token TEXT;
+          `)
+        },
+        {
+          name: 'enabled column',
+          check: () => !tableInfo.some(col => col.name === 'enabled'),
+          run: () => db.exec('ALTER TABLE api_keys ADD COLUMN enabled INTEGER DEFAULT 1;')
+        },
+        {
+          name: 'gateway proxy columns',
+          check: () => !tableInfo.some(col => col.name === 'gateway_proxy_enabled'),
+          run: () => db.exec(`
+            ALTER TABLE api_keys ADD COLUMN gateway_proxy_enabled INTEGER DEFAULT 0;
+            ALTER TABLE api_keys ADD COLUMN gateway_proxy_id TEXT;
+            ALTER TABLE api_keys ADD COLUMN gateway_proxy_url TEXT;
+          `)
+        },
+        {
+          name: 'bio column',
+          check: () => !tableInfo.some(col => col.name === 'bio'),
+          run: () => db.exec('ALTER TABLE api_keys ADD COLUMN bio TEXT;')
+        },
+        {
+          name: 'raw_results column',
+          check: () => !tableInfo.some(col => col.name === 'raw_results'),
+          run: () => db.exec('ALTER TABLE api_keys ADD COLUMN raw_results INTEGER DEFAULT 0;')
+        }
+      ];
 
-      // Check if we need to add enabled column (agent enable/disable feature)
-      const hasEnabled = tableInfo.some(col => col.name === 'enabled');
-      if (!hasEnabled) {
-        console.log('Adding enabled column to api_keys table...');
-        db.exec('ALTER TABLE api_keys ADD COLUMN enabled INTEGER DEFAULT 1;');
-        console.log('Enabled column added.');
-      }
-
-      // Check if we need to add gateway proxy columns
-      const hasProxyEnabled = tableInfo.some(col => col.name === 'gateway_proxy_enabled');
-      if (!hasProxyEnabled) {
-        console.log('Adding gateway proxy columns to api_keys table...');
-        db.exec(`
-          ALTER TABLE api_keys ADD COLUMN gateway_proxy_enabled INTEGER DEFAULT 0;
-          ALTER TABLE api_keys ADD COLUMN gateway_proxy_id TEXT;
-          ALTER TABLE api_keys ADD COLUMN gateway_proxy_url TEXT;
-        `);
-        console.log('Gateway proxy columns added.');
-      }
-
-      // Check if we need to add bio column (agent identity/persona)
-      const hasBio = tableInfo.some(col => col.name === 'bio');
-      if (!hasBio) {
-        console.log('Adding bio column to api_keys table...');
-        db.exec('ALTER TABLE api_keys ADD COLUMN bio TEXT;');
-        console.log('Bio column added.');
-      }
-
-      // Check if we need to add raw_results column (per-agent raw results default)
-      const hasRawResults = tableInfo.some(col => col.name === 'raw_results');
-      if (!hasRawResults) {
-        console.log('Adding raw_results column to api_keys table...');
-        db.exec('ALTER TABLE api_keys ADD COLUMN raw_results INTEGER DEFAULT 0;');
-        console.log('Raw results column added.');
+      for (const migration of migrations) {
+        try {
+          if (migration.check()) {
+            console.log(`Adding ${migration.name} to api_keys table...`);
+            migration.run();
+            console.log(`${migration.name} added.`);
+          }
+        } catch (err) {
+          console.error(`Error adding ${migration.name} to api_keys:`, err.message);
+        }
       }
     }
   }
