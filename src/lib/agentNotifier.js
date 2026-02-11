@@ -84,7 +84,7 @@ export async function notifyAgentQueueStatus(entry) {
       results: entry.results
     },
     // Also include a human-readable message for Clawdbot-style gateways
-    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id.substring(0, 8)} ${entry.auto_approved ? 'auto-approved + ' : ''}${entry.status}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
+    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id} ${entry.auto_approved ? 'auto-approved + ' : ''}${entry.status}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
     mode: 'now'
   };
 
@@ -138,7 +138,7 @@ async function notifyWarningAgentsOnResolution(entry) {
         submitted_by: entry.submitted_by
       },
       // Human-readable for Clawdbot-style gateways
-      text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id.substring(0, 8)} you warned on was ${entry.status}\n→ ${entry.service}/${entry.account_name}\nSubmitted by: ${entry.submitted_by}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}`,
+      text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id} you warned on was ${entry.status}\n→ ${entry.service}/${entry.account_name}\nSubmitted by: ${entry.submitted_by}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}`,
       mode: 'now'
     };
 
@@ -174,7 +174,7 @@ export async function notifyAgentQueueWarning(entry, warningAgent, warningMessag
       from: warningAgent,
       message: warningMessage
     },
-    text: `⚠️ [agentgate] Warning on Queue #${entry.id.substring(0, 8)}\n→ ${entry.service}/${entry.account_name}\nFrom: ${warningAgent}\n"${warningMessage.substring(0, 200)}"`,
+    text: `⚠️ [agentgate] Warning on Queue #${entry.id}\n→ ${entry.service}/${entry.account_name}\nFrom: ${warningAgent}\n"${warningMessage.substring(0, 200)}"`,
     mode: 'now'
   };
 
