@@ -9,16 +9,17 @@
  */
 
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import http from 'http';
+import https from 'https';
 import { getChannel, markChannelConnected } from '../lib/db.js';
-// http import removed - not used
-// https import removed - not used
 
 // Whitelist of allowed message types from client → gateway
 const ALLOWED_CLIENT_MESSAGES = new Set([
   'send',           // Send a message
   'subscribe',      // Subscribe to session events
   'ping',           // Keepalive
-  'pong',           // Keepalive response
+  'pong'            // Keepalive response
 ]);
 
 // Message types from gateway that we forward to client
@@ -29,7 +30,7 @@ const ALLOWED_GATEWAY_MESSAGES = new Set([
   'ping',
   'pong',
   'subscribed',     // Confirmation of subscription
-  'error',          // Errors (filtered)
+  'error'           // Errors (filtered)
 ]);
 
 /**
@@ -83,7 +84,7 @@ function filterGatewayMessage(message) {
     // Block anything with sensitive data patterns
     const str = message.toLowerCase();
     if (str.includes('config') || str.includes('admin') || str.includes('token')) {
-      console.log(`[channel] Blocked gateway message with sensitive content`);
+      console.log('[channel] Blocked gateway message with sensitive content');
       return null;
     }
     
@@ -105,7 +106,7 @@ function filterGatewayMessage(message) {
  * Called after setupWebSocketProxy() to handle /channel/* paths.
  */
 export function setupChannelProxy(server) {
-  server.on('upgrade', async (req, socket, head) => {
+  server.on('upgrade', async (req, socket, _head) => {
     const match = req.url.match(/^\/channel\/([^/?]+)(.*)/);
     if (!match) return; // Not a channel request
 
@@ -134,20 +135,20 @@ export function setupChannelProxy(server) {
         return;
       }
       // Auth passed, proceed to connect
-      connectToGateway(channel, socket, head);
+      connectToGateway(channel, socket);
       return;
     }
 
     // No header key — expect auth in first WebSocket message
     // Complete the WebSocket handshake first, then wait for auth
-    completeHandshakeAndWaitForAuth(channel, req, socket, head);
+    completeHandshakeAndWaitForAuth(channel, req, socket);
   });
 }
 
 /**
  * Complete WebSocket handshake and wait for auth message
  */
-function completeHandshakeAndWaitForAuth(channel, req, socket, head) {
+function completeHandshakeAndWaitForAuth(channel, req, socket) {
   // Simple WebSocket handshake
   const key = req.headers['sec-websocket-key'];
   if (!key) {
@@ -156,7 +157,6 @@ function completeHandshakeAndWaitForAuth(channel, req, socket, head) {
     return;
   }
 
-  const crypto = require('crypto');
   const acceptKey = crypto
     .createHash('sha1')
     .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
@@ -252,7 +252,7 @@ function connectToGatewayFiltered(channel, clientSocket) {
       'Connection': 'Upgrade',
       'Upgrade': 'websocket',
       'Sec-WebSocket-Version': '13',
-      'Sec-WebSocket-Key': require('crypto').randomBytes(16).toString('base64'),
+      'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'),
       'Host': parsed.host
     };
 
@@ -264,7 +264,7 @@ function connectToGatewayFiltered(channel, clientSocket) {
       headers
     });
 
-    proxyReq.on('upgrade', (proxyRes, gatewaySocket, proxyHead) => {
+    proxyReq.on('upgrade', (_proxyRes, gatewaySocket, _proxyHead) => {
       // Pipe gateway messages to client (filtered)
       gatewaySocket.on('data', (data) => {
         const messages = parseWebSocketFrames(data);
@@ -294,7 +294,7 @@ function connectToGatewayFiltered(channel, clientSocket) {
 /**
  * Connect directly to gateway (when auth via header)
  */
-function connectToGateway(channel, socket, head) {
+function connectToGateway(channel, socket) {
   const parsed = new URL(channel.gateway_proxy_url);
   const isHttps = parsed.protocol === 'https:' || parsed.protocol === 'wss:';
   const transport = isHttps ? https : http;
@@ -303,7 +303,7 @@ function connectToGateway(channel, socket, head) {
     'Connection': 'Upgrade',
     'Upgrade': 'websocket',
     'Sec-WebSocket-Version': '13',
-    'Sec-WebSocket-Key': require('crypto').randomBytes(16).toString('base64'),
+    'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'),
     'Host': parsed.host
   };
 
@@ -315,7 +315,7 @@ function connectToGateway(channel, socket, head) {
     headers: forwardHeaders
   });
 
-  proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+  proxyReq.on('upgrade', (proxyRes, proxySocket, _proxyHead) => {
     // Send upgrade response to client
     let responseHead = 'HTTP/1.1 101 Switching Protocols\r\n';
     for (const [key, value] of Object.entries(proxyRes.headers)) {
@@ -327,9 +327,6 @@ function connectToGateway(channel, socket, head) {
     }
     responseHead += '\r\n';
     socket.write(responseHead);
-
-    if (proxyHead && proxyHead.length > 0) socket.write(proxyHead);
-    if (head && head.length > 0) proxySocket.write(head);
 
     // Filtered bidirectional pipe
     proxySocket.on('data', (data) => {
@@ -414,7 +411,7 @@ function parseWebSocketFrames(buffer) {
 
     if (buffer.length - offset < payloadLength) break;
 
-    let payload = buffer.slice(offset, offset + payloadLength);
+    const payload = buffer.slice(offset, offset + payloadLength);
     offset += payloadLength;
 
     if (masked && maskKey) {
@@ -458,4 +455,3 @@ function createWebSocketFrame(message) {
 }
 
 export default { setupChannelProxy };
-
