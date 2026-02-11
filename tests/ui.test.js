@@ -129,7 +129,27 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listAgentModels: jest.fn(() => []),
   setAgentLlmModel: jest.fn(),
   removeAgentLlmModel: jest.fn(),
-  listAllAgentLlmModels: jest.fn(() => [])
+  listAllAgentLlmModels: jest.fn(() => []),
+
+  // Webhook functions
+  listWebhookConfigs: jest.fn(() => []),
+  getWebhookConfig: jest.fn(),
+  getWebhookConfigBySource: jest.fn(),
+  createWebhookConfig: jest.fn(() => ({ id: 'test-webhook' })),
+  updateWebhookConfig: jest.fn(),
+  deleteWebhookConfig: jest.fn(),
+  logWebhookDelivery: jest.fn(),
+  listWebhookDeliveries: jest.fn(() => []),
+  getWebhookDelivery: jest.fn(),
+  clearWebhookDeliveries: jest.fn(),
+  isWebhookDeliveryDuplicate: jest.fn(() => false),
+  pruneWebhookDeliveries: jest.fn(() => 0),
+  getWebhookLogTTL: jest.fn(() => 30),
+  setWebhookLogTTL: jest.fn(),
+  getWebhookSecret: jest.fn(),
+  setWebhookSecret: jest.fn(),
+  deleteWebhookSecret: jest.fn(),
+  listWebhookSecrets: jest.fn(() => [])
 }));
 
 // Mock hsyncManager
