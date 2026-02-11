@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountsByService } from '../lib/db.js';
+import { listAccessibleServices } from '../services/serviceService.js';
 import SERVICE_REGISTRY, { SERVICE_CATEGORIES } from '../lib/serviceRegistry.js';
 
 const router = Router();
@@ -8,15 +9,30 @@ const router = Router();
 // See: https://docs.openclaw.ai/tools/skills
 router.get('/', (req, res) => {
   const baseUrl = req.query.base_url || process.env.BASE_URL || `http://localhost:${process.env.PORT || 3050}`;
-  const accountsByService = getAccountsByService();
+  const agentName = req.apiKeyInfo?.name;
 
   // Build flat list of configured service/account pairs
-  const configuredServices = [];
-  for (const [serviceKey, info] of Object.entries(SERVICE_REGISTRY)) {
-    const dbKey = info.dbKey || serviceKey;
-    const accounts = accountsByService[dbKey] || [];
-    for (const account of accounts) {
-      configuredServices.push({ service: serviceKey, account_name: account, info });
+  // If authenticated agent, filter to only their accessible services
+  let configuredServices = [];
+
+  if (agentName) {
+    // Agent-scoped: only include services the agent has access to
+    const accessibleServices = listAccessibleServices(agentName);
+    for (const svc of accessibleServices) {
+      const info = SERVICE_REGISTRY[svc.service];
+      if (info) {
+        configuredServices.push({ service: svc.service, account_name: svc.account_name, info });
+      }
+    }
+  } else {
+    // No agent context (admin/unauthenticated): show all configured services
+    const accountsByService = getAccountsByService();
+    for (const [serviceKey, info] of Object.entries(SERVICE_REGISTRY)) {
+      const dbKey = info.dbKey || serviceKey;
+      const accounts = accountsByService[dbKey] || [];
+      for (const account of accounts) {
+        configuredServices.push({ service: serviceKey, account_name: account, info });
+      }
     }
   }
 
