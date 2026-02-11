@@ -286,6 +286,10 @@ function renderQueuePage(entries, filter, counts = {}) {
         ${warningsSection}
         ${notificationSection}
         ${actions}
+
+        <div class="queue-entry-footer">
+          <span class="entry-id">ID: ${entry.id}</span>
+        </div>
       </div>
     `;
   };
@@ -339,6 +343,8 @@ function renderQueuePage(entries, filter, counts = {}) {
     .warning-header strong { color: #fbbf24; }
     .warning-time { color: #6b7280; font-size: 12px; margin-left: auto; }
     .warning-message { color: #e5e7eb; font-size: 14px; line-height: 1.5; }
+    .queue-entry-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: right; }
+    .entry-id { color: #6b7280; font-size: 11px; font-family: monospace; }
   </style>
 <body>
   ${navHeader()}
