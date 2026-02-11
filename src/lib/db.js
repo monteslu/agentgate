@@ -478,6 +478,16 @@ try {
           name: 'raw_results column',
           check: () => !tableInfo.some(col => col.name === 'raw_results'),
           run: () => db.exec('ALTER TABLE api_keys ADD COLUMN raw_results INTEGER DEFAULT 0;')
+        },
+        {
+          name: 'channel columns',
+          check: () => !tableInfo.some(col => col.name === 'channel_enabled'),
+          run: () => db.exec(`
+            ALTER TABLE api_keys ADD COLUMN channel_enabled INTEGER DEFAULT 0;
+            ALTER TABLE api_keys ADD COLUMN channel_id TEXT;
+            ALTER TABLE api_keys ADD COLUMN channel_key_hash TEXT;
+            ALTER TABLE api_keys ADD COLUMN channel_last_connected TEXT;
+          `)
         }
       ];
 
@@ -652,6 +662,50 @@ export function disableGatewayProxy(id) {
     'UPDATE api_keys SET gateway_proxy_enabled = 0 WHERE id = ?'
   ).run(id);
 }
+
+// ============================================
+// Channel WebSocket Proxy (filtered gateway access)
+// ============================================
+
+export function getChannel(channelId) {
+  return db.prepare(
+    'SELECT id, name, channel_enabled, channel_id, channel_key_hash, gateway_proxy_url FROM api_keys WHERE channel_id = ?'
+  ).get(channelId);
+}
+
+export function getChannelByAgentId(agentId) {
+  return db.prepare(
+    'SELECT id, name, channel_enabled, channel_id, channel_key_hash, gateway_proxy_url FROM api_keys WHERE id = ?'
+  ).get(agentId);
+}
+
+export async function updateChannel(id, enabled, channelKey) {
+  const channelId = enabled ? nanoid(32) : null;
+  const keyHash = channelKey ? await bcrypt.hash(channelKey, 10) : null;
+  db.prepare(
+    'UPDATE api_keys SET channel_enabled = ?, channel_id = ?, channel_key_hash = ? WHERE id = ?'
+  ).run(enabled ? 1 : 0, channelId, keyHash, id);
+  return { channelId, keyHash };
+}
+
+export function disableChannel(id) {
+  db.prepare(
+    'UPDATE api_keys SET channel_enabled = 0 WHERE id = ?'
+  ).run(id);
+}
+
+export function markChannelConnected(id) {
+  db.prepare(
+    'UPDATE api_keys SET channel_last_connected = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(id);
+}
+
+export function listChannels() {
+  return db.prepare(
+    'SELECT id, name, channel_enabled, channel_id, channel_last_connected FROM api_keys WHERE channel_id IS NOT NULL'
+  ).all();
+}
+
 
 export function listGatewayProxies() {
   return db.prepare(
@@ -1918,3 +1972,4 @@ export function listAllAgentLlmModels() {
     ORDER BY lam.agent_name, lam.model_id
   `).all();
 }
+
