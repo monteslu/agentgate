@@ -6,6 +6,11 @@
  * 
  * Endpoint: WS /channel/<channel-id>
  * Auth: bcrypt key in first message or x-channel-key header
+ * 
+ * Security model: STRICT WHITELIST ONLY
+ * - Only explicitly allowed message types pass through
+ * - Non-JSON messages are blocked
+ * - No fallback heuristics for unknown message types
  */
 
 import bcrypt from 'bcrypt';
@@ -13,6 +18,10 @@ import crypto from 'crypto';
 import http from 'http';
 import https from 'https';
 import { getChannel, markChannelConnected } from '../lib/db.js';
+
+// Configuration
+const AUTH_TIMEOUT_MS = 30000;  // 30 seconds to authenticate
+const MAX_AUTH_ATTEMPTS = 3;    // Max failed auth attempts before disconnect
 
 // Whitelist of allowed message types from client → gateway
 const ALLOWED_CLIENT_MESSAGES = new Set([
@@ -34,6 +43,14 @@ const ALLOWED_GATEWAY_MESSAGES = new Set([
 ]);
 
 /**
+ * Log channel events with timestamp for audit trail
+ */
+function channelLog(channelId, event, details = '') {
+  const ts = new Date().toISOString();
+  console.log(`[channel][${ts}] ${channelId}: ${event}${details ? ' - ' + details : ''}`);
+}
+
+/**
  * Verify channel key against stored bcrypt hash
  */
 async function verifyChannelKey(channel, providedKey) {
@@ -47,57 +64,46 @@ async function verifyChannelKey(channel, providedKey) {
 
 /**
  * Filter a message from client before forwarding to gateway.
- * Returns the message if allowed, null if blocked.
+ * STRICT WHITELIST: Returns the message if type is explicitly allowed, null otherwise.
  */
-function filterClientMessage(message) {
+function filterClientMessage(message, channelId) {
   try {
     const parsed = JSON.parse(message);
     const type = parsed.type || parsed.action || parsed.method;
     
     if (!type || !ALLOWED_CLIENT_MESSAGES.has(type)) {
-      console.log(`[channel] Blocked client message type: ${type}`);
+      channelLog(channelId, 'blocked_client_msg', `type=${type}`);
       return null;
     }
     
-    return message; // Pass through as-is
+    return message;
   } catch {
-    // Non-JSON messages are blocked
-    console.log('[channel] Blocked non-JSON client message');
+    channelLog(channelId, 'blocked_client_msg', 'non-JSON');
     return null;
   }
 }
 
 /**
  * Filter a message from gateway before forwarding to client.
- * Returns the message if allowed, null if blocked.
+ * STRICT WHITELIST: Only explicitly allowed types pass through.
+ * Non-JSON and unknown types are BLOCKED (not forwarded).
  */
-function filterGatewayMessage(message) {
+function filterGatewayMessage(message, channelId) {
   try {
     const parsed = JSON.parse(message);
     const type = parsed.type || parsed.action || parsed.method;
     
-    // Allow all response types that aren't admin/config related
+    // STRICT: Only allow explicitly whitelisted types
     if (type && ALLOWED_GATEWAY_MESSAGES.has(type)) {
       return message;
     }
     
-    // Block anything with sensitive data patterns
-    const str = message.toLowerCase();
-    if (str.includes('config') || str.includes('admin') || str.includes('token')) {
-      console.log('[channel] Blocked gateway message with sensitive content');
-      return null;
-    }
-    
-    // Default: forward if it looks like a regular response
-    if (parsed.content || parsed.text || parsed.message) {
-      return message;
-    }
-    
-    console.log(`[channel] Blocked unknown gateway message type: ${type}`);
+    channelLog(channelId, 'blocked_gateway_msg', `type=${type}`);
     return null;
   } catch {
-    // Non-JSON from gateway is unusual but forward it
-    return message;
+    // Non-JSON from gateway is blocked (security: could leak binary/raw data)
+    channelLog(channelId, 'blocked_gateway_msg', 'non-JSON');
+    return null;
   }
 }
 
@@ -113,13 +119,17 @@ export function setupChannelProxy(server) {
     const channelId = match[1];
     const channel = getChannel(channelId);
 
+    channelLog(channelId, 'connection_attempt', `from=${req.socket.remoteAddress}`);
+
     if (!channel || !channel.channel_enabled) {
+      channelLog(channelId, 'rejected', 'channel not found or disabled');
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
     }
 
     if (!channel.gateway_proxy_url) {
+      channelLog(channelId, 'rejected', 'gateway not configured');
       socket.write('HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\nGateway not configured');
       socket.destroy();
       return;
@@ -130,17 +140,17 @@ export function setupChannelProxy(server) {
     if (headerKey) {
       const valid = await verifyChannelKey(channel, headerKey);
       if (!valid) {
+        channelLog(channelId, 'auth_failed', 'invalid header key');
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
         return;
       }
-      // Auth passed, proceed to connect
-      connectToGateway(channel, socket);
+      channelLog(channelId, 'auth_success', 'via header');
+      connectToGatewayFiltered(channel, req, socket);
       return;
     }
 
     // No header key — expect auth in first WebSocket message
-    // Complete the WebSocket handshake first, then wait for auth
     completeHandshakeAndWaitForAuth(channel, req, socket);
   });
 }
@@ -149,6 +159,8 @@ export function setupChannelProxy(server) {
  * Complete WebSocket handshake and wait for auth message
  */
 function completeHandshakeAndWaitForAuth(channel, req, socket) {
+  const channelId = channel.channel_id;
+  
   // Simple WebSocket handshake
   const key = req.headers['sec-websocket-key'];
   if (!key) {
@@ -173,25 +185,40 @@ function completeHandshakeAndWaitForAuth(channel, req, socket) {
   let authenticated = false;
   let gatewaySocket = null;
   let buffer = Buffer.alloc(0);
+  let authAttempts = 0;
 
-  // Simple WebSocket frame parser for auth
+  // Auth timeout - disconnect if no auth within timeout period
+  const authTimeout = setTimeout(() => {
+    if (!authenticated) {
+      channelLog(channelId, 'auth_timeout', `after ${AUTH_TIMEOUT_MS}ms`);
+      socket.write(createWebSocketFrame(JSON.stringify({ 
+        type: 'error', 
+        error: 'Authentication timeout' 
+      })));
+      socket.end();
+    }
+  }, AUTH_TIMEOUT_MS);
+
+  // Cleanup function
+  const cleanup = () => {
+    clearTimeout(authTimeout);
+    if (gatewaySocket) gatewaySocket.destroy();
+  };
+
   socket.on('data', async (data) => {
     if (authenticated) {
-      // Already authed, forward to gateway
+      // Already authed, forward to gateway (filtered)
       if (gatewaySocket && gatewaySocket.writable) {
-        // Parse, filter, then forward
         const messages = parseWebSocketFrames(data);
         for (const msg of messages) {
-          const filtered = filterClientMessage(msg);
+          const filtered = filterClientMessage(msg, channelId);
           if (filtered) {
             gatewaySocket.write(createWebSocketFrame(filtered));
           } else {
-            // Send error back to client
-            const errorFrame = createWebSocketFrame(JSON.stringify({
+            socket.write(createWebSocketFrame(JSON.stringify({
               type: 'error',
               error: 'Message type not allowed on channel endpoint'
-            }));
-            socket.write(errorFrame);
+            })));
           }
         }
       }
@@ -209,39 +236,128 @@ function completeHandshakeAndWaitForAuth(channel, req, socket) {
         if (parsed.type === 'auth' && parsed.key) {
           const valid = await verifyChannelKey(channel, parsed.key);
           if (valid) {
+            clearTimeout(authTimeout);
             authenticated = true;
-            // Send auth success
+            channelLog(channelId, 'auth_success', 'via message');
             socket.write(createWebSocketFrame(JSON.stringify({ type: 'auth', success: true })));
-            // Now connect to gateway
-            gatewaySocket = await connectToGatewayFiltered(channel, socket);
+            gatewaySocket = await connectToGatewayFilteredInternal(channel, socket);
             markChannelConnected(channel.id);
           } else {
-            socket.write(createWebSocketFrame(JSON.stringify({ type: 'auth', success: false, error: 'Invalid key' })));
-            socket.end();
+            authAttempts++;
+            channelLog(channelId, 'auth_failed', `attempt ${authAttempts}/${MAX_AUTH_ATTEMPTS}`);
+            
+            if (authAttempts >= MAX_AUTH_ATTEMPTS) {
+              socket.write(createWebSocketFrame(JSON.stringify({ 
+                type: 'auth', 
+                success: false, 
+                error: 'Max auth attempts exceeded' 
+              })));
+              cleanup();
+              socket.end();
+            } else {
+              socket.write(createWebSocketFrame(JSON.stringify({ 
+                type: 'auth', 
+                success: false, 
+                error: 'Invalid key',
+                attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts
+              })));
+              // Clear buffer to allow retry
+              buffer = Buffer.alloc(0);
+            }
           }
         } else {
-          socket.write(createWebSocketFrame(JSON.stringify({ type: 'error', error: 'First message must be auth' })));
+          socket.write(createWebSocketFrame(JSON.stringify({ 
+            type: 'error', 
+            error: 'First message must be auth' 
+          })));
+          cleanup();
           socket.end();
         }
       } catch {
-        socket.write(createWebSocketFrame(JSON.stringify({ type: 'error', error: 'Invalid auth message' })));
+        socket.write(createWebSocketFrame(JSON.stringify({ 
+          type: 'error', 
+          error: 'Invalid auth message' 
+        })));
+        cleanup();
         socket.end();
       }
     }
   });
 
-  socket.on('error', () => {
-    if (gatewaySocket) gatewaySocket.destroy();
-  });
-  socket.on('close', () => {
-    if (gatewaySocket) gatewaySocket.destroy();
+  socket.on('error', cleanup);
+  socket.on('close', cleanup);
+}
+
+/**
+ * Connect to gateway with full message filtering (for header auth path)
+ * Completes WS handshake to client, then connects to gateway with filtering
+ */
+function connectToGatewayFiltered(channel, req, socket) {
+  const channelId = channel.channel_id;
+  
+  // Complete WS handshake with client first
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+
+  const acceptKey = crypto
+    .createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+    .digest('base64');
+
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
+    '\r\n'
+  );
+
+  // Now connect to gateway with filtering
+  connectToGatewayFilteredInternal(channel, socket).then(gatewaySocket => {
+    channelLog(channelId, 'connected', 'gateway proxy established');
+    markChannelConnected(channel.id);
+    
+    // Set up client→gateway filtering
+    socket.on('data', (data) => {
+      if (gatewaySocket && gatewaySocket.writable) {
+        const messages = parseWebSocketFrames(data);
+        for (const msg of messages) {
+          const filtered = filterClientMessage(msg, channelId);
+          if (filtered) {
+            gatewaySocket.write(createWebSocketFrame(filtered));
+          } else {
+            socket.write(createWebSocketFrame(JSON.stringify({
+              type: 'error',
+              error: 'Message type not allowed on channel endpoint'
+            })));
+          }
+        }
+      }
+    });
+
+    socket.on('error', () => gatewaySocket.destroy());
+    socket.on('close', () => gatewaySocket.destroy());
+  }).catch(err => {
+    channelLog(channelId, 'gateway_error', err.message);
+    socket.write(createWebSocketFrame(JSON.stringify({
+      type: 'error',
+      error: 'Failed to connect to gateway'
+    })));
+    socket.end();
   });
 }
 
 /**
- * Connect to gateway with message filtering
+ * Internal: Connect to gateway and set up gateway→client filtering
+ * Returns the gateway socket for bidirectional communication
  */
-function connectToGatewayFiltered(channel, clientSocket) {
+function connectToGatewayFilteredInternal(channel, clientSocket) {
+  const channelId = channel.channel_id;
+  
   return new Promise((resolve, reject) => {
     const parsed = new URL(channel.gateway_proxy_url);
     const isHttps = parsed.protocol === 'https:' || parsed.protocol === 'wss:';
@@ -265,25 +381,35 @@ function connectToGatewayFiltered(channel, clientSocket) {
     });
 
     proxyReq.on('upgrade', (_proxyRes, gatewaySocket, _proxyHead) => {
-      // Pipe gateway messages to client (filtered)
+      // NOTE: We intentionally do NOT forward proxyHead to client
+      // as it could contain unfiltered data from the gateway handshake
+      
+      // Set up gateway→client filtering
       gatewaySocket.on('data', (data) => {
         const messages = parseWebSocketFrames(data);
         for (const msg of messages) {
-          const filtered = filterGatewayMessage(msg);
+          const filtered = filterGatewayMessage(msg, channelId);
           if (filtered) {
             clientSocket.write(createWebSocketFrame(filtered));
           }
+          // Blocked messages are silently dropped (logged in filterGatewayMessage)
         }
       });
 
-      gatewaySocket.on('error', () => clientSocket.destroy());
-      gatewaySocket.on('close', () => clientSocket.end());
+      gatewaySocket.on('error', () => {
+        channelLog(channelId, 'gateway_socket_error');
+        clientSocket.destroy();
+      });
+      gatewaySocket.on('close', () => {
+        channelLog(channelId, 'gateway_disconnected');
+        clientSocket.end();
+      });
 
       resolve(gatewaySocket);
     });
 
     proxyReq.on('error', (err) => {
-      console.error('[channel] Gateway connection error:', err.message);
+      channelLog(channelId, 'gateway_connection_error', err.message);
       reject(err);
     });
 
@@ -292,91 +418,12 @@ function connectToGatewayFiltered(channel, clientSocket) {
 }
 
 /**
- * Connect directly to gateway (when auth via header)
+ * Parse WebSocket frames from buffer.
+ * NOTE: This is a simplified parser that only handles complete, non-fragmented
+ * text frames (FIN=1, opcode=1). Fragmented messages (FIN=0 continuation frames)
+ * are not supported and will be dropped. For production use, consider using
+ * the 'ws' library which handles all frame types correctly.
  */
-function connectToGateway(channel, socket) {
-  const parsed = new URL(channel.gateway_proxy_url);
-  const isHttps = parsed.protocol === 'https:' || parsed.protocol === 'wss:';
-  const transport = isHttps ? https : http;
-
-  const forwardHeaders = {
-    'Connection': 'Upgrade',
-    'Upgrade': 'websocket',
-    'Sec-WebSocket-Version': '13',
-    'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'),
-    'Host': parsed.host
-  };
-
-  const proxyReq = transport.request({
-    hostname: parsed.hostname,
-    port: parsed.port || (isHttps ? 443 : 80),
-    path: parsed.pathname || '/',
-    method: 'GET',
-    headers: forwardHeaders
-  });
-
-  proxyReq.on('upgrade', (proxyRes, proxySocket, _proxyHead) => {
-    // Send upgrade response to client
-    let responseHead = 'HTTP/1.1 101 Switching Protocols\r\n';
-    for (const [key, value] of Object.entries(proxyRes.headers)) {
-      if (Array.isArray(value)) {
-        value.forEach(v => { responseHead += `${key}: ${v}\r\n`; });
-      } else {
-        responseHead += `${key}: ${value}\r\n`;
-      }
-    }
-    responseHead += '\r\n';
-    socket.write(responseHead);
-
-    // Filtered bidirectional pipe
-    proxySocket.on('data', (data) => {
-      const messages = parseWebSocketFrames(data);
-      for (const msg of messages) {
-        const filtered = filterGatewayMessage(msg);
-        if (filtered) {
-          socket.write(createWebSocketFrame(filtered));
-        }
-      }
-    });
-
-    socket.on('data', (data) => {
-      const messages = parseWebSocketFrames(data);
-      for (const msg of messages) {
-        const filtered = filterClientMessage(msg);
-        if (filtered) {
-          proxySocket.write(createWebSocketFrame(filtered));
-        }
-      }
-    });
-
-    socket.on('error', () => proxySocket.destroy());
-    proxySocket.on('error', () => socket.destroy());
-    socket.on('close', () => proxySocket.destroy());
-    proxySocket.on('close', () => socket.destroy());
-
-    markChannelConnected(channel.id);
-  });
-
-  proxyReq.on('response', (proxyRes) => {
-    let responseHead = `HTTP/1.1 ${proxyRes.statusCode} ${proxyRes.statusMessage}\r\n`;
-    for (const [key, value] of Object.entries(proxyRes.headers)) {
-      responseHead += `${key}: ${value}\r\n`;
-    }
-    responseHead += '\r\n';
-    socket.write(responseHead);
-    proxyRes.pipe(socket);
-  });
-
-  proxyReq.on('error', (err) => {
-    console.error('[channel] Gateway error:', err.message);
-    socket.write('HTTP/1.1 502 Bad Gateway\r\n\r\n');
-    socket.destroy();
-  });
-
-  proxyReq.end();
-}
-
-// Simple WebSocket frame parsing (text frames only for filtering)
 function parseWebSocketFrames(buffer) {
   const messages = [];
   let offset = 0;
@@ -386,6 +433,7 @@ function parseWebSocketFrames(buffer) {
 
     const firstByte = buffer[offset];
     const secondByte = buffer[offset + 1];
+    const fin = (firstByte & 0x80) !== 0;
     const opcode = firstByte & 0x0f;
     const masked = (secondByte & 0x80) !== 0;
     let payloadLength = secondByte & 0x7f;
@@ -420,16 +468,20 @@ function parseWebSocketFrames(buffer) {
       }
     }
 
-    // Only handle text frames (opcode 1)
-    if (opcode === 1) {
+    // Only handle complete text frames (FIN=1, opcode=1)
+    // Fragmented frames (FIN=0) and continuation frames (opcode=0) are dropped
+    if (fin && opcode === 1) {
       messages.push(payload.toString('utf8'));
     }
+    // Close frames (opcode=8) could be handled here for graceful shutdown
   }
 
   return messages;
 }
 
-// Create a WebSocket text frame
+/**
+ * Create a WebSocket text frame
+ */
 function createWebSocketFrame(message) {
   const payload = Buffer.from(message, 'utf8');
   const length = payload.length;
