@@ -168,12 +168,13 @@ function isEventEnabled(config, eventType) {
 
 /**
  * Filter agents by assignment list
- * If assignedAgents is null/empty, returns all agents with webhook_url
+ * SECURITY: Default is NO agents receive webhooks - must be explicitly assigned
+ * If assignedAgents is null/empty, returns empty array (no one gets messages)
  * Otherwise, returns only agents in the assignment list
  */
 function filterAgentsByAssignment(agents, assignedAgents) {
   if (!assignedAgents || assignedAgents.length === 0) {
-    return agents; // No filter = all agents
+    return []; // SECURITY: No assignment = no agents receive (explicit opt-in required)
   }
   const assignedSet = new Set(assignedAgents.map(a => a.toLowerCase()));
   return agents.filter(a => assignedSet.has(a.name.toLowerCase()) || assignedSet.has(String(a.id)));
