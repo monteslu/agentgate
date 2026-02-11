@@ -84,6 +84,36 @@
        y2="58.86664"
        gradientTransform="scale(1.0606602,0.94280904)"
        gradientUnits="userSpaceOnUse" />
+    <linearGradient
+       id="wood"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         style="stop-color:#8B5E3C" />
+      <stop
+         offset="30%"
+         style="stop-color:#A0714F" />
+      <stop
+         offset="50%"
+         style="stop-color:#6D4829" />
+      <stop
+         offset="70%"
+         style="stop-color:#A0714F" />
+      <stop
+         offset="100%"
+         style="stop-color:#7A5234" />
+    </linearGradient>
+    <linearGradient
+       id="woodHandle"
+       xlink:href="#wood"
+       x1="22.22"
+       y1="52.27"
+       x2="30.43"
+       y2="58.95"
+       gradientUnits="userSpaceOnUse" />
   </defs>
   <!-- Background -->
   <rect
@@ -175,6 +205,16 @@
      fill="url(#metal)"
      id="rect12" />
   <!-- Incoming robot arm from bottom left -->
+  <!-- Magnifying glass handle (behind glass, above background) -->
+  <line
+     x1="22.221638"
+     y1="52.272541"
+     x2="30.425323"
+     y2="58.950775"
+     stroke="url(#woodHandle)"
+     stroke-width="4.05411"
+     stroke-linecap="round"
+     id="line14" />
   <!-- Magnifying glass being blocked -->
   <circle
      cx="15.064039"
@@ -191,14 +231,4 @@
      r="5"
      fill="rgba(255,255,255,0.3)"
      id="circle14" />
-  <line
-     x1="22.221638"
-     y1="52.272541"
-     x2="30.425323"
-     y2="58.950775"
-     stroke="url(#metal)"
-     stroke-width="4.05411"
-     stroke-linecap="round"
-     id="line14"
-     style="stroke:url(#linearGradient15)" />
 </svg>
