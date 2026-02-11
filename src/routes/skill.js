@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 
   // Build flat list of configured service/account pairs
   // If authenticated agent, filter to only their accessible services
-  let configuredServices = [];
+  const configuredServices = [];
 
   if (agentName) {
     // Agent-scoped: only include services the agent has access to
