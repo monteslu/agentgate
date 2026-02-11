@@ -390,9 +390,24 @@ Returns: \`{ mementos: [{ id, content, keywords, created_at, ... }, ...] }\`
 }
 
 // Serve a self-contained setup script that writes skills to ~/.openclaw/skills/
-// Usage: curl -s $AGENT_GATE_URL/api/skill/setup | node
+// Recommended usage (two-step for safety-cautious models):
+//   curl -s $AGENT_GATE_URL/api/skill/setup -o /tmp/agentgate-setup.js
+//   node /tmp/agentgate-setup.js
+// Or one-liner: curl -s $AGENT_GATE_URL/api/skill/setup | node
 router.get('/setup', (_req, res) => {
-  res.type('text/javascript').send(`#!/usr/bin/env node
+  res.type('text/javascript').send(`/**
+ * agentgate skill installer
+ *
+ * This script:
+ * 1. Fetches skill definitions from your agentgate server
+ * 2. Writes them to ~/.openclaw/skills/<skill-name>/SKILL.md
+ *
+ * Requirements: AGENT_GATE_URL and AGENT_GATE_TOKEN environment variables
+ *
+ * Recommended usage:
+ *   curl -s $AGENT_GATE_URL/api/skill/setup -o /tmp/agentgate-setup.js
+ *   node /tmp/agentgate-setup.js
+ */
 const { mkdirSync, writeFileSync } = require('fs');
 const { join } = require('path');
 const { homedir } = require('os');
@@ -440,6 +455,37 @@ async function main() {
 }
 
 main().catch(err => { console.error('Fatal: ' + err.message); process.exit(1); });
+`);
+});
+
+// Alternative setup guide for agents that prefer not to pipe to node
+// Returns a text guide instead of executable code
+router.get('/setup-guide', (_req, res) => {
+  const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3050}`;
+  res.type('text/plain').send(`agentgate Skill Setup Guide
+=============================
+
+Option 1: Two-step download and run (recommended)
+--------------------------------------------------
+Step 1: Download the setup script
+  curl -s ${baseUrl}/api/skill/setup -o /tmp/agentgate-setup.js
+
+Step 2: Review it (optional, for peace of mind)
+  cat /tmp/agentgate-setup.js
+
+Step 3: Run it
+  node /tmp/agentgate-setup.js
+
+Option 2: Manual TOOLS.md update
+--------------------------------
+Instead of running a script, you can manually update your TOOLS.md:
+
+1. Fetch the service list:
+   curl -s ${baseUrl}/api/agent_start_here -H "Authorization: Bearer \$AGENT_GATE_TOKEN"
+
+2. Add the agentgate section to your TOOLS.md with the services listed.
+
+This avoids exec entirely but requires manual maintenance.
 `);
 });
 
