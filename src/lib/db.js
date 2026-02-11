@@ -218,6 +218,48 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_llm_agent_default
   ON llm_agent_models(agent_name, is_default);
+
+  -- Webhook configuration table (for managing inbound webhooks)
+  CREATE TABLE IF NOT EXISTS webhook_configs (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    name TEXT NOT NULL,
+    secret TEXT,
+    events TEXT,
+    enabled INTEGER DEFAULT 1,
+    -- Security: Agent assignment (JSON array of agent IDs, null = all agents)
+    assigned_agents TEXT,
+    -- Security: IP allowlist for generic webhooks (JSON array of CIDRs)
+    ip_allowlist TEXT,
+    -- Security: Max payload size in bytes (default 1MB)
+    max_payload_size INTEGER DEFAULT 1048576,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Webhook delivery history (audit log)
+  CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id TEXT PRIMARY KEY,
+    config_id TEXT REFERENCES webhook_configs(id) ON DELETE SET NULL,
+    source TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    delivery_id TEXT,
+    repo TEXT,
+    payload TEXT,
+    success INTEGER DEFAULT 1,
+    broadcast_result TEXT,
+    received_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_config
+  ON webhook_deliveries(config_id, received_at DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_time
+  ON webhook_deliveries(received_at DESC);
+
+  -- Replay protection: unique delivery IDs per source
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_delivery_dedup
+  ON webhook_deliveries(source, delivery_id) WHERE delivery_id IS NOT NULL;
 `);
 
 // ============================================
@@ -1238,6 +1280,186 @@ export function listWebhookSecrets() {
     service: row.key.replace('webhook_secret_', ''),
     updated_at: row.updated_at
   }));
+}
+
+// Webhook Configuration Management
+// =================================
+
+function parseWebhookConfig(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    events: row.events ? JSON.parse(row.events) : [],
+    enabled: row.enabled === 1,
+    assignedAgents: row.assigned_agents ? JSON.parse(row.assigned_agents) : null,
+    ipAllowlist: row.ip_allowlist ? JSON.parse(row.ip_allowlist) : null,
+    maxPayloadSize: row.max_payload_size || 1048576
+  };
+}
+
+export function listWebhookConfigs() {
+  const rows = db.prepare('SELECT * FROM webhook_configs ORDER BY created_at DESC').all();
+  return rows.map(parseWebhookConfig);
+}
+
+export function getWebhookConfig(id) {
+  const row = db.prepare('SELECT * FROM webhook_configs WHERE id = ?').get(id);
+  return parseWebhookConfig(row);
+}
+
+export function getWebhookConfigBySource(source) {
+  const row = db.prepare('SELECT * FROM webhook_configs WHERE source = ? AND enabled = 1').get(source);
+  return parseWebhookConfig(row);
+}
+
+export function createWebhookConfig({ source, name, secret, events, enabled, assignedAgents, ipAllowlist, maxPayloadSize }) {
+  const id = nanoid();
+  const eventsJson = JSON.stringify(events || []);
+  const agentsJson = assignedAgents ? JSON.stringify(assignedAgents) : null;
+  const ipJson = ipAllowlist ? JSON.stringify(ipAllowlist) : null;
+  db.prepare(`
+    INSERT INTO webhook_configs (id, source, name, secret, events, enabled, assigned_agents, ip_allowlist, max_payload_size)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, source, name, secret || null, eventsJson, enabled ? 1 : 0, agentsJson, ipJson, maxPayloadSize || 1048576);
+  return { id, source, name, secret, events: events || [], enabled: !!enabled, assignedAgents: assignedAgents || null, ipAllowlist: ipAllowlist || null, maxPayloadSize: maxPayloadSize || 1048576 };
+}
+
+export function updateWebhookConfig(id, updates) {
+  const fields = [];
+  const values = [];
+  
+  if (updates.name !== undefined) {
+    fields.push('name = ?');
+    values.push(updates.name);
+  }
+  if (updates.secret !== undefined) {
+    fields.push('secret = ?');
+    values.push(updates.secret);
+  }
+  if (updates.events !== undefined) {
+    fields.push('events = ?');
+    values.push(JSON.stringify(updates.events));
+  }
+  if (updates.enabled !== undefined) {
+    fields.push('enabled = ?');
+    values.push(updates.enabled ? 1 : 0);
+  }
+  if (updates.assignedAgents !== undefined) {
+    fields.push('assigned_agents = ?');
+    values.push(updates.assignedAgents ? JSON.stringify(updates.assignedAgents) : null);
+  }
+  if (updates.ipAllowlist !== undefined) {
+    fields.push('ip_allowlist = ?');
+    values.push(updates.ipAllowlist ? JSON.stringify(updates.ipAllowlist) : null);
+  }
+  if (updates.maxPayloadSize !== undefined) {
+    fields.push('max_payload_size = ?');
+    values.push(updates.maxPayloadSize);
+  }
+  
+  if (fields.length === 0) return;
+  
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(id);
+  
+  db.prepare(`UPDATE webhook_configs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function deleteWebhookConfig(id) {
+  db.prepare('DELETE FROM webhook_configs WHERE id = ?').run(id);
+}
+
+// Webhook Delivery Logging
+// ========================
+
+export function logWebhookDelivery({ configId, source, eventType, deliveryId, repo, payload, success, broadcastResult }) {
+  const id = nanoid();
+  db.prepare(`
+    INSERT INTO webhook_deliveries (id, config_id, source, event_type, delivery_id, repo, payload, success, broadcast_result)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    configId || null,
+    source,
+    eventType,
+    deliveryId || null,
+    repo || null,
+    typeof payload === 'string' ? payload : JSON.stringify(payload),
+    success ? 1 : 0,
+    typeof broadcastResult === 'string' ? broadcastResult : JSON.stringify(broadcastResult)
+  );
+  return id;
+}
+
+export function listWebhookDeliveries(limit = 50, configId = null) {
+  let query = 'SELECT * FROM webhook_deliveries';
+  const params = [];
+  
+  if (configId) {
+    query += ' WHERE config_id = ?';
+    params.push(configId);
+  }
+  
+  query += ' ORDER BY received_at DESC LIMIT ?';
+  params.push(limit);
+  
+  return db.prepare(query).all(...params).map(row => ({
+    ...row,
+    success: row.success === 1
+  }));
+}
+
+export function getWebhookDelivery(id) {
+  const row = db.prepare('SELECT * FROM webhook_deliveries WHERE id = ?').get(id);
+  if (!row) return null;
+  return {
+    ...row,
+    success: row.success === 1
+  };
+}
+
+export function clearWebhookDeliveries(configId = null) {
+  if (configId) {
+    db.prepare('DELETE FROM webhook_deliveries WHERE config_id = ?').run(configId);
+  } else {
+    db.prepare('DELETE FROM webhook_deliveries').run();
+  }
+}
+
+/**
+ * Check if a delivery ID has already been processed (replay protection)
+ * Returns true if this is a duplicate delivery
+ */
+export function isWebhookDeliveryDuplicate(source, deliveryId) {
+  if (!deliveryId) return false;
+  const existing = db.prepare('SELECT id FROM webhook_deliveries WHERE source = ? AND delivery_id = ?').get(source, deliveryId);
+  return !!existing;
+}
+
+/**
+ * Prune old webhook deliveries (log TTL)
+ * @param {number} maxAgeDays - Delete deliveries older than this many days (default 30)
+ * @returns {number} Number of deleted records
+ */
+export function pruneWebhookDeliveries(maxAgeDays = 30) {
+  const cutoff = new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000).toISOString();
+  const result = db.prepare('DELETE FROM webhook_deliveries WHERE received_at < ?').run(cutoff);
+  return result.changes;
+}
+
+/**
+ * Get webhook delivery log TTL setting (in days)
+ */
+export function getWebhookLogTTL() {
+  const setting = getSetting('webhook_log_ttl_days');
+  return setting ? parseInt(setting, 10) : 30; // Default 30 days
+}
+
+/**
+ * Set webhook delivery log TTL (in days)
+ */
+export function setWebhookLogTTL(days) {
+  setSetting('webhook_log_ttl_days', String(days));
 }
 
 // Memento helpers
