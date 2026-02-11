@@ -10,7 +10,8 @@ import crypto from 'crypto';
 import {
   listWebhookConfigs, getWebhookConfig, createWebhookConfig, updateWebhookConfig, deleteWebhookConfig,
   listWebhookDeliveries, getWebhookDelivery, clearWebhookDeliveries,
-  getWebhookSecret, setWebhookSecret, deleteWebhookSecret
+  getWebhookSecret, setWebhookSecret, deleteWebhookSecret,
+  listApiKeys
 } from '../../lib/db.js';
 import { htmlHead, navHeader, menuScript, localizeScript } from './shared.js';
 
@@ -47,12 +48,13 @@ router.get('/webhooks', (req, res) => {
 
 // Add new webhook config form
 router.get('/webhooks/add', (req, res) => {
-  res.send(renderAddWebhookPage());
+  const agents = listApiKeys().filter(k => k.enabled);
+  res.send(renderAddWebhookPage(agents));
 });
 
 // Create new webhook config
 router.post('/webhooks/add', (req, res) => {
-  const { source, name, events } = req.body;
+  const { source, name, events, assigned_agents } = req.body;
   
   if (!source || !WEBHOOK_SOURCES[source]) {
     return res.status(400).send('Invalid webhook source');
@@ -64,13 +66,17 @@ router.post('/webhooks/add', (req, res) => {
   // Parse events (comes as array or single value)
   const eventList = Array.isArray(events) ? events : (events ? [events] : []);
   
+  // Parse assigned agents (default to empty = no agents receive)
+  const agentList = Array.isArray(assigned_agents) ? assigned_agents : (assigned_agents ? [assigned_agents] : []);
+  
   try {
     const config = createWebhookConfig({
       source,
       name: name || `${WEBHOOK_SOURCES[source].name} Webhook`,
       secret,
       events: eventList,
-      enabled: true
+      enabled: true,
+      assignedAgents: agentList.length > 0 ? agentList : null
     });
     
     // Also set the webhook secret in settings for verification
@@ -90,18 +96,19 @@ router.get('/webhooks/:id', (req, res) => {
   }
   
   const deliveries = listWebhookDeliveries(20, config.id);
+  const agents = listApiKeys().filter(k => k.enabled);
   const alerts = {
     created: req.query.created === '1',
     updated: req.query.updated === '1',
     secretRegenerated: req.query.secret_regenerated === '1',
     cleared: req.query.cleared === '1'
   };
-  res.send(renderWebhookDetailPage(config, deliveries, alerts));
+  res.send(renderWebhookDetailPage(config, deliveries, agents, alerts));
 });
 
 // Update webhook config
 router.post('/webhooks/:id', (req, res) => {
-  const { name, events, enabled } = req.body;
+  const { name, events, enabled, assigned_agents } = req.body;
   const config = getWebhookConfig(req.params.id);
   
   if (!config) {
@@ -110,11 +117,15 @@ router.post('/webhooks/:id', (req, res) => {
   
   const eventList = Array.isArray(events) ? events : (events ? [events] : []);
   
+  // Parse assigned agents (empty = no agents receive)
+  const agentList = Array.isArray(assigned_agents) ? assigned_agents : (assigned_agents ? [assigned_agents] : []);
+  
   try {
     updateWebhookConfig(req.params.id, {
       name,
       events: eventList,
-      enabled: enabled === 'on' || enabled === '1'
+      enabled: enabled === 'on' || enabled === '1',
+      assignedAgents: agentList.length > 0 ? agentList : null
     });
     res.redirect(`/ui/webhooks/${req.params.id}?updated=1`);
   } catch (err) {
@@ -336,6 +347,41 @@ function renderStyles() {
     }
     .detail-grid dt { color: #9ca3af; }
     .detail-grid dd { color: #e5e7eb; margin: 0; }
+    
+    .agent-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 8px;
+      margin: 12px 0;
+    }
+    .agent-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .agent-checkbox:hover { background: rgba(255,255,255,0.05); }
+    .agent-checkbox.selected { 
+      background: rgba(99,102,241,0.15); 
+      border-color: rgba(99,102,241,0.4); 
+    }
+    .agent-checkbox input { margin: 0; }
+    .agent-checkbox .agent-name { font-weight: 500; color: #e5e7eb; }
+    
+    .no-agents-warning {
+      background: rgba(234,179,8,0.15);
+      border: 1px solid rgba(234,179,8,0.3);
+      color: #facc15;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 0.9em;
+      margin-top: 12px;
+    }
   </style>`;
 }
 
@@ -393,7 +439,7 @@ ${renderStyles()}
 </html>`;
 }
 
-function renderAddWebhookPage() {
+function renderAddWebhookPage(agents = []) {
   const sourceOptions = Object.entries(WEBHOOK_SOURCES).map(([key, src]) => `
     <div class="webhook-item" style="cursor: pointer;" onclick="selectSource('${key}')">
       <img src="${src.icon}" alt="${src.name}">
@@ -420,6 +466,15 @@ function renderAddWebhookPage() {
       </div>
     </div>`).join('');
 
+  // Agent selection (default: none selected = no agents receive)
+  const agentCheckboxes = agents.length === 0
+    ? '<p style="color: #9ca3af; font-style: italic;">No agents configured. Add agents in API Keys first.</p>'
+    : agents.map(a => `
+        <label class="agent-checkbox" onclick="updateAgentStyle(this)">
+          <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}">
+          <span class="agent-name">${escapeHtml(a.name)}</span>
+        </label>`).join('');
+
   return `${htmlHead('Add Webhook')}
 ${renderStyles()}
 <body>
@@ -443,6 +498,17 @@ ${renderStyles()}
       <div class="card">
         <h3>3. Events</h3>
         ${eventSections}
+      </div>
+      
+      <div class="card">
+        <h3>4. Assigned Agents</h3>
+        <p class="help">Select which agents will receive notifications for this webhook. If none selected, no agents will be notified.</p>
+        <div class="agent-grid">
+          ${agentCheckboxes}
+        </div>
+        <div class="no-agents-warning" id="no-agents-warning">
+          ⚠ No agents selected — webhook events will not be delivered to any agent.
+        </div>
       </div>
       
       <button type="submit" class="btn-primary">Create Webhook</button>
@@ -469,6 +535,22 @@ ${renderStyles()}
       event.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)';
       event.currentTarget.style.background = 'rgba(99,102,241,0.1)';
     }
+    
+    function updateAgentStyle(label) {
+      setTimeout(() => {
+        const cb = label.querySelector('input');
+        label.classList.toggle('selected', cb.checked);
+        updateAgentWarning();
+      }, 0);
+    }
+    
+    function updateAgentWarning() {
+      const anyChecked = document.querySelectorAll('input[name="assigned_agents"]:checked').length > 0;
+      document.getElementById('no-agents-warning').style.display = anyChecked ? 'none' : 'block';
+    }
+    
+    // Init warning state
+    updateAgentWarning();
   </script>
   
   ${menuScript()}
@@ -476,10 +558,11 @@ ${renderStyles()}
 </html>`;
 }
 
-function renderWebhookDetailPage(config, deliveries, alerts = {}) {
+function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
   const source = WEBHOOK_SOURCES[config.source] || { name: config.source, icon: '/public/favicon.svg', events: [] };
   const secret = getWebhookSecret(config.source) || config.secret || 'Not configured';
   const webhookPath = `/webhooks/${config.source}`;
+  const assignedAgents = config.assignedAgents || [];
   
   const eventCheckboxes = source.events.map(e => {
     const checked = (config.events || []).includes(e.id) ? 'checked' : '';
@@ -492,6 +575,19 @@ function renderWebhookDetailPage(config, deliveries, alerts = {}) {
         </div>
       </label>`;
   }).join('');
+  
+  // Agent selection for edit form
+  const agentCheckboxes = agents.length === 0
+    ? '<p style="color: #9ca3af; font-style: italic;">No agents configured. Add agents in API Keys first.</p>'
+    : agents.map(a => {
+      const checked = assignedAgents.includes(a.name) ? 'checked' : '';
+      const selectedClass = checked ? 'selected' : '';
+      return `
+          <label class="agent-checkbox ${selectedClass}" onclick="updateAgentStyle(this)">
+            <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}" ${checked}>
+            <span class="agent-name">${escapeHtml(a.name)}</span>
+          </label>`;
+    }).join('');
 
   const deliveryList = deliveries.length === 0
     ? '<div class="empty-state" style="padding: 20px;">No deliveries yet</div>'
@@ -562,6 +658,17 @@ ${renderStyles()}
       </div>
     </div>
     
+    <div class="card">
+      <h3>Assigned Agents</h3>
+      <p class="help">Select which agents will receive notifications for this webhook. If none selected, no agents will be notified.</p>
+      <div class="agent-grid">
+        ${agentCheckboxes}
+      </div>
+      <div class="no-agents-warning" id="no-agents-warning" style="${assignedAgents.length > 0 ? 'display:none;' : ''}">
+        ⚠ No agents selected — webhook events will not be delivered to any agent.
+      </div>
+    </div>
+    
     <div style="display: flex; gap: 12px; margin-bottom: 24px;">
       <button type="submit" class="btn-primary">Save Changes</button>
       <button type="button" class="btn-primary" onclick="testWebhook()">Test Connection</button>
@@ -598,6 +705,19 @@ ${renderStyles()}
       const res = await fetch('/ui/webhooks/${config.id}/test', { method: 'POST' });
       const data = await res.json();
       alert(data.success ? '✓ ' + data.message : '✗ ' + data.message);
+    }
+    
+    function updateAgentStyle(label) {
+      setTimeout(() => {
+        const cb = label.querySelector('input');
+        label.classList.toggle('selected', cb.checked);
+        updateAgentWarning();
+      }, 0);
+    }
+    
+    function updateAgentWarning() {
+      const anyChecked = document.querySelectorAll('input[name="assigned_agents"]:checked').length > 0;
+      document.getElementById('no-agents-warning').style.display = anyChecked ? 'none' : 'block';
     }
   </script>
   
