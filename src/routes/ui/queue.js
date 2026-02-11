@@ -377,6 +377,82 @@ function renderQueuePage(entries, filter, counts = {}) {
       return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
+    function updateEntryStatus(id, entry) {
+      const entryEl = document.getElementById('entry-' + id);
+      if (!entryEl) return;
+
+      // Update status badge
+      const statusBadgeEl = entryEl.querySelector('.status-badge .status');
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = entry.status;
+        statusBadgeEl.className = 'status ' + entry.status;
+      }
+      entryEl.dataset.status = entry.status;
+
+      // Remove action buttons
+      if (entry.status !== 'pending') {
+        const actionsEl = entryEl.querySelector('.queue-actions');
+        if (actionsEl) actionsEl.remove();
+      }
+
+      // Add results section if present
+      let insertTarget = entryEl.querySelector('.notification-status') || entryEl.querySelector('.queue-entry-footer');
+      if (entry.results && entry.results.length) {
+        const details = document.createElement('details');
+        details.style.marginTop = '12px';
+        details.innerHTML = '<summary>Results (' + entry.results.length + ')</summary>' +
+          '<pre style="margin-top: 8px; font-size: 12px;">' + escapeHtml(JSON.stringify(entry.results, null, 2)) + '</pre>';
+        if (insertTarget) insertTarget.parentNode.insertBefore(details, insertTarget);
+        else entryEl.appendChild(details);
+      }
+
+      // Add rejection reason if present
+      if (entry.rejection_reason) {
+        const div = document.createElement('div');
+        div.className = 'rejection-reason';
+        div.innerHTML = '<strong>Rejection reason:</strong> ' + escapeHtml(entry.rejection_reason);
+        if (insertTarget) insertTarget.parentNode.insertBefore(div, insertTarget);
+        else entryEl.appendChild(div);
+      }
+
+      // Add notification status section for terminal states
+      if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) {
+        let notifyEl = document.getElementById('notify-status-' + id);
+        if (!notifyEl) {
+          notifyEl = document.createElement('div');
+          notifyEl.className = 'notification-status';
+          notifyEl.id = 'notify-status-' + id;
+          const notifyStatus = entry.notified
+            ? '<span class="notify-status notify-sent">✓ Notified</span>'
+            : '<span class="notify-status notify-pending">— Not notified</span> <button type="button" class="btn-sm btn-link" onclick="retryNotify(' + "'" + id + "'" + ')" id="retry-' + id + '">Retry</button>';
+          notifyEl.innerHTML = notifyStatus;
+          const footer = entryEl.querySelector('.queue-entry-footer');
+          if (footer) footer.parentNode.insertBefore(notifyEl, footer);
+          else entryEl.appendChild(notifyEl);
+        }
+      }
+
+      // Flash effect for visual feedback
+      entryEl.style.transition = 'box-shadow 0.3s ease';
+      entryEl.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.6)';
+      setTimeout(() => { entryEl.style.boxShadow = ''; }, 1500);
+    }
+
+    function updateFilterCounts(counts) {
+      if (!counts) return;
+      const filterBar = document.getElementById('filter-bar');
+      if (!filterBar) return;
+      filterBar.querySelectorAll('.filter-link').forEach(a => {
+        const href = a.getAttribute('href') || '';
+        const match = href.match(/filter=([^&]*)/);
+        const f = match ? match[1] : 'pending';
+        if (counts[f] !== undefined) {
+          const text = f + (counts[f] > 0 ? ' (' + counts[f] + ')' : '');
+          a.textContent = text;
+        }
+      });
+    }
+
     async function approveEntry(id) {
       const btn = event.target;
       btn.disabled = true;
@@ -385,7 +461,8 @@ function renderQueuePage(entries, filter, counts = {}) {
         const res = await fetch('/ui/queue/' + id + '/approve', { method: 'POST', headers: { 'Accept': 'application/json' } });
         const data = await res.json();
         if (data.success) {
-          window.location.reload();
+          updateEntryStatus(id, data.entry);
+          updateFilterCounts(data.counts);
         } else {
           alert(data.error || 'Failed to approve');
           btn.disabled = false;
@@ -412,7 +489,8 @@ function renderQueuePage(entries, filter, counts = {}) {
         });
         const data = await res.json();
         if (data.success) {
-          window.location.reload();
+          updateEntryStatus(id, data.entry);
+          updateFilterCounts(data.counts);
         } else {
           alert(data.error || 'Failed to reject');
           btn.disabled = false;
@@ -437,7 +515,29 @@ function renderQueuePage(entries, filter, counts = {}) {
         });
         const data = await res.json();
         if (data.success) {
-          window.location.reload();
+          // Animate out cleared entries
+          const entries = document.querySelectorAll('.queue-entry');
+          const targetStatuses = status === 'all'
+            ? ['completed', 'failed', 'rejected', 'withdrawn']
+            : [status];
+          entries.forEach(el => {
+            if (targetStatuses.includes(el.dataset.status)) {
+              el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+              el.style.opacity = '0';
+              el.style.transform = 'translateX(20px)';
+              setTimeout(() => el.remove(), 300);
+            }
+          });
+          // Check if container is empty after animation
+          setTimeout(() => {
+            const container = document.getElementById('entries-container');
+            if (container && container.querySelectorAll('.queue-entry').length === 0) {
+              container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
+            }
+          }, 350);
+          updateFilterCounts(data.counts);
+          // Remove the clear button itself
+          btn.remove();
         }
       } catch (err) {
         alert('Error: ' + err.message);
