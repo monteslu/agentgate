@@ -13,6 +13,7 @@ import homeRouter from './home.js';
 import accessRouter from './access.js';
 import llmRouter from './llm.js';
 import serviceDetailRouter from './service-detail.js';
+import webhooksRouter from './webhooks.js';
 
 // Create the main UI router
 const router = Router();
@@ -46,6 +47,9 @@ router.use('/llm', llmRouter);
 
 // Service detail pages: /services/:id
 router.use('/services', serviceDetailRouter);
+
+// Webhook management: /webhooks, /webhooks/add, /webhooks/:id
+router.use('/', webhooksRouter);
 
 // Settings page: /settings
 // Also handles POST routes: /hsync/*, /messaging/*, /queue/settings/*
