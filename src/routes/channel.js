@@ -10,8 +10,8 @@
 
 import bcrypt from 'bcrypt';
 import { getChannel, markChannelConnected } from '../lib/db.js';
-import http from 'http';
-import https from 'https';
+// http import removed - not used
+// https import removed - not used
 
 // Whitelist of allowed message types from client → gateway
 const ALLOWED_CLIENT_MESSAGES = new Set([
@@ -458,3 +458,4 @@ function createWebSocketFrame(message) {
 }
 
 export default { setupChannelProxy };
+
