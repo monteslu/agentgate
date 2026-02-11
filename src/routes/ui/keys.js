@@ -830,9 +830,9 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
 
   <div class="card">
     <div class="detail-section">
-      <h3>Webhook</h3>
+      <h3>Agent Notifications</h3>
       <div class="config-card">
-        <h4><span class="status-dot ${agent.webhook_url ? 'active' : 'inactive'}"></span> Webhook Notifications</h4>
+        <h4><span class="status-dot ${agent.webhook_url ? 'active' : 'inactive'}"></span> Outbound Webhook</h4>
         ${agent.webhook_url ? `
           <div class="detail-row">
             <span class="label">URL</span>
@@ -842,7 +842,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
             <span class="label">Token</span>
             <span class="value">${agent.webhook_token ? '••••••••' : 'Not set'}</span>
           </div>
-        ` : '<p class="value muted">Not configured. Webhooks notify the agent of messages and queue updates.</p>'}
+        ` : '<p class="value muted">Not configured. Agent notifications send messages and queue updates to the agent\'s gateway.</p>'}
         <div class="btn-row">
           <button type="button" class="btn-secondary" id="webhook-btn">Configure</button>
           ${agent.webhook_url ? '<button type="button" class="btn-secondary" id="test-webhook-btn">Test</button>' : ''}
@@ -895,8 +895,8 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
   <!-- Webhook Modal -->
   <div id="webhook-modal" class="modal-overlay">
     <div class="modal">
-      <h3>Configure Webhook</h3>
-      <label>Webhook URL</label>
+      <h3>Configure Outbound Webhook</h3>
+      <label>Notification URL</label>
       <input type="url" id="webhook-url" value="${escapeHtml(agent.webhook_url || '')}" placeholder="https://your-agent.com/webhook">
       <p class="help-text">Receives POST notifications for messages and queue updates</p>
       <label>Authorization Token (optional)</label>
