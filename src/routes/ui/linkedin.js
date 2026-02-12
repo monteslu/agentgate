@@ -126,7 +126,7 @@ export function renderCard(accounts, baseUrl) {
       
       const retryBtn = (!hasToken && hasCredentials) ? `
         <form method="POST" action="/ui/linkedin/retry" style="margin:0;">
-          <input type="hidden" name="accountName" value="${acc.name}">
+          <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
           <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
         </form>` : '';
       
@@ -136,7 +136,7 @@ export function renderCard(accounts, baseUrl) {
         <div style="display: flex; gap: 8px;">
           ${retryBtn}
           <form method="POST" action="/ui/linkedin/delete" style="margin:0;">
-            <input type="hidden" name="accountName" value="${acc.name}">
+            <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
@@ -158,13 +158,13 @@ export function renderCard(accounts, baseUrl) {
         <p class="help">Redirect URL: <span class="copyable">${baseUrl}/ui/linkedin/callback <button type="button" class="copy-btn" onclick="copyText('${baseUrl}/ui/linkedin/callback', this)">Copy</button></span></p>
         <form method="POST" action="/ui/linkedin/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="personal, business, etc." required>
+          <input type="text" name="accountName" placeholder="personal, business, etc." required autocomplete="off">
           <label>Client ID</label>
-          <input type="text" name="clientId" placeholder="LinkedIn client ID" required>
+          <input type="text" name="clientId" placeholder="LinkedIn client ID" required autocomplete="off">
           <label>Client Secret</label>
-          <input type="password" name="clientSecret" placeholder="LinkedIn client secret" required>
+          <input type="password" name="clientSecret" placeholder="LinkedIn client secret" required autocomplete="off">
           <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(comma or space separated)</span></label>
-          <input type="text" name="scopes" placeholder="openid profile email w_member_social" value="openid profile email w_member_social">
+          <input type="text" name="scopes" placeholder="openid profile email w_member_social" value="openid profile email w_member_social" autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
