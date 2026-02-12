@@ -178,7 +178,8 @@ export function createMCPPostHandler() {
 
                 transport.onclose = () => {
                   activeSessions.delete(sessionId);
-                  deleteMcpSession(sessionId);
+                  // Don't delete from DB - session can be recreated after restart
+                  // DB cleanup via TTL expiry or admin kill
                 };
 
                 const now = Date.now();
@@ -240,7 +241,7 @@ export function createMCPPostHandler() {
           const sid = transport.sessionId;
           if (sid) {
             activeSessions.delete(sid);
-            deleteMcpSession(sid);
+            // Don't delete from DB - allows recreation after server restart
           }
         };
 
