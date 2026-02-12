@@ -149,7 +149,18 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   getWebhookSecret: jest.fn(),
   setWebhookSecret: jest.fn(),
   deleteWebhookSecret: jest.fn(),
-  listWebhookSecrets: jest.fn(() => [])
+  listWebhookSecrets: jest.fn(() => []),
+
+  // MCP Session functions
+  upsertMcpSession: jest.fn(),
+  touchMcpSession: jest.fn(),
+  getMcpSession: jest.fn(),
+  listMcpSessions: jest.fn(() => []),
+  deleteMcpSession: jest.fn(() => ({ changes: 0 })),
+  deleteMcpSessionsForAgent: jest.fn(() => ({ changes: 0 })),
+  deleteStaleMcpSessions: jest.fn(() => ({ changes: 0 })),
+  getMcpSessionCounts: jest.fn(() => ({ total: 0, byAgent: {} })),
+  getMcpSessionCount: jest.fn(() => 0)
 }));
 
 // Mock hsyncManager
