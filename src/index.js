@@ -27,6 +27,8 @@ import servicesRoutes from './routes/services.js';
 import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
 import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
+import { setupChannelProxy, setAdminTokenValidator } from './routes/channel.js';
+import { validateAdminChatToken } from './routes/ui/keys.js';
 import llmRoutes from './routes/llm.js';
 import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
 
@@ -131,6 +133,11 @@ const server = app.listen(PORT, async () => {
   // Set up WebSocket proxy for agent gateways (after socket.io)
   setupWebSocketProxy(server);
   console.log('Gateway proxy WebSocket handler initialized');
+
+  // Set up channel WebSocket proxy for chat clients
+  setAdminTokenValidator(validateAdminChatToken);
+  setupChannelProxy(server);
+  console.log('Channel WebSocket handler initialized');
 
   // Start tunnels if configured
   try {
