@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions } from '../../lib/db.js';
+import crypto from 'crypto';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel, disableChannel } from '../../lib/db.js';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -389,6 +390,34 @@ router.post('/:id/regenerate-proxy', (req, res) => {
   res.json({ success: true, proxy_id: newProxyId });
 });
 
+// Channel WebSocket management
+router.post('/:id/channel', async (req, res) => {
+  const { id } = req.params;
+  const { enabled } = req.body;
+  const agent = getApiKeyById(id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  if (enabled) {
+    const channelKey = crypto.randomBytes(24).toString('base64url');
+    const result = await updateChannel(id, true, channelKey);
+    res.json({ success: true, channel_id: result.channelId, channel_key: channelKey });
+  } else {
+    disableChannel(id);
+    res.json({ success: true, disabled: true });
+  }
+});
+
+router.post('/:id/channel/regenerate', async (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  if (!agent.channel_enabled) return res.status(400).json({ error: 'Channel not enabled' });
+
+  const channelKey = crypto.randomBytes(24).toString('base64url');
+  const result = await updateChannel(id, true, channelKey);
+  res.json({ success: true, channel_id: result.channelId, channel_key: channelKey });
+});
+
 // Sessions routes for agent detail page
 // Uses dynamic import to avoid circular dependency with mcp.js
 router.get('/:id/sessions', async (req, res) => {
@@ -544,13 +573,6 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .toast.show { opacity: 1; transform: translateY(0); }
     .toast.error { background: #dc2626; }
     .toast.success { background: #059669; }
-
-    /* Session table styling */
-    .sessions-table .session-id { font-family: monospace; font-size: 12px; background: rgba(99,102,241,0.15); padding: 2px 6px; border-radius: 3px; }
-    .sessions-table .timestamp { font-size: 13px; color: #9ca3af; white-space: nowrap; }
-    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-    .status-active { background: rgba(16,185,129,0.15); color: #10b981; }
-    .status-db { background: rgba(107,114,128,0.15); color: #9ca3af; }
   </style>
 </head>
 <body>
@@ -946,6 +968,46 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
 
   <div class="card">
     <div class="detail-section">
+      <h3>Channel WebSocket</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.channel_enabled ? 'active' : 'inactive'}"></span> Channel</h4>
+        ${agent.channel_enabled ? `
+          <div class="detail-row">
+            <span class="label">Channel ID</span>
+            <span class="value" style="font-size: 12px; word-break: break-all;">${escapeHtml(agent.channel_id || '')}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">WebSocket URL</span>
+            <span class="value" style="font-size: 12px; word-break: break-all;">ws[s]://&lt;host&gt;/channel/${escapeHtml(agent.channel_id || '')}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Last Connected</span>
+            <span class="value ${agent.channel_last_connected ? '' : 'muted'}">${agent.channel_last_connected ? formatDate(agent.channel_last_connected) : 'Never'}</span>
+          </div>
+          <div id="channel-key-display" style="display: none;">
+            <div class="proxy-url-box">
+              <code id="channel-key-value"></code>
+              <button type="button" class="btn-copy-sm" onclick="copyChannelKey()">Copy</button>
+            </div>
+            <p class="help-text" style="color: #fbbf24;">⚠️ Save this key — it won't be shown again.</p>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="btn-secondary" id="channel-regen-btn">🔑 Regenerate Key</button>
+            <button type="button" class="btn-secondary" id="channel-test-btn">🔌 Test Connection</button>
+            <button type="button" class="btn-danger btn-sm" id="channel-disable-btn">Disable</button>
+          </div>
+        ` : `
+          <p class="value muted">Not enabled. Channel provides a filtered WebSocket endpoint for chat clients.</p>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="channel-enable-btn">Enable Channel</button>
+          </div>
+        `}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
       <h3>MCP Sessions</h3>
       <div id="sessions-container">
         <p style="color: #9ca3af;">Loading sessions...</p>
@@ -1243,6 +1305,65 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       if ((await res.json()).success) location.href = '/ui/keys';
     }
 
+    // Channel WebSocket
+    ${agent.channel_enabled ? `
+    document.getElementById('channel-regen-btn').onclick = async function() {
+      if (!confirm('Regenerate channel key? The old key will stop working immediately.')) return;
+      this.disabled = true;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/channel/regenerate', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('channel-key-value').textContent = data.channel_key;
+          document.getElementById('channel-key-display').style.display = '';
+          showToast('Channel key regenerated', 'success');
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+      this.disabled = false;
+    };
+    document.getElementById('channel-test-btn').onclick = async function() {
+      this.disabled = true; this.textContent = 'Testing...';
+      try {
+        const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/channel/${escapeHtml(agent.channel_id || '')}');
+        const timeout = setTimeout(() => { ws.close(); showToast('Connection timed out', 'error'); }, 5000);
+        ws.onopen = () => { clearTimeout(timeout); ws.close(); showToast('Connection successful!', 'success'); };
+        ws.onerror = () => { clearTimeout(timeout); showToast('Connection failed', 'error'); };
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+      this.disabled = false; this.textContent = '🔌 Test Connection';
+    };
+    document.getElementById('channel-disable-btn').onclick = async function() {
+      if (!confirm('Disable channel? Active connections will be dropped.')) return;
+      const res = await fetch('/ui/keys/' + agentId + '/channel', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false })
+      });
+      if ((await res.json()).success) location.reload();
+    };
+    ` : `
+    document.getElementById('channel-enable-btn').onclick = async function() {
+      this.disabled = true;
+      const res = await fetch('/ui/keys/' + agentId + '/channel', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Show the key before reload
+        alert('Channel Key (save it now!):\\n\\n' + data.channel_key);
+        location.reload();
+      } else {
+        showToast(data.error || 'Failed', 'error');
+        this.disabled = false;
+      }
+    };
+    `}
+    function copyChannelKey() {
+      navigator.clipboard.writeText(document.getElementById('channel-key-value').textContent);
+      showToast('Copied!', 'success');
+    }
+
     // Sessions (event delegation for kill buttons — no inline onclick, addresses XSS concern)
     async function loadSessions() {
       try {
@@ -1258,44 +1379,11 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
         }
 
         killAllBtn.style.display = '';
-        
-        // Format timestamp to human-readable local time
-        function formatTime(dateStr) {
-          if (!dateStr) return '-';
-          try {
-            const d = new Date(dateStr);
-            const now = new Date();
-            const diffMs = now - d;
-            const diffMins = Math.floor(diffMs / 60000);
-            const diffHours = Math.floor(diffMs / 3600000);
-            const diffDays = Math.floor(diffMs / 86400000);
-            
-            // Relative time for recent timestamps
-            if (diffMins < 1) return 'just now';
-            if (diffMins < 60) return diffMins + 'm ago';
-            if (diffHours < 24) return diffHours + 'h ago';
-            if (diffDays < 7) return diffDays + 'd ago';
-            
-            // Full date for older timestamps
-            return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
-          } catch { return dateStr; }
-        }
-        
-        let html = '<table class="agents-table sessions-table"><thead><tr><th>Session ID</th><th>Created</th><th>Last Seen</th><th>Status</th><th></th></tr></thead><tbody>';
+        let html = '<table class="agents-table"><thead><tr><th>Session ID</th><th>Created</th><th>Last Seen</th><th>Status</th><th></th></tr></thead><tbody>';
         for (const s of data.sessions) {
           const shortId = s.sessionId.substring(0, 8) + '...';
-          const status = s.active 
-            ? '<span class="status-badge status-active">● Active</span>' 
-            : '<span class="status-badge status-db">○ DB Only</span>';
-          const created = formatTime(s.createdAt);
-          const lastSeen = formatTime(s.lastSeen);
-          html += '<tr>' +
-            '<td title="' + s.sessionId + '"><code class="session-id">' + shortId + '</code></td>' +
-            '<td class="timestamp" title="' + (s.createdAt || '') + '">' + created + '</td>' +
-            '<td class="timestamp" title="' + (s.lastSeen || '') + '">' + lastSeen + '</td>' +
-            '<td>' + status + '</td>' +
-            '<td><button class="btn-sm btn-danger kill-session-btn" data-session-id="' + s.sessionId + '">Kill</button></td>' +
-            '</tr>';
+          const status = s.active ? '<span style="color: #10b981;">● Active</span>' : '<span style="color: #6b7280;">○ DB Only</span>';
+          html += '<tr><td title="' + s.sessionId + '"><code>' + shortId + '</code></td><td>' + (s.createdAt || '-') + '</td><td>' + (s.lastSeen || '-') + '</td><td>' + status + '</td><td><button class="btn-sm btn-danger kill-session-btn" data-session-id="' + s.sessionId + '">Kill</button></td></tr>';
         }
         html += '</tbody></table>';
         container.innerHTML = html;
