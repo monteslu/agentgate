@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { selectPrompt, passwordPrompt, confirmPrompt, handleCancel } from './helpers.js';
+import { term, selectPrompt, passwordPrompt, confirmPrompt, handleCancel } from './helpers.js';
 import { tunnelScreen } from './screens/tunnel.js';
 import { keysScreen } from './screens/keys.js';
 import { servicesScreen } from './screens/services.js';
@@ -20,34 +20,34 @@ async function adminPasswordScreen() {
   try {
     const hasPassword = hasAdminPassword();
     if (hasPassword) {
-      console.log('  Admin password is set ✅\n');
+      term.green('  Admin password is set ✅\n\n');
       const change = await confirmPrompt('Change admin password?');
       if (!change) return;
     }
 
     const password = await passwordPrompt('New admin password');
     if (!password) {
-      console.log('Password cannot be empty.\n');
+      term('  Password cannot be empty.\n\n');
       return;
     }
 
     const confirm = await passwordPrompt('Confirm password');
     if (password !== confirm) {
-      console.log('Passwords do not match.\n');
+      term.red('  Passwords do not match.\n\n');
       return;
     }
 
     await setAdminPassword(password);
-    console.log('\n✅ Admin password set\n');
+    term.green('\n  ✅ Admin password set\n\n');
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
 async function main() {
-  console.log(BANNER);
-  console.log('  🔒 Secure gateway for AI agents\n');
+  term.bold.cyan(BANNER);
+  term('  🔒 Secure gateway for AI agents\n');
 
   while (true) {
     try {
@@ -61,8 +61,8 @@ async function main() {
       ]);
 
       if (choice === 'exit') {
-        console.log('Goodbye!\n');
-        process.exit(0);
+        term('\n  Goodbye!\n\n');
+        term.processExit(0);
       }
 
       if (choice === 'password') await adminPasswordScreen();
@@ -72,10 +72,10 @@ async function main() {
       if (choice === 'settings') await settingsScreen();
     } catch (err) {
       if (handleCancel(err)) {
-        console.log('\nGoodbye!\n');
-        process.exit(0);
+        term('\n  Goodbye!\n\n');
+        term.processExit(0);
       }
-      console.error('Error:', err.message);
+      term.red(`  Error: ${err.message}\n`);
     }
   }
 }

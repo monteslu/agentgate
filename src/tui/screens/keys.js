@@ -1,19 +1,19 @@
 // API Key management screen for TUI
-import { selectPrompt, inputPrompt, confirmPrompt, handleCancel } from '../helpers.js';
+import { term, selectPrompt, inputPrompt, confirmPrompt, handleCancel } from '../helpers.js';
 import { listApiKeys, createApiKey, deleteApiKey, setAgentEnabled } from '../../lib/db.js';
 
 function showKeys(keys) {
   if (keys.length === 0) {
-    console.log('\n  No API keys configured.\n');
+    term('\n  No API keys configured.\n\n');
     return;
   }
-  console.log('\n  API Keys:');
+  term('\n  ').bold('API Keys:')('\n');
   for (const k of keys) {
     const status = k.enabled === 0 ? ' (disabled)' : '';
     const webhook = k.webhook_url ? ' 🔔' : '';
-    console.log(`  • ${k.name} [${k.key_prefix}...]${status}${webhook}`);
+    term(`  • ${k.name} [${k.key_prefix}...]${status}${webhook}\n`);
   }
-  console.log();
+  term('\n');
 }
 
 async function createKeyScreen() {
@@ -24,15 +24,15 @@ async function createKeyScreen() {
     if (!name.trim()) return;
 
     const result = await createApiKey(name.trim());
-    console.log(`\n✅ API key created for "${name.trim()}"`);
-    console.log("\n  ⚠️  Save this key — it won't be shown again:\n");
-    console.log(`  ${result.key}\n`);
+    term.green(`\n  ✅ API key created for "${name.trim()}"\n`);
+    term.yellow("\n  ⚠️  Save this key — it won't be shown again:\n\n");
+    term.bold(`  ${result.key}\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
     if (err.message?.includes('UNIQUE')) {
-      console.log('\n  ❌ An agent with that name already exists.\n');
+      term.red('\n  ❌ An agent with that name already exists.\n\n');
     } else {
-      console.error('Error:', err.message);
+      term.red(`  Error: ${err.message}\n`);
     }
   }
 }
@@ -40,7 +40,7 @@ async function createKeyScreen() {
 async function deleteKeyScreen(keys) {
   try {
     if (keys.length === 0) {
-      console.log('\n  No keys to delete.\n');
+      term('\n  No keys to delete.\n\n');
       return;
     }
 
@@ -58,17 +58,17 @@ async function deleteKeyScreen(keys) {
     if (!confirmed) return;
 
     deleteApiKey(id);
-    console.log(`\n✅ "${agent.name}" deleted\n`);
+    term.green(`\n  ✅ "${agent.name}" deleted\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
 async function toggleKeyScreen(keys) {
   try {
     if (keys.length === 0) {
-      console.log('\n  No keys to toggle.\n');
+      term('\n  No keys to toggle.\n\n');
       return;
     }
 
@@ -84,10 +84,10 @@ async function toggleKeyScreen(keys) {
     const agent = keys.find(k => k.id === id);
     const newState = agent.enabled === 0 ? 1 : 0;
     setAgentEnabled(id, newState);
-    console.log(`\n✅ "${agent.name}" ${newState ? 'enabled' : 'disabled'}\n`);
+    term.green(`\n  ✅ "${agent.name}" ${newState ? 'enabled' : 'disabled'}\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
@@ -111,6 +111,6 @@ export async function keysScreen() {
     }
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }

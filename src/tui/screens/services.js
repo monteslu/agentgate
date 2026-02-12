@@ -1,5 +1,5 @@
 // Service account setup screen for TUI
-import { selectPrompt, inputPrompt, passwordPrompt, handleCancel, confirmPrompt } from '../helpers.js';
+import { term, selectPrompt, inputPrompt, passwordPrompt, handleCancel, confirmPrompt } from '../helpers.js';
 import { setAccountCredentials, deleteAccount, listAccounts } from '../../lib/db.js';
 
 // Services that support simple token/key auth in TUI
@@ -41,14 +41,14 @@ const TUI_SERVICES = [
 function showAccounts() {
   const accounts = listAccounts();
   if (accounts.length === 0) {
-    console.log('\n  No service accounts configured.\n');
+    term('\n  No service accounts configured.\n\n');
     return accounts;
   }
-  console.log('\n  Service Accounts:');
+  term('\n  ').bold('Service Accounts:')('\n');
   for (const acc of accounts) {
-    console.log(`  • ${acc.service}/${acc.name}`);
+    term(`  • ${acc.service}/${acc.name}\n`);
   }
-  console.log();
+  term('\n');
   return accounts;
 }
 
@@ -73,7 +73,7 @@ async function addServiceScreen() {
     const creds = {};
     for (const field of service.fields) {
       if (field.help) {
-        console.log(`  ℹ  ${field.help}`);
+        term.dim(`  ℹ  ${field.help}\n`);
       }
       if (field.masked) {
         creds[field.name] = await passwordPrompt(field.label);
@@ -81,7 +81,7 @@ async function addServiceScreen() {
         creds[field.name] = await inputPrompt(field.label);
       }
       if (!creds[field.name]) {
-        console.log(`  ${field.label} cannot be empty.\n`);
+        term(`  ${field.label} cannot be empty.\n\n`);
         return;
       }
     }
@@ -93,17 +93,17 @@ async function addServiceScreen() {
     }
 
     setAccountCredentials(serviceId, accountName.trim(), creds);
-    console.log(`\n✅ ${service.name} account "${accountName.trim()}" added\n`);
+    term.green(`\n  ✅ ${service.name} account "${accountName.trim()}" added\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
 async function removeServiceScreen(accounts) {
   try {
     if (accounts.length === 0) {
-      console.log('\n  No accounts to remove.\n');
+      term('\n  No accounts to remove.\n\n');
       return;
     }
 
@@ -121,10 +121,10 @@ async function removeServiceScreen(accounts) {
     if (!confirmed) return;
 
     deleteAccount(service, name);
-    console.log(`\n✅ ${service}/${name} removed\n`);
+    term.green(`\n  ✅ ${service}/${name} removed\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
@@ -146,6 +146,6 @@ export async function servicesScreen() {
     }
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
