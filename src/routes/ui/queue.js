@@ -130,6 +130,10 @@ router.post('/:id/react', (req, res) => {
   const validEmoji = emoji ? validateReactionEmoji(emoji) : null;
   if (emoji && !validEmoji) return res.status(400).json({ error: 'Invalid emoji' });
   updateQueueStatus(id, entry.status, { reaction_emoji: validEmoji });
+  const updated = getQueueEntry(id);
+  notifyAgentQueueStatus(updated).catch(err => {
+    console.error('[agentNotifier] Failed to notify agent of reaction:', err.message);
+  });
   res.json({ success: true, emoji: validEmoji });
 });
 
