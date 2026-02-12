@@ -72,6 +72,9 @@ export async function notifyAgentQueueStatus(entry) {
     rejected: '🚫'
   };
 
+  // Build reaction suffix if emoji was added
+  const reactionSuffix = entry.reaction_emoji ? ` ${entry.reaction_emoji}` : '';
+
   const payload = {
     type: 'queue_status',
     entry: {
@@ -81,10 +84,11 @@ export async function notifyAgentQueueStatus(entry) {
       status: entry.status,
       comment: entry.comment,
       rejection_reason: entry.rejection_reason,
+      reaction_emoji: entry.reaction_emoji,
       results: entry.results
     },
     // Also include a human-readable message for Clawdbot-style gateways
-    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id} ${entry.auto_approved ? 'auto-approved + ' : ''}${entry.status}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
+    text: `${statusEmoji[entry.status] || '📋'} [agentgate] Queue #${entry.id} ${entry.auto_approved ? 'auto-approved + ' : ''}${entry.status}${reactionSuffix}\n→ ${entry.service}/${entry.account_name}${entry.rejection_reason ? `\nReason: ${entry.rejection_reason}` : ''}${entry.comment ? `\nOriginal: "${entry.comment.substring(0, 100)}"` : ''}`,
     mode: 'now'
   };
 

@@ -439,6 +439,22 @@ try {
   }
 }
 
+// Migrate write_queue table to add reaction_emoji column
+try {
+  const queueInfo3 = db.prepare('PRAGMA table_info(write_queue)').all();
+  const hasReactionEmoji = queueInfo3.some(col => col.name === 'reaction_emoji');
+
+  if (queueInfo3.length > 0 && !hasReactionEmoji) {
+    console.log('Migrating write_queue table to add reaction_emoji column...');
+    db.exec('ALTER TABLE write_queue ADD COLUMN reaction_emoji TEXT;');
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating write_queue reaction_emoji:', err.message);
+  }
+}
+
 // Initialize api_keys table with migration support for old schema
 // Schema evolution:
 // v1: id, name, key, created_at
@@ -994,6 +1010,10 @@ export function updateQueueStatus(id, status, extra = {}) {
   if (extra.results !== undefined) {
     updates.push('results = ?');
     values.push(JSON.stringify(extra.results));
+  }
+  if (extra.reaction_emoji !== undefined) {
+    updates.push('reaction_emoji = ?');
+    values.push(extra.reaction_emoji || null);
   }
   if (status === 'approved' || status === 'rejected') {
     updates.push('reviewed_at = CURRENT_TIMESTAMP');
