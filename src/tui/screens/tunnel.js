@@ -1,220 +1,201 @@
-// Tunnel configuration screen for TUI
-// Supports hsync (Node-native) and Cloudflare Tunnel (cloudflared binary)
-
-import { selectPrompt, inputPrompt, passwordPrompt, asyncAction, handleCancel } from '../helpers.js';
+// Tunnel configuration screen — ink version
+import React, { useState } from 'react';
+import { Box, Text, useInput } from 'ink';
 import { getSetting, setSetting } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl } from '../../lib/hsyncManager.js';
 import { hasCloudflared, startCloudflared, stopCloudflared } from '../../lib/cloudflareManager.js';
+import { MenuList, TextInput } from '../index.js';
 
+const e = React.createElement;
 const PORT = process.env.PORT || 3050;
 
-async function testLocal() {
-  try {
-    await asyncAction('Testing local AgentGate...', async () => {
-      const res = await fetch(`http://localhost:${PORT}/health`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    });
-    return true;
-  } catch {
-    console.log('  AgentGate does not appear to be running locally.\n');
-    return false;
-  }
-}
+function TunnelStatus() {
+  const hsync = getSetting('hsync') || { enabled: false };
+  const cf = getSetting('cloudflare_tunnel') || { enabled: false };
 
-async function testPublicUrl(url) {
-  try {
-    await asyncAction(`Testing ${url}/health`, async () => {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 10000)
-      );
-      const res = await Promise.race([
-        fetch(`${url}/health`),
-        timeoutPromise
-      ]);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    });
-    return true;
-  } catch (err) {
-    if (err.message === 'timeout') {
-      console.log('  ❌ Timeout — tunnel may not be connected\n');
-    } else {
-      console.log(`  ❌ Failed: ${err.message}\n`);
-    }
-    return false;
-  }
-}
-
-function getCurrentConfig() {
-  return {
-    hsync: getSetting('hsync') || { enabled: false },
-    cloudflare: getSetting('cloudflare_tunnel') || { enabled: false }
-  };
-}
-
-function showCurrentStatus(config) {
-  console.log('\n  Current tunnel configuration:');
-  if (config.hsync?.enabled) {
-    console.log(`  ✅ hsync — ${config.hsync.url || 'configured'}`);
-  } else if (config.cloudflare?.enabled) {
-    console.log('  ✅ Cloudflare Tunnel — configured');
-  } else {
-    console.log('  ⚠  No tunnel configured — AgentGate is only accessible locally');
-  }
-  console.log();
-}
-
-async function hsyncConfigScreen(current) {
-  try {
-    const url = await inputPrompt('hsync server URL', {
-      initial: current?.url || ''
-    });
-
-    const token = await passwordPrompt('hsync secret (leave empty for none)');
-
-    const config = {
-      enabled: true,
-      url,
-      token: token || undefined
-    };
-
-    setSetting('hsync', config);
-    // Disable cloudflare if switching
-    const cf = getSetting('cloudflare_tunnel');
-    if (cf?.enabled) {
-      setSetting('cloudflare_tunnel', { ...cf, enabled: false });
-      stopCloudflared();
-    }
-
-    console.log('\n✅ hsync configuration saved\n');
-
-    // Connect immediately
-    await asyncAction('Connecting hsync...', async () => {
-      await disconnectHsync();
-      await connectHsync(PORT);
-    });
-
-    // Auto-test through the public URL
-    const publicUrl = getHsyncUrl() || url;
-    if (publicUrl) {
-      await testPublicUrl(publicUrl);
-    }
-
-    return config;
-  } catch (err) {
-    if (handleCancel(err)) return null;
-    throw err;
-  }
-}
-
-async function cloudflareConfigScreen() {
-  try {
-    if (!hasCloudflared()) {
-      console.log('\n  ⚠  cloudflared binary not found in PATH');
-      console.log('  Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
-      console.log('  Docker users: cloudflared is included in the agentgate image.\n');
-      return null;
-    }
-
-    console.log('\n  Note: Cloudflare Tunnels require your own domain on Cloudflare.');
-    console.log('  You need a public hostname configured in the Cloudflare dashboard.\n');
-
-    const token = await passwordPrompt('Cloudflare Tunnel token');
-    if (!token) {
-      console.log('Token cannot be empty.\n');
-      return null;
-    }
-
-    const config = {
-      enabled: true,
-      token
-    };
-
-    setSetting('cloudflare_tunnel', config);
-    // Disable hsync if switching
-    const hsync = getSetting('hsync');
-    if (hsync?.enabled) {
-      setSetting('hsync', { ...hsync, enabled: false });
-      await disconnectHsync();
-    }
-
-    console.log('\n✅ Cloudflare Tunnel configuration saved\n');
-
-    // Start immediately
-    await asyncAction('Starting cloudflared...', async () => {
-      startCloudflared();
-      // Give it a moment to connect
-      await new Promise(resolve => setTimeout(resolve, 3000));
-    });
-
-    const publicUrl = await inputPrompt('Public hostname to test (e.g. https://agentgate.yourdomain.com)');
-    if (publicUrl) {
-      await testPublicUrl(publicUrl);
-    }
-
-    return config;
-  } catch (err) {
-    if (handleCancel(err)) return null;
-    throw err;
-  }
-}
-
-async function disableTunnel() {
-  const hsync = getSetting('hsync');
-  const cf = getSetting('cloudflare_tunnel');
-
+  let status;
   if (hsync?.enabled) {
-    setSetting('hsync', { ...hsync, enabled: false });
-    await disconnectHsync();
+    status = e(Text, { color: 'green' }, '  ✅ hsync — ', hsync.url || 'configured');
+  } else if (cf?.enabled) {
+    status = e(Text, { color: 'green' }, '  ✅ Cloudflare Tunnel — configured');
+  } else {
+    status = e(Text, { color: 'yellow' }, '  ⚠  No tunnel configured — local only');
   }
-  if (cf?.enabled) {
-    setSetting('cloudflare_tunnel', { ...cf, enabled: false });
-    stopCloudflared();
-  }
-  console.log('\n✅ Tunnel disabled\n');
+
+  return e(Box, { flexDirection: 'column' },
+    e(Text, { bold: true }, '  Tunnel Configuration:'),
+    status
+  );
 }
 
-export async function tunnelScreen() {
-  try {
-    const config = getCurrentConfig();
-    showCurrentStatus(config);
+function HsyncConfigScreen({ onDone }) {
+  const [step, setStep] = useState('url');
+  const [url, setUrl] = useState('');
+  const [token, setToken] = useState('');
+  const [status, setStatus] = useState(null);
 
-    // Quick local health check first
-    await testLocal();
-
-    const choices = [
-      { name: 'hsync', message: 'Configure hsync' },
-      { name: 'cloudflare', message: 'Configure Cloudflare Tunnel' }
-    ];
-
-    // Add test option if a tunnel is configured
-    if (config.hsync?.enabled || config.cloudflare?.enabled) {
-      choices.push({ name: 'test', message: 'Test connection' });
+  useInput((_input, key) => {
+    if (status && (key.return || key.escape)) {
+      onDone();
     }
+  });
 
-    choices.push({ name: 'disable', message: 'Disable tunnel' });
-    choices.push({ name: 'back', message: 'Back' });
-
-    const choice = await selectPrompt('Remote Access', choices);
-
-    if (choice === 'back') return;
-
-    if (choice === 'hsync') {
-      await hsyncConfigScreen(config.hsync);
-    } else if (choice === 'cloudflare') {
-      await cloudflareConfigScreen();
-    } else if (choice === 'test') {
-      const url = config.hsync?.enabled ? (getHsyncUrl() || config.hsync.url) : null;
-      if (url) {
-        await testPublicUrl(url);
-      } else {
-        const manualUrl = await inputPrompt('Public URL to test');
-        if (manualUrl) await testPublicUrl(manualUrl);
-      }
-    } else if (choice === 'disable') {
-      await disableTunnel();
-    }
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+  if (status) {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: status.startsWith('✅') ? 'green' : 'red' }, '  ', status),
+      e(Text, { color: 'gray' }, '  Press enter to continue')
+    );
   }
+
+  if (step === 'url') {
+    const current = getSetting('hsync');
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(TextInput, {
+        label: 'hsync server URL',
+        value: url || (current?.url || ''),
+        onChange: setUrl,
+        onSubmit: (val) => {
+          if (val === null) { onDone(); return; }
+          setUrl(val);
+          setStep('token');
+        }
+      })
+    );
+  }
+
+  if (step === 'token') {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'gray' }, '  URL: ', url),
+      e(TextInput, {
+        label: 'hsync secret (leave empty for none)',
+        value: token,
+        masked: true,
+        onChange: setToken,
+        onSubmit: async (val) => {
+          if (val === null) { onDone(); return; }
+          const config = { enabled: true, url, token: val || undefined };
+          setSetting('hsync', config);
+          const cf = getSetting('cloudflare_tunnel');
+          if (cf?.enabled) {
+            setSetting('cloudflare_tunnel', { ...cf, enabled: false });
+            stopCloudflared();
+          }
+          try {
+            await disconnectHsync();
+            await connectHsync(PORT);
+            const publicUrl = getHsyncUrl() || url;
+            setStatus(`✅ hsync configured and connected — ${publicUrl}`);
+          } catch (err) {
+            setStatus(`✅ hsync configuration saved (connect error: ${err.message})`);
+          }
+        }
+      })
+    );
+  }
+
+  return null;
+}
+
+function CloudflareConfigScreen({ onDone }) {
+  const [token, setToken] = useState('');
+  const [status, setStatus] = useState(null);
+
+  useInput((_input, key) => {
+    if (status && (key.return || key.escape)) {
+      onDone();
+    }
+  });
+
+  if (!hasCloudflared()) {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'yellow' }, '  ⚠  cloudflared binary not found in PATH'),
+      e(Text, { color: 'gray' }, '  Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/'),
+      e(Text, null, ''),
+      e(Text, { color: 'gray' }, '  Press any key to go back')
+    );
+  }
+
+  if (status) {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'green' }, '  ', status),
+      e(Text, { color: 'gray' }, '  Press enter to continue')
+    );
+  }
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(Text, { color: 'gray' }, '  Note: Cloudflare Tunnels require your own domain on Cloudflare.'),
+    e(TextInput, {
+      label: 'Cloudflare Tunnel token',
+      value: token,
+      masked: true,
+      onChange: setToken,
+      onSubmit: async (val) => {
+        if (val === null || !val) { onDone(); return; }
+        const config = { enabled: true, token: val };
+        setSetting('cloudflare_tunnel', config);
+        const hsync = getSetting('hsync');
+        if (hsync?.enabled) {
+          setSetting('hsync', { ...hsync, enabled: false });
+          await disconnectHsync();
+        }
+        startCloudflared();
+        setStatus('✅ Cloudflare Tunnel configuration saved and started');
+      }
+    })
+  );
+}
+
+export function TunnelScreen({ onBack }) {
+  const [sub, setSub] = useState('menu');
+  const [selected, setSelected] = useState(0);
+
+  const hsync = getSetting('hsync') || { enabled: false };
+  const cf = getSetting('cloudflare_tunnel') || { enabled: false };
+  const hasTunnel = hsync?.enabled || cf?.enabled;
+
+  const menuItems = [
+    { name: 'hsync', message: 'Configure hsync' },
+    { name: 'cloudflare', message: 'Configure Cloudflare Tunnel' },
+    ...(hasTunnel ? [{ name: 'disable', message: 'Disable tunnel' }] : []),
+    { name: 'back', message: '← Back' }
+  ];
+
+  useInput((input, key) => {
+    if (sub !== 'menu') return;
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(menuItems.length - 1, i + 1));
+    } else if (key.return) {
+      const item = menuItems[selected];
+      if (item.name === 'back') { onBack(); return; }
+      if (item.name === 'disable') {
+        const h = getSetting('hsync');
+        const c = getSetting('cloudflare_tunnel');
+        if (h?.enabled) { setSetting('hsync', { ...h, enabled: false }); disconnectHsync(); }
+        if (c?.enabled) { setSetting('cloudflare_tunnel', { ...c, enabled: false }); stopCloudflared(); }
+        setSub('_refresh');
+        setTimeout(() => setSub('menu'), 0);
+        return;
+      }
+      setSub(item.name);
+    } else if (key.escape) {
+      onBack();
+    }
+  });
+
+  const goMenu = () => { setSub('menu'); setSelected(0); };
+
+  if (sub === 'hsync') return e(HsyncConfigScreen, { onDone: goMenu });
+  if (sub === 'cloudflare') return e(CloudflareConfigScreen, { onDone: goMenu });
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(TunnelStatus),
+    e(Text, null, ''),
+    e(Text, { bold: true, color: 'yellow' }, 'Remote Access'),
+    e(Text, null, ''),
+    e(MenuList, { items: menuItems, selectedIndex: selected }),
+    e(Text, null, ''),
+    e(Text, { color: 'gray' }, '  ↑↓/jk navigate • enter select • esc back')
+  );
 }

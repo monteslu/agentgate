@@ -1,8 +1,11 @@
-// Service account setup screen for TUI
-import { selectPrompt, inputPrompt, passwordPrompt, handleCancel, confirmPrompt } from '../helpers.js';
+// Service account setup screen — ink version
+import React, { useState } from 'react';
+import { Box, Text, useInput } from 'ink';
 import { setAccountCredentials, deleteAccount, listAccounts } from '../../lib/db.js';
+import { MenuList, TextInput } from '../index.js';
 
-// Services that support simple token/key auth in TUI
+const e = React.createElement;
+
 const TUI_SERVICES = [
   {
     id: 'github',
@@ -38,114 +41,212 @@ const TUI_SERVICES = [
   }
 ];
 
-function showAccounts() {
-  const accounts = listAccounts();
+function AccountList({ accounts }) {
   if (accounts.length === 0) {
-    console.log('\n  No service accounts configured.\n');
-    return accounts;
+    return e(Text, { color: 'gray' }, '  No service accounts configured.');
   }
-  console.log('\n  Service Accounts:');
-  for (const acc of accounts) {
-    console.log(`  • ${acc.service}/${acc.name}`);
-  }
-  console.log();
-  return accounts;
+  return e(Box, { flexDirection: 'column' },
+    e(Text, { bold: true }, '  Service Accounts:'),
+    ...accounts.map((acc, i) =>
+      e(Text, { key: i, color: 'green' }, '  • ', acc.service, '/', acc.name)
+    )
+  );
 }
 
-async function addServiceScreen() {
-  try {
-    const choices = TUI_SERVICES.map(s => ({
-      name: s.id,
-      message: s.name
-    }));
-    choices.push({ name: 'back', message: '← Back' });
+function AddServiceScreen({ onDone }) {
+  const [step, setStep] = useState('pick');
+  const [selected, setSelected] = useState(0);
+  const [service, setService] = useState(null);
+  const [accountName, setAccountName] = useState('');
+  const [fieldIndex, setFieldIndex] = useState(0);
+  const [fieldValue, setFieldValue] = useState('');
+  const [creds, setCreds] = useState({});
 
-    const serviceId = await selectPrompt('Add service', choices);
-    if (serviceId === 'back') return;
+  const serviceChoices = [
+    ...TUI_SERVICES.map(s => ({ name: s.id, message: s.name })),
+    { name: 'back', message: '← Back' }
+  ];
 
-    const service = TUI_SERVICES.find(s => s.id === serviceId);
+  useInput((input, key) => {
+    if (step !== 'pick') return;
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(serviceChoices.length - 1, i + 1));
+    } else if (key.return) {
+      const item = serviceChoices[selected];
+      if (item.name === 'back') { onDone(); return; }
+      setService(TUI_SERVICES.find(s => s.id === item.name));
+      setStep('name');
+    } else if (key.escape) {
+      onDone();
+    }
+  });
 
-    const accountName = await inputPrompt('Account name (e.g. personal, work)', {
-      validate: (v) => v.trim() ? true : 'Name required'
+  if (step === 'pick') {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { bold: true, color: 'yellow' }, 'Add service'),
+      e(Text, null, ''),
+      e(MenuList, { items: serviceChoices, selectedIndex: selected })
+    );
+  }
+
+  if (step === 'name') {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'cyan' }, '  Adding: ', service.name),
+      e(TextInput, {
+        label: 'Account name (e.g. personal, work)',
+        value: accountName,
+        onChange: setAccountName,
+        onSubmit: (val) => {
+          if (val === null || !val.trim()) { onDone(); return; }
+          setAccountName(val.trim());
+          setStep('fields');
+        }
+      })
+    );
+  }
+
+  if (step === 'fields') {
+    const field = service.fields[fieldIndex];
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'cyan' }, '  ', service.name, ' / ', accountName),
+      field.help ? e(Text, { color: 'gray' }, '  ℹ  ', field.help) : null,
+      e(TextInput, {
+        label: field.label,
+        value: fieldValue,
+        masked: field.masked,
+        onChange: setFieldValue,
+        onSubmit: (val) => {
+          if (val === null) { onDone(); return; }
+          if (!val) return;
+          const newCreds = { ...creds, [field.name]: val };
+          setCreds(newCreds);
+          setFieldValue('');
+          if (fieldIndex + 1 < service.fields.length) {
+            setFieldIndex(fieldIndex + 1);
+          } else {
+            // Save
+            if (service.id === 'mastodon') {
+              newCreds.authStatus = 'success';
+              newCreds.instance = newCreds.instance.replace(/^https?:\/\//, '').replace(/\/$/, '');
+            }
+            setAccountCredentials(service.id, accountName, newCreds);
+            setStep('done');
+          }
+        }
+      })
+    );
+  }
+
+  if (step === 'done') {
+    return e(DoneMessage, {
+      text: `✅ ${service.name} account "${accountName}" added`,
+      onDone
     });
-    if (!accountName.trim()) return;
-
-    const creds = {};
-    for (const field of service.fields) {
-      if (field.help) {
-        console.log(`  ℹ  ${field.help}`);
-      }
-      if (field.masked) {
-        creds[field.name] = await passwordPrompt(field.label);
-      } else {
-        creds[field.name] = await inputPrompt(field.label);
-      }
-      if (!creds[field.name]) {
-        console.log(`  ${field.label} cannot be empty.\n`);
-        return;
-      }
-    }
-
-    // Mastodon needs authStatus set
-    if (serviceId === 'mastodon') {
-      creds.authStatus = 'success';
-      creds.instance = creds.instance.replace(/^https?:\/\//, '').replace(/\/$/, '');
-    }
-
-    setAccountCredentials(serviceId, accountName.trim(), creds);
-    console.log(`\n✅ ${service.name} account "${accountName.trim()}" added\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
   }
+
+  return null;
 }
 
-async function removeServiceScreen(accounts) {
-  try {
-    if (accounts.length === 0) {
-      console.log('\n  No accounts to remove.\n');
-      return;
-    }
+function DoneMessage({ text, onDone }) {
+  useInput((_input, key) => {
+    if (key.return || key.escape) onDone();
+  });
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(Text, { color: 'green' }, '  ', text),
+    e(Text, { color: 'gray' }, '  Press enter to continue')
+  );
+}
 
-    const choices = accounts.map(a => ({
+function RemoveServiceScreen({ accounts, onDone }) {
+  const [selected, setSelected] = useState(0);
+  const [confirming, setConfirming] = useState(null);
+
+  const items = [
+    ...accounts.map(a => ({
       name: `${a.service}::${a.name}`,
       message: `${a.service}/${a.name}`
-    }));
-    choices.push({ name: 'back', message: '← Back' });
+    })),
+    { name: 'back', message: '← Back' }
+  ];
 
-    const selected = await selectPrompt('Remove which account?', choices);
-    if (selected === 'back') return;
+  useInput((input, key) => {
+    if (confirming) {
+      if (input === 'y' || input === 'Y') {
+        const [svc, name] = confirming.split('::');
+        deleteAccount(svc, name);
+        onDone();
+      } else {
+        onDone();
+      }
+      return;
+    }
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(items.length - 1, i + 1));
+    } else if (key.return) {
+      const item = items[selected];
+      if (item.name === 'back') { onDone(); return; }
+      setConfirming(item.name);
+    } else if (key.escape) {
+      onDone();
+    }
+  });
 
-    const [service, name] = selected.split('::');
-    const confirmed = await confirmPrompt(`Remove ${service}/${name}?`);
-    if (!confirmed) return;
-
-    deleteAccount(service, name);
-    console.log(`\n✅ ${service}/${name} removed\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+  if (confirming) {
+    const [svc, name] = confirming.split('::');
+    return e(Box, { padding: 1 },
+      e(Text, { color: 'red' }, 'Remove ', svc, '/', name, '? (y/n)')
+    );
   }
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(Text, { bold: true, color: 'yellow' }, 'Remove which account?'),
+    e(Text, null, ''),
+    e(MenuList, { items, selectedIndex: selected })
+  );
 }
 
-export async function servicesScreen() {
-  try {
-    while (true) {
-      const accounts = showAccounts();
+export function ServicesScreen({ onBack }) {
+  const [sub, setSub] = useState('menu');
+  const [selected, setSelected] = useState(0);
+  const accounts = listAccounts();
 
-      const choices = [
-        { name: 'add', message: 'Add service account' },
-        { name: 'remove', message: 'Remove service account' },
-        { name: 'back', message: '← Back' }
-      ];
+  const menuItems = [
+    { name: 'add', message: 'Add service account' },
+    { name: 'remove', message: 'Remove service account' },
+    { name: 'back', message: '← Back' }
+  ];
 
-      const choice = await selectPrompt('Services', choices);
-      if (choice === 'back') return;
-      if (choice === 'add') await addServiceScreen();
-      if (choice === 'remove') await removeServiceScreen(accounts);
+  useInput((input, key) => {
+    if (sub !== 'menu') return;
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(menuItems.length - 1, i + 1));
+    } else if (key.return) {
+      const item = menuItems[selected];
+      if (item.name === 'back') { onBack(); return; }
+      setSub(item.name);
+    } else if (key.escape) {
+      onBack();
     }
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
-  }
+  });
+
+  const goMenu = () => { setSub('menu'); setSelected(0); };
+
+  if (sub === 'add') return e(AddServiceScreen, { onDone: goMenu });
+  if (sub === 'remove') return e(RemoveServiceScreen, { accounts, onDone: goMenu });
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(AccountList, { accounts }),
+    e(Text, null, ''),
+    e(Text, { bold: true, color: 'yellow' }, 'Services'),
+    e(Text, null, ''),
+    e(MenuList, { items: menuItems, selectedIndex: selected }),
+    e(Text, null, ''),
+    e(Text, { color: 'gray' }, '  ↑↓/jk navigate • enter select • esc back')
+  );
 }

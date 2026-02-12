@@ -1,116 +1,197 @@
-// API Key management screen for TUI
-import { selectPrompt, inputPrompt, confirmPrompt, handleCancel } from '../helpers.js';
+// API Key management screen — ink version
+import React, { useState } from 'react';
+import { Box, Text, useInput } from 'ink';
 import { listApiKeys, createApiKey, deleteApiKey, setAgentEnabled } from '../../lib/db.js';
+import { MenuList, TextInput } from '../index.js';
 
-function showKeys(keys) {
+const e = React.createElement;
+
+function KeyList({ keys }) {
   if (keys.length === 0) {
-    console.log('\n  No API keys configured.\n');
-    return;
+    return e(Text, { color: 'gray' }, '  No API keys configured.');
   }
-  console.log('\n  API Keys:');
-  for (const k of keys) {
-    const status = k.enabled === 0 ? ' (disabled)' : '';
-    const webhook = k.webhook_url ? ' 🔔' : '';
-    console.log(`  • ${k.name} [${k.key_prefix}...]${status}${webhook}`);
-  }
-  console.log();
+  return e(Box, { flexDirection: 'column' },
+    e(Text, { bold: true }, '  API Keys:'),
+    ...keys.map(k =>
+      e(Text, { key: k.id },
+        e(Text, { color: k.enabled === 0 ? 'red' : 'green' }, '  • '),
+        e(Text, { color: k.enabled === 0 ? 'gray' : 'white' },
+          k.name, ' [', k.key_prefix, '...]'
+        ),
+        k.enabled === 0 ? e(Text, { color: 'red' }, ' (disabled)') : null,
+        k.webhook_url ? e(Text, null, ' 🔔') : null
+      )
+    )
+  );
 }
 
-async function createKeyScreen() {
-  try {
-    const name = await inputPrompt('Agent name', {
-      validate: (v) => v.trim() ? true : 'Name required'
-    });
-    if (!name.trim()) return;
+function CreateKeyScreen({ onDone }) {
+  const [name, setName] = useState('');
+  const [result, setResult] = useState(null);
 
-    const result = await createApiKey(name.trim());
-    console.log(`\n✅ API key created for "${name.trim()}"`);
-    console.log("\n  ⚠️  Save this key — it won't be shown again:\n");
-    console.log(`  ${result.key}\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    if (err.message?.includes('UNIQUE')) {
-      console.log('\n  ❌ An agent with that name already exists.\n');
-    } else {
-      console.error('Error:', err.message);
+  useInput((_input, key) => {
+    if (result && (key.return || key.escape)) {
+      onDone();
     }
+  });
+
+  if (result) {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'green' }, '✅ API key created for "', result.name, '"'),
+      e(Text, null, ''),
+      e(Text, { color: 'yellow' }, '  ⚠️  Save this key — it won\'t be shown again:'),
+      e(Text, null, ''),
+      e(Text, { bold: true }, '  ', result.key),
+      e(Text, null, ''),
+      e(Text, { color: 'gray' }, '  Press enter to continue')
+    );
   }
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(TextInput, {
+      label: 'Agent name',
+      value: name,
+      onChange: setName,
+      onSubmit: (val) => {
+        if (val === null || !val.trim()) { onDone(); return; }
+        try {
+          const res = createApiKey(val.trim());
+          setResult({ name: val.trim(), key: res.key });
+        } catch (err) {
+          if (err.message?.includes('UNIQUE')) {
+            setResult({ name: val.trim(), key: '❌ An agent with that name already exists.' });
+          } else {
+            onDone();
+          }
+        }
+      }
+    })
+  );
 }
 
-async function deleteKeyScreen(keys) {
-  try {
-    if (keys.length === 0) {
-      console.log('\n  No keys to delete.\n');
-      return;
-    }
-
-    const choices = keys.map(k => ({
-      name: k.id,
-      message: `${k.name} [${k.key_prefix}...]`
-    }));
-    choices.push({ name: 'back', message: '← Back' });
-
-    const id = await selectPrompt('Delete which agent?', choices);
-    if (id === 'back') return;
-
-    const agent = keys.find(k => k.id === id);
-    const confirmed = await confirmPrompt(`Delete "${agent.name}" and all related data?`);
-    if (!confirmed) return;
-
-    deleteApiKey(id);
-    console.log(`\n✅ "${agent.name}" deleted\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
-  }
-}
-
-async function toggleKeyScreen(keys) {
-  try {
-    if (keys.length === 0) {
-      console.log('\n  No keys to toggle.\n');
-      return;
-    }
-
-    const choices = keys.map(k => ({
+function ToggleKeyScreen({ keys, onDone }) {
+  const [selected, setSelected] = useState(0);
+  const items = [
+    ...keys.map(k => ({
       name: k.id,
       message: `${k.name} — currently ${k.enabled === 0 ? 'DISABLED' : 'enabled'}`
-    }));
-    choices.push({ name: 'back', message: '← Back' });
+    })),
+    { name: 'back', message: '← Back' }
+  ];
 
-    const id = await selectPrompt('Toggle which agent?', choices);
-    if (id === 'back') return;
+  useInput((input, key) => {
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(items.length - 1, i + 1));
+    } else if (key.return) {
+      const item = items[selected];
+      if (item.name === 'back') { onDone(); return; }
+      const agent = keys.find(k => k.id === item.name);
+      if (agent) {
+        setAgentEnabled(agent.id, agent.enabled === 0 ? 1 : 0);
+      }
+      onDone();
+    } else if (key.escape) {
+      onDone();
+    }
+  });
 
-    const agent = keys.find(k => k.id === id);
-    const newState = agent.enabled === 0 ? 1 : 0;
-    setAgentEnabled(id, newState);
-    console.log(`\n✅ "${agent.name}" ${newState ? 'enabled' : 'disabled'}\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
-  }
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(Text, { bold: true, color: 'yellow' }, 'Toggle which agent?'),
+    e(Text, null, ''),
+    e(MenuList, { items, selectedIndex: selected })
+  );
 }
 
-export async function keysScreen() {
-  try {
-    while (true) {
-      const keys = listApiKeys();
-      showKeys(keys);
+function DeleteKeyScreen({ keys, onDone }) {
+  const [selected, setSelected] = useState(0);
+  const [confirming, setConfirming] = useState(null);
+  const items = [
+    ...keys.map(k => ({
+      name: k.id,
+      message: `${k.name} [${k.key_prefix}...]`
+    })),
+    { name: 'back', message: '← Back' }
+  ];
 
-      const choice = await selectPrompt('API Keys', [
-        { name: 'create', message: 'Create new API key' },
-        { name: 'toggle', message: 'Enable/disable agent' },
-        { name: 'delete', message: 'Delete agent' },
-        { name: 'back', message: '← Back' }
-      ]);
-
-      if (choice === 'back') return;
-      if (choice === 'create') await createKeyScreen();
-      if (choice === 'toggle') await toggleKeyScreen(keys);
-      if (choice === 'delete') await deleteKeyScreen(keys);
+  useInput((input, key) => {
+    if (confirming) {
+      if (input === 'y' || input === 'Y') {
+        deleteApiKey(confirming.id);
+        onDone();
+      } else {
+        onDone();
+      }
+      return;
     }
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(items.length - 1, i + 1));
+    } else if (key.return) {
+      const item = items[selected];
+      if (item.name === 'back') { onDone(); return; }
+      const agent = keys.find(k => k.id === item.name);
+      if (agent) setConfirming(agent);
+    } else if (key.escape) {
+      onDone();
+    }
+  });
+
+  if (confirming) {
+    return e(Box, { flexDirection: 'column', padding: 1 },
+      e(Text, { color: 'red' }, 'Delete "', confirming.name, '" and all related data? (y/n)')
+    );
   }
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(Text, { bold: true, color: 'yellow' }, 'Delete which agent?'),
+    e(Text, null, ''),
+    e(MenuList, { items, selectedIndex: selected })
+  );
+}
+
+export function KeysScreen({ onBack }) {
+  const [sub, setSub] = useState('menu');
+  const [selected, setSelected] = useState(0);
+  const keys = listApiKeys();
+
+  const menuItems = [
+    { name: 'create', message: 'Create new API key' },
+    { name: 'toggle', message: 'Enable/disable agent' },
+    { name: 'delete', message: 'Delete agent' },
+    { name: 'back', message: '← Back' }
+  ];
+
+  useInput((input, key) => {
+    if (sub !== 'menu') return;
+    if (key.upArrow || input === 'k') {
+      setSelected(i => Math.max(0, i - 1));
+    } else if (key.downArrow || input === 'j') {
+      setSelected(i => Math.min(menuItems.length - 1, i + 1));
+    } else if (key.return) {
+      const item = menuItems[selected];
+      if (item.name === 'back') { onBack(); return; }
+      setSub(item.name);
+    } else if (key.escape) {
+      onBack();
+    }
+  });
+
+  const goMenu = () => { setSub('menu'); setSelected(0); };
+
+  if (sub === 'create') return e(CreateKeyScreen, { onDone: goMenu });
+  if (sub === 'toggle') return e(ToggleKeyScreen, { keys, onDone: goMenu });
+  if (sub === 'delete') return e(DeleteKeyScreen, { keys, onDone: goMenu });
+
+  return e(Box, { flexDirection: 'column', padding: 1 },
+    e(KeyList, { keys }),
+    e(Text, null, ''),
+    e(Text, { bold: true, color: 'yellow' }, 'API Keys'),
+    e(Text, null, ''),
+    e(MenuList, { items: menuItems, selectedIndex: selected }),
+    e(Text, null, ''),
+    e(Text, { color: 'gray' }, '  ↑↓/jk navigate • enter select • esc back')
+  );
 }
