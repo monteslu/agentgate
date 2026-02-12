@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { getMessagingMode, setMessagingMode, getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setSetting } from '../../lib/db.js';
-import { MenuList } from '../index.js';
+import { MenuList } from '../helpers.js';
 
 const e = React.createElement;
 
@@ -67,6 +67,7 @@ function MessagingModeScreen({ onDone }) {
 export function SettingsScreen({ onBack }) {
   const [sub, setSub] = useState('menu');
   const [selected, setSelected] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const menuItems = [
     { name: 'messaging', message: 'Messaging mode' },
@@ -87,16 +88,13 @@ export function SettingsScreen({ onBack }) {
       if (item.name === 'queue') {
         const current = getSharedQueueVisibility();
         setSharedQueueVisibility(!current);
-        // Force re-render by toggling sub
-        setSub('_refresh');
-        setTimeout(() => setSub('menu'), 0);
+        setRefreshKey(k => k + 1);
         return;
       }
       if (item.name === 'withdraw') {
         const current = getAgentWithdrawEnabled();
         setSetting('agent_withdraw_enabled', !current);
-        setSub('_refresh');
-        setTimeout(() => setSub('menu'), 0);
+        setRefreshKey(k => k + 1);
         return;
       }
       setSub(item.name);
@@ -110,7 +108,7 @@ export function SettingsScreen({ onBack }) {
   if (sub === 'messaging') return e(MessagingModeScreen, { onDone: goMenu });
 
   return e(Box, { flexDirection: 'column', padding: 1 },
-    e(CurrentSettings),
+    e(CurrentSettings, { key: refreshKey }),
     e(Text, null, ''),
     e(Text, { bold: true, color: 'yellow' }, 'Settings'),
     e(Text, null, ''),
