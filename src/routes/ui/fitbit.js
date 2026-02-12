@@ -123,7 +123,7 @@ export function renderCard(accounts, baseUrl) {
       
       const retryBtn = (!hasToken && hasCredentials) ? `
         <form method="POST" action="/ui/fitbit/retry" style="margin:0;">
-          <input type="hidden" name="accountName" value="${acc.name}">
+          <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
           <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
         </form>` : '';
       
@@ -133,7 +133,7 @@ export function renderCard(accounts, baseUrl) {
         <div style="display: flex; gap: 8px;">
           ${retryBtn}
           <form method="POST" action="/ui/fitbit/delete" style="margin:0;">
-            <input type="hidden" name="accountName" value="${acc.name}">
+            <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
@@ -155,11 +155,11 @@ export function renderCard(accounts, baseUrl) {
         <p class="help">Redirect URI: <span class="copyable">${baseUrl}/ui/fitbit/callback <button type="button" class="copy-btn" onclick="copyText('${baseUrl}/ui/fitbit/callback', this)">Copy</button></span></p>
         <form method="POST" action="/ui/fitbit/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="personal, etc." required>
+          <input type="text" name="accountName" placeholder="personal, etc." required autocomplete="off">
           <label>Client ID (OAuth 2.0 Client ID)</label>
-          <input type="text" name="clientId" placeholder="Fitbit client ID" required>
+          <input type="text" name="clientId" placeholder="Fitbit client ID" required autocomplete="off">
           <label>Client Secret</label>
-          <input type="password" name="clientSecret" placeholder="Fitbit client secret" required>
+          <input type="password" name="clientSecret" placeholder="Fitbit client secret" required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
