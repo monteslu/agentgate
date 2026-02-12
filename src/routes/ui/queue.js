@@ -13,7 +13,8 @@ import { escapeHtml, renderMarkdownLinks, statusBadge, autoApprovedBadge, format
 const router = Router();
 
 // Allowed reaction emojis (must match UI picker)
-const ALLOWED_REACTION_EMOJIS = new Set(['❤️', '🔥', '👏', '⭐', '👎', '😠', '💀']);
+const ALL_EMOJIS = ['❤️', '🔥', '👏', '⭐', '👎', '😠', '💀', '😂', '🤔', '👀'];
+const ALLOWED_REACTION_EMOJIS = new Set(ALL_EMOJIS);
 
 // Validate and sanitize reaction emoji
 function validateReactionEmoji(emoji) {
@@ -120,6 +121,18 @@ router.post('/:id/reject', async (req, res) => {
   res.redirect('/ui/queue');
 });
 
+router.post('/:id/react', (req, res) => {
+  const { id } = req.params;
+  const { emoji } = req.body;
+  const entry = getQueueEntry(id);
+  if (!entry) return res.status(404).json({ error: 'Queue entry not found' });
+  if (entry.status === 'pending') return res.status(400).json({ error: 'Cannot react to pending items' });
+  const validEmoji = emoji ? validateReactionEmoji(emoji) : null;
+  if (emoji && !validEmoji) return res.status(400).json({ error: 'Invalid emoji' });
+  updateQueueStatus(id, entry.status, { reaction_emoji: validEmoji });
+  res.json({ success: true, emoji: validEmoji });
+});
+
 router.post('/clear', (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
   const { status } = req.body;
@@ -223,24 +236,37 @@ function renderQueuePage(entries, filter, counts = {}) {
         <div class="queue-actions" id="actions-${entry.id}">
           <div class="action-row">
             <button type="button" class="btn-primary btn-sm" onclick="approveEntry('${entry.id}')">Approve</button>
-            <div class="emoji-picker approve-emojis">
-              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '❤️')" title="Approve with love">❤️</button>
-              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '🔥')" title="Approve - fire">🔥</button>
-              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '👏')" title="Approve - applause">👏</button>
-              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '⭐')" title="Approve - star">⭐</button>
-            </div>
           </div>
           <div class="action-row">
             <input type="text" id="reason-${entry.id}" placeholder="Rejection reason (optional)" class="reject-input">
             <button type="button" class="btn-danger btn-sm" onclick="rejectEntry('${entry.id}')">Reject</button>
-            <div class="emoji-picker reject-emojis">
-              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '👎')" title="Reject - thumbs down">👎</button>
-              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '😠')" title="Reject - angry">😠</button>
-              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '💀')" title="Reject - skull">💀</button>
-            </div>
           </div>
         </div>
       `;
+    }
+
+    let emojiSection = '';
+    if (entry.status !== 'pending') {
+      if (entry.reaction_emoji) {
+        emojiSection = `
+          <div class="emoji-section" id="emoji-section-${entry.id}">
+            <span class="reaction-emoji-display" data-id="${entry.id}" title="Click to change">${escapeHtml(entry.reaction_emoji)}</span>
+            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" style="display:none;">
+              ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
+              <button type="button" class="emoji-btn emoji-remove" data-id="${entry.id}" data-emoji="" title="Remove">✕</button>
+            </div>
+          </div>
+        `;
+      } else {
+        emojiSection = `
+          <div class="emoji-section" id="emoji-section-${entry.id}">
+            <button type="button" class="emoji-trigger" data-id="${entry.id}" title="Add reaction">😀</button>
+            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" style="display:none;">
+              ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
+            </div>
+          </div>
+        `;
+      }
     }
 
     let resultSection = '';
@@ -285,7 +311,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
-            <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}${entry.reaction_emoji ? `<span class="reaction-emoji">${escapeHtml(entry.reaction_emoji)}</span>` : ''}</span>
+            <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}</span>
             ${warningBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
@@ -311,6 +337,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         ${warningsSection}
         ${notificationSection}
         ${actions}
+        ${emojiSection}
 
         <div class="queue-entry-footer">
           <span class="entry-id">ID: ${entry.id}</span>
@@ -372,12 +399,15 @@ function renderQueuePage(entries, filter, counts = {}) {
     .entry-id { color: #6b7280; font-size: 11px; font-family: monospace; }
     .queue-actions { flex-direction: column; align-items: flex-start; gap: 10px; }
     .action-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .emoji-picker { display: flex; gap: 4px; }
+    .emoji-section { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; position: relative; }
+    .emoji-trigger { background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 6px; padding: 4px 8px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; opacity: 0.5; }
+    .emoji-trigger:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); }
+    .reaction-emoji-display { font-size: 20px; cursor: pointer; transition: transform 0.2s ease; }
+    .reaction-emoji-display:hover { transform: scale(1.2); }
+    .emoji-picker-popup { position: absolute; bottom: 100%; left: 0; background: #1f2937; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 6px; display: flex; gap: 4px; flex-wrap: wrap; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.4); margin-bottom: 4px; }
     .emoji-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 4px 8px; font-size: 16px; cursor: pointer; transition: all 0.2s ease; }
     .emoji-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.25); transform: scale(1.1); }
-    .approve-emojis .emoji-btn:hover { background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.4); }
-    .reject-emojis .emoji-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
-    .reaction-emoji { font-size: 18px; margin-left: 6px; }
+    .emoji-remove { font-size: 12px; color: #9ca3af; }
   </style>
 <body>
   ${navHeader()}
@@ -422,10 +452,25 @@ function renderQueuePage(entries, filter, counts = {}) {
       }
       entryEl.dataset.status = entry.status;
 
-      // Remove action buttons
+      // Remove action buttons and add emoji picker
       if (entry.status !== 'pending') {
         const actionsEl = entryEl.querySelector('.queue-actions');
         if (actionsEl) actionsEl.remove();
+
+        // Add emoji picker section if not already present
+        if (!entryEl.querySelector('.emoji-section')) {
+          const emojiDiv = document.createElement('div');
+          emojiDiv.className = 'emoji-section';
+          emojiDiv.id = 'emoji-section-' + entry.id;
+          if (entry.reaction_emoji) {
+            emojiDiv.innerHTML = '<span class="reaction-emoji-display" data-id="'+entry.id+'" title="Click to change">'+entry.reaction_emoji+'</span>' + emojiPickerHtml(entry.id, true);
+          } else {
+            emojiDiv.innerHTML = '<button type="button" class="emoji-trigger" data-id="'+entry.id+'" title="Add reaction">😀</button>' + emojiPickerHtml(entry.id, false);
+          }
+          const footer = entryEl.querySelector('.queue-entry-footer');
+          if (footer) footer.parentNode.insertBefore(emojiDiv, footer);
+          else entryEl.appendChild(emojiDiv);
+        }
       }
 
       // Add results section if present
@@ -602,6 +647,70 @@ function renderQueuePage(entries, filter, counts = {}) {
         alert('Error: ' + err.message);
       }
     }
+
+    function toggleEmojiPicker(id) {
+      // Close any other open pickers
+      document.querySelectorAll('.emoji-picker-popup').forEach(p => {
+        if (p.id !== 'emoji-popup-' + id) p.style.display = 'none';
+      });
+      const popup = document.getElementById('emoji-popup-' + id);
+      if (popup) popup.style.display = popup.style.display === 'none' ? 'flex' : 'none';
+    }
+
+    var EMOJI_LIST = ${JSON.stringify(ALL_EMOJIS)};
+
+    function emojiPickerHtml(id, includeRemove) {
+      var btns = EMOJI_LIST.map(function(e) {
+        return '<button type="button" class="emoji-btn" data-id="'+id+'" data-emoji="'+e+'">'+e+'</button>';
+      }).join('');
+      if (includeRemove) btns += '<button type="button" class="emoji-btn emoji-remove" data-id="'+id+'" data-emoji="" title="Remove">✕</button>';
+      return '<div class="emoji-picker-popup" id="emoji-popup-'+id+'" style="display:none;">'+btns+'</div>';
+    }
+
+    async function setReaction(id, emoji) {
+      var popup = document.getElementById('emoji-popup-' + id);
+      if (popup) popup.style.display = 'none';
+      try {
+        var res = await fetch('/ui/queue/' + id + '/react', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji: emoji || null })
+        });
+        var data = await res.json();
+        if (data.success) {
+          var section = document.getElementById('emoji-section-' + id);
+          if (!section) return;
+          if (data.emoji) {
+            section.innerHTML = '<span class="reaction-emoji-display" data-id="'+id+'">'+data.emoji+'</span>' + emojiPickerHtml(id, true);
+          } else {
+            section.innerHTML = '<button type="button" class="emoji-trigger" data-id="'+id+'">😀</button>' + emojiPickerHtml(id, false);
+          }
+        }
+      } catch (err) {
+        console.error('Error setting reaction:', err);
+      }
+    }
+
+    // Event delegation for emoji interactions
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      // Emoji picker button clicks
+      if (target.closest('.emoji-picker-popup .emoji-btn')) {
+        var btn = target.closest('.emoji-btn');
+        setReaction(btn.dataset.id, btn.dataset.emoji);
+        return;
+      }
+      // Toggle picker from trigger or display
+      if (target.closest('.emoji-trigger, .reaction-emoji-display')) {
+        var el = target.closest('.emoji-trigger, .reaction-emoji-display');
+        toggleEmojiPicker(el.dataset.id);
+        return;
+      }
+      // Close all pickers when clicking outside
+      if (!target.closest('.emoji-section')) {
+        document.querySelectorAll('.emoji-picker-popup').forEach(function(p) { p.style.display = 'none'; });
+      }
+    });
 
     async function retryNotify(id) {
       const btn = document.getElementById('retry-' + id);
