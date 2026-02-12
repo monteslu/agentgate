@@ -21,9 +21,10 @@ const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 
 // POST /api/agents/message - Send a message to another agent
 router.post('/message', async (req, res) => {
-  const { to_agent, to, message } = req.body;
+  const { to_agent, to, message, reply_to } = req.body;
   const targetAgent = to_agent || to; // Prefer to_agent, fall back to to for backwards compatibility
   const fromAgent = req.apiKeyName; // Set by apiKeyAuth middleware
+  const replyToId = reply_to ? parseInt(reply_to, 10) : null;
 
   if (!targetAgent) {
     return res.status(400).json({
@@ -72,7 +73,7 @@ router.post('/message', async (req, res) => {
 
   try {
     // Use canonical recipient name from database
-    const result = createAgentMessage(fromAgent, recipientName, message);
+    const result = createAgentMessage(fromAgent, recipientName, message, { replyToId });
 
     // Emit real-time update
     emitCountUpdate();
