@@ -41,6 +41,8 @@ const ALLOWED_CLIENT_MESSAGES = new Set([
 const ALLOWED_GATEWAY_MESSAGES = new Set([
   'message',        // Agent response
   'response',       // Response to send
+  'chunk',          // Streaming chunk (partial response)
+  'done',           // Streaming done (final message)
   'event',          // Session events (typing, etc.)
   'ping',
   'pong',
