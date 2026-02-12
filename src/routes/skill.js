@@ -69,7 +69,7 @@ function generateBaseSkill(baseUrl, configuredServices) {
   return `---
 name: agentgate
 description: API gateway for personal data with human-in-the-loop write approval. Read requests execute immediately. Write requests are queued for approval.
-metadata: { "openclaw": { "emoji": "🚪", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] } } }
+metadata: { "openclaw": { "emoji": "🚪", "homepage": "https://github.com/monteslu/agentgate", "primaryEnv": "AGENT_GATE_TOKEN", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] }, "install": [{ "id": "node", "kind": "node", "package": "agentgate", "label": "Install agentgate (npm)" }] } }
 ---
 
 # agentgate
@@ -180,7 +180,7 @@ function generateCategorySkill(baseUrl, category, catInfo, categoryServices) {
   let body = `---
 name: agentgate-${category}
 description: "${description}"
-metadata: { "openclaw": { "emoji": "🚪", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] } } }
+metadata: { "openclaw": { "emoji": "🚪", "homepage": "https://github.com/monteslu/agentgate", "primaryEnv": "AGENT_GATE_TOKEN", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] }, "install": [{ "id": "node", "kind": "node", "package": "agentgate", "label": "Install agentgate (npm)" }] } }
 ---
 
 # agentgate — ${catInfo.name}
@@ -243,7 +243,7 @@ function generateMessagesSkill() {
   return `---
 name: agentgate-messages
 description: "Send and receive messages between AI agents via agentgate. Supports direct messages and broadcasts."
-metadata: { "openclaw": { "emoji": "💬", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] } } }
+metadata: { "openclaw": { "emoji": "💬", "homepage": "https://github.com/monteslu/agentgate", "primaryEnv": "AGENT_GATE_TOKEN", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] }, "install": [{ "id": "node", "kind": "node", "package": "agentgate", "label": "Install agentgate (npm)" }] } }
 ---
 
 # agentgate — Messages
@@ -323,7 +323,7 @@ function generateMementosSkill() {
   return `---
 name: agentgate-mementos
 description: "Persistent memory for AI agents. Store and retrieve notes across sessions using keywords."
-metadata: { "openclaw": { "emoji": "🧠", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] } } }
+metadata: { "openclaw": { "emoji": "🧠", "homepage": "https://github.com/monteslu/agentgate", "primaryEnv": "AGENT_GATE_TOKEN", "requires": { "env": ["AGENT_GATE_TOKEN", "AGENT_GATE_URL"] }, "install": [{ "id": "node", "kind": "node", "package": "agentgate", "label": "Install agentgate (npm)" }] } }
 ---
 
 # agentgate — Mementos
@@ -404,105 +404,5 @@ Returns: \`{ mementos: [{ id, content, keywords, created_at, ... }, ...] }\`
 - Recommended ~1.5-2K tokens per memento
 `;
 }
-
-// Serve a self-contained setup script that writes skills to ~/.openclaw/skills/
-// Recommended usage (two-step for safety-cautious models):
-//   curl -s $AGENT_GATE_URL/api/skill/setup -o /tmp/agentgate-setup.js
-//   node /tmp/agentgate-setup.js
-// Or one-liner: curl -s $AGENT_GATE_URL/api/skill/setup | node
-router.get('/setup', (_req, res) => {
-  res.type('text/javascript').send(`/**
- * agentgate skill installer
- *
- * This script:
- * 1. Fetches skill definitions from your agentgate server
- * 2. Writes them to ~/.openclaw/skills/<skill-name>/SKILL.md
- *
- * Requirements: AGENT_GATE_URL and AGENT_GATE_TOKEN environment variables
- *
- * Recommended usage:
- *   curl -s $AGENT_GATE_URL/api/skill/setup -o /tmp/agentgate-setup.js
- *   node /tmp/agentgate-setup.js
- */
-const { mkdirSync, writeFileSync } = require('fs');
-const { join } = require('path');
-const { homedir } = require('os');
-
-const AGENT_GATE_URL = process.env.AGENT_GATE_URL;
-const AGENT_GATE_TOKEN = process.env.AGENT_GATE_TOKEN;
-
-if (!AGENT_GATE_URL || !AGENT_GATE_TOKEN) {
-  console.error('Error: AGENT_GATE_URL and AGENT_GATE_TOKEN environment variables are required.');
-  process.exit(1);
-}
-
-async function main() {
-  const url = AGENT_GATE_URL.replace(/\\/$/, '') + '/api/skill';
-  console.log('Fetching skills from ' + url + '...');
-
-  const response = await fetch(url, {
-    headers: { 'Authorization': 'Bearer ' + AGENT_GATE_TOKEN }
-  });
-
-  if (!response.ok) {
-    console.error('Error: ' + response.status + ' ' + response.statusText);
-    console.error(await response.text());
-    process.exit(1);
-  }
-
-  const { skills } = await response.json();
-  if (!skills || Object.keys(skills).length === 0) {
-    console.error('No skills returned. Check your server configuration.');
-    process.exit(1);
-  }
-
-  const outputDir = join(homedir(), '.openclaw', 'skills');
-  console.log('Writing ' + Object.keys(skills).length + ' skill(s) to ' + outputDir);
-
-  for (const [name, content] of Object.entries(skills)) {
-    const skillDir = join(outputDir, name);
-    mkdirSync(skillDir, { recursive: true });
-    const skillPath = join(skillDir, 'SKILL.md');
-    writeFileSync(skillPath, content, 'utf8');
-    console.log('  wrote ' + skillPath);
-  }
-
-  console.log('Done. Restart OpenClaw or wait for skill watcher to pick up changes.');
-}
-
-main().catch(err => { console.error('Fatal: ' + err.message); process.exit(1); });
-`);
-});
-
-// Alternative setup guide for agents that prefer not to pipe to node
-// Returns a text guide instead of executable code
-router.get('/setup-guide', (_req, res) => {
-  const baseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 3050}`;
-  res.type('text/plain').send(`agentgate Skill Setup Guide
-=============================
-
-Option 1: Two-step download and run (recommended)
---------------------------------------------------
-Step 1: Download the setup script
-  curl -s ${baseUrl}/api/skill/setup -o /tmp/agentgate-setup.js
-
-Step 2: Review it (optional, for peace of mind)
-  cat /tmp/agentgate-setup.js
-
-Step 3: Run it
-  node /tmp/agentgate-setup.js
-
-Option 2: Manual TOOLS.md update
---------------------------------
-Instead of running a script, you can manually update your TOOLS.md:
-
-1. Fetch the service list:
-   curl -s ${baseUrl}/api/agent_start_here -H "Authorization: Bearer $AGENT_GATE_TOKEN"
-
-2. Add the agentgate section to your TOOLS.md with the services listed.
-
-This avoids exec entirely but requires manual maintenance.
-`);
-});
 
 export default router;

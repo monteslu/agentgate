@@ -9,47 +9,61 @@ Configure your AI agent to use agentgate.
 
 ## OpenClaw / ClawdBot
 
-### 1. Add environment variables
+### 1. Install skills from ClawHub
 
-Add these to your agent's config:
-
-- `AGENT_GATE_URL` — your agentgate URL (e.g., `https://your-server.com`)
-- `AGENT_GATE_TOKEN` — the API key you created
-
-### 2. Tell the agent to install skills
-
-Start a conversation and send:
-
-> Run `curl -s $AGENT_GATE_URL/api/skill/setup | node`
-
-The agent runs the command, which writes skill files to `~/.openclaw/skills/`. You'll see output like:
-
+```bash
+clawhub install agentgate
 ```
-Fetching skills from https://your-server.com/api/skill...
-Writing 5 skill(s) to /home/you/.openclaw/skills
-  wrote agentgate/SKILL.md
-  wrote agentgate-messages/SKILL.md
-  wrote agentgate-mementos/SKILL.md
-  wrote agentgate-code/SKILL.md
-  wrote agentgate-social/SKILL.md
-Done. Restart OpenClaw or wait for skill watcher to pick up changes.
+
+This installs the agentgate skill pack into your workspace. Start a new session to pick up the skills.
+
+### 2. Configure environment variables
+
+Add these to your agent's config (via `skills.entries` in `openclaw.json`):
+
+```json5
+{
+  skills: {
+    entries: {
+      "agentgate": {
+        enabled: true,
+        apiKey: "your-agent-gate-token",
+        env: {
+          AGENT_GATE_URL: "https://your-server.com"
+        }
+      }
+    }
+  }
+}
 ```
+
+- `apiKey` maps to `AGENT_GATE_TOKEN` (the skill's `primaryEnv`)
+- `AGENT_GATE_URL` is your agentgate server URL
 
 ### 3. Start a new conversation
 
 Skills are loaded per-session. Start a fresh conversation and the agent will have full agentgate access.
 
-### If the setup command fails
-
-The agent can use agentgate directly without skills. Tell it:
-
-> Fetch your API docs by running: `curl -s -H "Authorization: Bearer $AGENT_GATE_TOKEN" $AGENT_GATE_URL/api/agent_start_here`
-
-The agent gets the full API documentation in-context and can work with agentgate immediately. This uses more tokens per conversation than skills but requires no file writes or new session.
-
 ### Updating skills
 
-Re-run the setup command anytime to refresh skills (e.g., after adding new services to agentgate). Start a new conversation to pick up changes.
+```bash
+clawhub update agentgate
+```
+
+Or update all installed skills:
+
+```bash
+clawhub update --all
+```
+
+### Dynamic service discovery
+
+The installed skills include your agent's available services. For the latest service list at runtime:
+
+```
+GET $AGENT_GATE_URL/api/agent_start_here
+Authorization: Bearer $AGENT_GATE_TOKEN
+```
 
 ## Claude Code (MCP)
 
