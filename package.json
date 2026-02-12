@@ -64,6 +64,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "eslint": "^9.0.0",
     "ink-testing-library": "^4.0.0",
     "jest": "^29.7.0",
