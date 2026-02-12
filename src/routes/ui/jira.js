@@ -33,7 +33,7 @@ export function renderCard(accounts, _baseUrl) {
         <div class="account-item">
           <span><strong>${info}</strong></span>
           <form method="POST" action="/ui/jira/delete" style="margin:0;">
-            <input type="hidden" name="accountName" value="${acc.name}">
+            <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
@@ -54,13 +54,13 @@ export function renderCard(accounts, _baseUrl) {
         <p class="help">Create an API token at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">Atlassian Account Settings</a>.</p>
         <form method="POST" action="/ui/jira/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="work, client, etc." required>
+          <input type="text" name="accountName" placeholder="work, client, etc." required autocomplete="off">
           <label>Jira Domain</label>
-          <input type="text" name="domain" placeholder="yourcompany.atlassian.net" required>
+          <input type="text" name="domain" placeholder="yourcompany.atlassian.net" required autocomplete="off">
           <label>Email</label>
-          <input type="text" name="email" placeholder="you@company.com" required>
+          <input type="text" name="email" placeholder="you@company.com" required autocomplete="off">
           <label>API Token</label>
-          <input type="password" name="apiToken" placeholder="Your Jira API token" required>
+          <input type="password" name="apiToken" placeholder="Your Jira API token" required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

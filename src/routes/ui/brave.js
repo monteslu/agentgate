@@ -27,7 +27,7 @@ export function renderCard(accounts, _baseUrl) {
       <div class="account-item">
         <span><strong>${escapeHtml(acc.name)}</strong></span>
         <form method="POST" action="/ui/brave/delete" style="margin:0;">
-          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}">
+          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}" autocomplete="off">
           <button type="submit" class="btn-sm btn-danger">Remove</button>
         </form>
       </div>
@@ -47,9 +47,9 @@ export function renderCard(accounts, _baseUrl) {
         <p class="help">Get an API key at <a href="https://brave.com/search/api/" target="_blank">brave.com/search/api</a></p>
         <form method="POST" action="/ui/brave/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="default, work, etc." required>
+          <input type="text" name="accountName" placeholder="default, work, etc." required autocomplete="off">
           <label>API Key</label>
-          <input type="password" name="apiKey" placeholder="BSA..." required>
+          <input type="password" name="apiKey" placeholder="BSA..." required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

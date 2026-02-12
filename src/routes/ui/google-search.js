@@ -27,7 +27,7 @@ export function renderCard(accounts, _baseUrl) {
       <div class="account-item">
         <span><strong>${escapeHtml(acc.name)}</strong></span>
         <form method="POST" action="/ui/google_search/delete" style="margin:0;">
-          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}">
+          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}" autocomplete="off">
           <button type="submit" class="btn-sm btn-danger">Remove</button>
         </form>
       </div>
@@ -50,11 +50,11 @@ export function renderCard(accounts, _baseUrl) {
         </p>
         <form method="POST" action="/ui/google_search/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="default, work, etc." required>
+          <input type="text" name="accountName" placeholder="default, work, etc." required autocomplete="off">
           <label>API Key</label>
-          <input type="password" name="apiKey" placeholder="AIza..." required>
+          <input type="password" name="apiKey" placeholder="AIza..." required autocomplete="off">
           <label>Search Engine ID (cx)</label>
-          <input type="text" name="cx" placeholder="abc123..." required>
+          <input type="text" name="cx" placeholder="abc123..." required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

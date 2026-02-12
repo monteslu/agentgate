@@ -161,7 +161,7 @@ export function renderCard(accounts, _baseUrl) {
       
       const retryBtn = (!hasToken && hasCredentials) ? `
         <form method="POST" action="/ui/mastodon/retry" style="margin:0;">
-          <input type="hidden" name="accountName" value="${acc.name}">
+          <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
           <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
         </form>` : '';
       
@@ -171,7 +171,7 @@ export function renderCard(accounts, _baseUrl) {
         <div style="display: flex; gap: 8px;">
           ${retryBtn}
           <form method="POST" action="/ui/mastodon/delete" style="margin:0;">
-            <input type="hidden" name="accountName" value="${acc.name}">
+            <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
@@ -192,11 +192,11 @@ export function renderCard(accounts, _baseUrl) {
         <p class="help">Paste an access token from your instance's settings. Go to <strong>Preferences → Development → New Application</strong>, create an app with <code>read</code> + <code>write:statuses</code> scopes, then copy the access token.</p>
         <form method="POST" action="/ui/mastodon/token-setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="main, tech, etc." required>
+          <input type="text" name="accountName" placeholder="main, tech, etc." required autocomplete="off">
           <label>Instance</label>
-          <input type="text" name="instance" placeholder="fosstodon.org" required>
+          <input type="text" name="instance" placeholder="fosstodon.org" required autocomplete="off">
           <label>Access Token</label>
-          <input type="password" name="accessToken" placeholder="Paste your access token" required>
+          <input type="password" name="accessToken" placeholder="Paste your access token" required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
         <details style="margin-top: 16px;">
@@ -205,11 +205,11 @@ export function renderCard(accounts, _baseUrl) {
             <p class="help">This will register an OAuth app and redirect you to authorize. Use this if you prefer not to create a token manually.</p>
             <form method="POST" action="/ui/mastodon/setup">
               <label>Account Name</label>
-              <input type="text" name="accountName" placeholder="main, tech, etc." required>
+              <input type="text" name="accountName" placeholder="main, tech, etc." required autocomplete="off">
               <label>Instance</label>
-              <input type="text" name="instance" placeholder="fosstodon.org" required>
+              <input type="text" name="instance" placeholder="fosstodon.org" required autocomplete="off">
               <label>Scopes <span style="font-weight: normal; color: #9ca3af;">(space separated)</span></label>
-              <input type="text" name="scopes" placeholder="read write:statuses" value="read write:statuses">
+              <input type="text" name="scopes" placeholder="read write:statuses" value="read write:statuses" autocomplete="off">
               <button type="submit" class="btn-primary">Add via OAuth</button>
             </form>
           </div>

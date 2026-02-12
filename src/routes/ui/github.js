@@ -26,7 +26,7 @@ export function renderCard(accounts, _baseUrl) {
       <div class="account-item">
         <span><strong>${acc.name}</strong></span>
         <form method="POST" action="/ui/github/delete" style="margin:0;">
-          <input type="hidden" name="accountName" value="${acc.name}">
+          <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
           <button type="submit" class="btn-sm btn-danger">Remove</button>
         </form>
       </div>
@@ -46,9 +46,9 @@ export function renderCard(accounts, _baseUrl) {
         <p class="help">Create a token at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></p>
         <form method="POST" action="/ui/github/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="personal, work, etc." required>
+          <input type="text" name="accountName" placeholder="personal, work, etc." required autocomplete="off">
           <label>Personal Access Token</label>
-          <input type="password" name="token" placeholder="ghp_xxxx or github_pat_xxxx" required>
+          <input type="password" name="token" placeholder="ghp_xxxx or github_pat_xxxx" required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

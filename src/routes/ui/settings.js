@@ -55,15 +55,15 @@ ${htmlHead('Settings', { includeSocket: true })}
     <p class="help">Allow agents to send messages to each other. Messages can require human approval (supervised) or be delivered immediately (open).</p>
     <form method="POST" action="/ui/messaging/mode" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
       <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
-        <input type="radio" name="mode" value="off" ${messagingMode === 'off' ? 'checked' : ''}>
+        <input type="radio" name="mode" value="off" ${messagingMode === 'off' ? 'checked' : ''} autocomplete="off">
         <span>Off</span>
       </label>
       <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
-        <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''}>
+        <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''} autocomplete="off">
         <span>Supervised <span class="help-hint" title="Agent messages are held for admin approval before delivery. Safer but slower — you review every message.">?</span></span>
       </label>
       <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
-        <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''}>
+        <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''} autocomplete="off">
         <span>Open <span class="help-hint" title="Agent messages are delivered immediately without approval. Faster but agents can communicate freely without oversight.">?</span></span>
       </label>
       <button type="submit" class="btn-primary btn-sm">Save</button>
@@ -85,7 +85,7 @@ ${htmlHead('Settings', { includeSocket: true })}
           <p class="help" style="margin: 4px 0 0 0;">When enabled, agents can see ALL queue items, not just their own.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/shared-visibility" style="margin: 0;">
-          <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}">
+          <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}" autocomplete="off">
           <button type="submit" class="btn-sm ${sharedQueueVisibility ? 'btn-danger' : 'btn-primary'}">${sharedQueueVisibility ? 'Disable' : 'Enable'}</button>
         </form>
       </div>
@@ -98,7 +98,7 @@ ${htmlHead('Settings', { includeSocket: true })}
           <p class="help" style="margin: 4px 0 0 0;">Allow agents to withdraw their own pending queue submissions.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/agent-withdraw" style="margin: 0;">
-          <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}">
+          <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}" autocomplete="off">
           <button type="submit" class="btn-sm ${agentWithdrawEnabled ? 'btn-danger' : 'btn-primary'}">${agentWithdrawEnabled ? 'Disable' : 'Enable'}</button>
         </form>
       </div>
@@ -118,9 +118,9 @@ ${htmlHead('Settings', { includeSocket: true })}
       <p class="help">Use <a href="https://hsync.tech" target="_blank">hsync</a> to expose this gateway to remote agents without opening ports.</p>
       <form method="POST" action="/ui/hsync/setup">
         <label>URL</label>
-        <input type="text" name="url" placeholder="https://yourname.hsync.tech" required>
+        <input type="text" name="url" placeholder="https://yourname.hsync.tech" required autocomplete="off">
         <label>Token (optional)</label>
-        <input type="password" name="token" placeholder="Token if required">
+        <input type="password" name="token" placeholder="Token if required" autocomplete="off">
         <button type="submit" class="btn-primary">Enable hsync</button>
       </form>
     `}

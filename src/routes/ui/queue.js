@@ -242,7 +242,7 @@ function renderQueuePage(entries, filter, counts = {}) {
             <button type="button" class="btn-primary btn-sm" onclick="approveEntry('${entry.id}')">Approve</button>
           </div>
           <div class="action-row">
-            <input type="text" id="reason-${entry.id}" placeholder="Rejection reason (optional)" class="reject-input">
+            <input type="text" id="reason-${entry.id}" placeholder="Rejection reason (optional)" class="reject-input" autocomplete="off">
             <button type="button" class="btn-danger btn-sm" onclick="rejectEntry('${entry.id}')">Reject</button>
           </div>
         </div>

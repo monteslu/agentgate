@@ -29,7 +29,7 @@ export function renderCard(accounts, _baseUrl) {
         <div class="account-item">
           <span><strong>${info}</strong></span>
           <form method="POST" action="/ui/bluesky/delete" style="margin:0;">
-            <input type="hidden" name="accountName" value="${acc.name}">
+            <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
             <button type="submit" class="btn-sm btn-danger">Remove</button>
           </form>
         </div>
@@ -50,11 +50,11 @@ export function renderCard(accounts, _baseUrl) {
         <p class="help">Create an app password at <a href="https://bsky.app/settings/app-passwords" target="_blank">bsky.app/settings/app-passwords</a></p>
         <form method="POST" action="/ui/bluesky/setup">
           <label>Account Name</label>
-          <input type="text" name="accountName" placeholder="main, alt, etc." required>
+          <input type="text" name="accountName" placeholder="main, alt, etc." required autocomplete="off">
           <label>Handle (no @ symbol)</label>
-          <input type="text" name="identifier" placeholder="yourname.bsky.social" required>
+          <input type="text" name="identifier" placeholder="yourname.bsky.social" required autocomplete="off">
           <label>App Password</label>
-          <input type="password" name="appPassword" placeholder="xxxx-xxxx-xxxx-xxxx" required>
+          <input type="password" name="appPassword" placeholder="xxxx-xxxx-xxxx-xxxx" required autocomplete="off">
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>

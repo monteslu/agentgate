@@ -164,13 +164,13 @@ function renderServiceDetail({ account, serviceInfo, serviceModule, agents, acce
         </td>
         <td>
           <label class="toggle">
-            <input type="checkbox" class="access-toggle" ${isAllowed ? 'checked' : ''}>
+            <input type="checkbox" class="access-toggle" ${isAllowed ? 'checked' : ''} autocomplete="off">
             <span class="toggle-slider"></span>
           </label>
         </td>
         <td>
           <label class="toggle ${!isAllowed ? 'disabled' : ''}">
-            <input type="checkbox" class="bypass-toggle" ${hasBypass ? 'checked' : ''} ${!isAllowed ? 'disabled' : ''}>
+            <input type="checkbox" class="bypass-toggle" ${hasBypass ? 'checked' : ''} ${!isAllowed ? 'disabled' : ''} autocomplete="off">
             <span class="toggle-slider bypass"></span>
           </label>
           ${hasBypass ? '<span class="bypass-badge">⚡ Bypass</span>' : ''}
@@ -525,7 +525,7 @@ function renderAddService(serviceModule) {
     <form method="POST" action="/ui/${serviceName}/setup">
       <div class="form-group">
         <label>Account Name</label>
-        <input type="text" name="accountName" placeholder="personal, work, etc." required>
+        <input type="text" name="accountName" placeholder="personal, work, etc." required autocomplete="off">
         <p class="help">A friendly name to identify this account</p>
       </div>
 
@@ -550,121 +550,121 @@ function getServiceFormFields(serviceName) {
     github: `
       <div class="form-group">
         <label>Personal Access Token</label>
-        <input type="password" name="token" placeholder="ghp_xxxx or github_pat_xxxx" required>
+        <input type="password" name="token" placeholder="ghp_xxxx or github_pat_xxxx" required autocomplete="off">
         <p class="help">Create a token at <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></p>
       </div>`,
 
     bluesky: `
       <div class="form-group">
         <label>Handle (no @ symbol)</label>
-        <input type="text" name="identifier" placeholder="yourname.bsky.social" required>
+        <input type="text" name="identifier" placeholder="yourname.bsky.social" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>App Password</label>
-        <input type="password" name="appPassword" placeholder="xxxx-xxxx-xxxx-xxxx" required>
+        <input type="password" name="appPassword" placeholder="xxxx-xxxx-xxxx-xxxx" required autocomplete="off">
         <p class="help">Create an app password at <a href="https://bsky.app/settings/app-passwords" target="_blank">bsky.app/settings/app-passwords</a></p>
       </div>`,
 
     mastodon: `
       <div class="form-group">
         <label>Instance URL</label>
-        <input type="text" name="instanceUrl" placeholder="https://mastodon.social" required>
+        <input type="text" name="instanceUrl" placeholder="https://mastodon.social" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Access Token</label>
-        <input type="password" name="accessToken" placeholder="Your access token" required>
+        <input type="password" name="accessToken" placeholder="Your access token" required autocomplete="off">
         <p class="help">Get a token from your instance's Development settings</p>
       </div>`,
 
     reddit: `
       <div class="form-group">
         <label>Client ID</label>
-        <input type="text" name="clientId" placeholder="Your app's client ID" required>
+        <input type="text" name="clientId" placeholder="Your app's client ID" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Client Secret</label>
-        <input type="password" name="clientSecret" placeholder="Your app's client secret" required>
+        <input type="password" name="clientSecret" placeholder="Your app's client secret" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Refresh Token</label>
-        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required>
+        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required autocomplete="off">
         <p class="help">Create an app at <a href="https://www.reddit.com/prefs/apps" target="_blank">reddit.com/prefs/apps</a></p>
       </div>`,
 
     google_calendar: `
       <div class="form-group">
         <label>Client ID</label>
-        <input type="text" name="clientId" placeholder="xxxxx.apps.googleusercontent.com" required>
+        <input type="text" name="clientId" placeholder="xxxxx.apps.googleusercontent.com" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Client Secret</label>
-        <input type="password" name="clientSecret" placeholder="Your client secret" required>
+        <input type="password" name="clientSecret" placeholder="Your client secret" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Refresh Token</label>
-        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required>
+        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required autocomplete="off">
         <p class="help">Set up OAuth at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
       </div>`,
 
     youtube: `
       <div class="form-group">
         <label>API Key</label>
-        <input type="password" name="apiKey" placeholder="Your YouTube API key" required>
+        <input type="password" name="apiKey" placeholder="Your YouTube API key" required autocomplete="off">
         <p class="help">Get an API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
       </div>`,
 
     linkedin: `
       <div class="form-group">
         <label>Access Token</label>
-        <input type="password" name="accessToken" placeholder="Your LinkedIn access token" required>
+        <input type="password" name="accessToken" placeholder="Your LinkedIn access token" required autocomplete="off">
         <p class="help">Get a token from <a href="https://www.linkedin.com/developers/" target="_blank">LinkedIn Developers</a></p>
       </div>`,
 
     jira: `
       <div class="form-group">
         <label>Domain</label>
-        <input type="text" name="domain" placeholder="yourcompany.atlassian.net" required>
+        <input type="text" name="domain" placeholder="yourcompany.atlassian.net" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Email</label>
-        <input type="email" name="email" placeholder="you@company.com" required>
+        <input type="email" name="email" placeholder="you@company.com" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>API Token</label>
-        <input type="password" name="apiToken" placeholder="Your Jira API token" required>
+        <input type="password" name="apiToken" placeholder="Your Jira API token" required autocomplete="off">
         <p class="help">Create a token at <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank">Atlassian API Tokens</a></p>
       </div>`,
 
     fitbit: `
       <div class="form-group">
         <label>Client ID</label>
-        <input type="text" name="clientId" placeholder="Your Fitbit app client ID" required>
+        <input type="text" name="clientId" placeholder="Your Fitbit app client ID" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Client Secret</label>
-        <input type="password" name="clientSecret" placeholder="Your client secret" required>
+        <input type="password" name="clientSecret" placeholder="Your client secret" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Refresh Token</label>
-        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required>
+        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required autocomplete="off">
         <p class="help">Create an app at <a href="https://dev.fitbit.com/apps" target="_blank">dev.fitbit.com</a></p>
       </div>`,
 
     brave: `
       <div class="form-group">
         <label>API Key</label>
-        <input type="password" name="apiKey" placeholder="BSA..." required>
+        <input type="password" name="apiKey" placeholder="BSA..." required autocomplete="off">
         <p class="help">Get an API key from <a href="https://brave.com/search/api/" target="_blank">Brave Search API</a></p>
       </div>`,
 
     google_search: `
       <div class="form-group">
         <label>API Key</label>
-        <input type="password" name="apiKey" placeholder="Your Google API key" required>
+        <input type="password" name="apiKey" placeholder="Your Google API key" required autocomplete="off">
       </div>
       <div class="form-group">
         <label>Search Engine ID (CX)</label>
-        <input type="text" name="cx" placeholder="Your custom search engine ID" required>
+        <input type="text" name="cx" placeholder="Your custom search engine ID" required autocomplete="off">
         <p class="help">Set up at <a href="https://programmablesearchengine.google.com/" target="_blank">Programmable Search Engine</a></p>
       </div>`
   };
@@ -672,7 +672,7 @@ function getServiceFormFields(serviceName) {
   return fields[serviceName] || `
     <div class="form-group">
       <label>API Key</label>
-      <input type="password" name="apiKey" placeholder="Your API key" required>
+      <input type="password" name="apiKey" placeholder="Your API key" required autocomplete="off">
     </div>`;
 }
 

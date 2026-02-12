@@ -112,7 +112,7 @@ function renderLoginPage(error = '') {
       ${error ? `<div class="error">${error}</div>` : ''}
       <form method="POST" action="/ui/login">
         <label>Password</label>
-        <input type="password" name="password" required autofocus>
+        <input type="password" name="password" required autofocus autocomplete="off">
         <button type="submit" class="btn-primary" style="width: 100%;">Login</button>
       </form>
     </div>
@@ -135,9 +135,9 @@ function renderSetupPasswordPage(error = '') {
       ${error ? `<div class="error">${error}</div>` : ''}
       <form method="POST" action="/ui/setup-password">
         <label>Password</label>
-        <input type="password" name="password" required autofocus minlength="4">
+        <input type="password" name="password" required autofocus minlength="4" autocomplete="off">
         <label>Confirm Password</label>
-        <input type="password" name="confirmPassword" required minlength="4">
+        <input type="password" name="confirmPassword" required minlength="4" autocomplete="off">
         <button type="submit" class="btn-primary" style="width: 100%;">Set Password</button>
       </form>
     </div>
