@@ -1,5 +1,5 @@
 // Settings screen for TUI
-import { selectPrompt, handleCancel } from '../helpers.js';
+import { term, selectPrompt, handleCancel } from '../helpers.js';
 import { getMessagingMode, setMessagingMode, getSharedQueueVisibility, setSharedQueueVisibility, getAgentWithdrawEnabled, setSetting } from '../../lib/db.js';
 
 function showSettings() {
@@ -7,11 +7,10 @@ function showSettings() {
   const sharedQueue = getSharedQueueVisibility();
   const withdraw = getAgentWithdrawEnabled();
 
-  console.log('\n  Current Settings:');
-  console.log(`  • Messaging mode: ${messaging}`);
-  console.log(`  • Shared queue visibility: ${sharedQueue ? 'on' : 'off'}`);
-  console.log(`  • Agent withdraw: ${withdraw ? 'on' : 'off'}`);
-  console.log();
+  term('\n  ').bold('Current Settings:')('\n');
+  term(`  • Messaging mode: ${messaging}\n`);
+  term(`  • Shared queue visibility: ${sharedQueue ? 'on' : 'off'}\n`);
+  term(`  • Agent withdraw: ${withdraw ? 'on' : 'off'}\n\n`);
 }
 
 async function messagingModeScreen() {
@@ -26,22 +25,10 @@ async function messagingModeScreen() {
 
     if (choice === 'back') return;
     setMessagingMode(choice);
-    console.log(`\n✅ Messaging mode set to "${choice}"\n`);
+    term.green(`\n  ✅ Messaging mode set to "${choice}"\n\n`);
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
-  }
-}
-
-async function toggleSetting(label, getter, setter) {
-  try {
-    const current = getter();
-    const newValue = !current;
-    setter(newValue);
-    console.log(`\n✅ ${label}: ${newValue ? 'on' : 'off'}\n`);
-  } catch (err) {
-    if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
 
@@ -60,16 +47,18 @@ export async function settingsScreen() {
       if (choice === 'back') return;
       if (choice === 'messaging') await messagingModeScreen();
       if (choice === 'queue') {
-        await toggleSetting('Shared queue visibility', getSharedQueueVisibility, setSharedQueueVisibility);
+        const current = getSharedQueueVisibility();
+        setSharedQueueVisibility(!current);
+        term.green(`\n  ✅ Shared queue visibility: ${!current ? 'on' : 'off'}\n\n`);
       }
       if (choice === 'withdraw') {
         const current = getAgentWithdrawEnabled();
         setSetting('agent_withdraw_enabled', !current);
-        console.log(`\n✅ Agent withdraw: ${!current ? 'on' : 'off'}\n`);
+        term.green(`\n  ✅ Agent withdraw: ${!current ? 'on' : 'off'}\n\n`);
       }
     }
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
