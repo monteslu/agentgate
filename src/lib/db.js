@@ -102,7 +102,8 @@ db.exec(`
     notified INTEGER DEFAULT 0,
     notified_at TEXT,
     notify_error TEXT,
-    auto_approved INTEGER DEFAULT 0
+    auto_approved INTEGER DEFAULT 0,
+    reaction_emoji TEXT
   );
 
   CREATE TABLE IF NOT EXISTS agent_messages (
@@ -115,7 +116,8 @@ db.exec(`
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     reviewed_at TEXT,
     delivered_at TEXT,
-    read_at TEXT
+    read_at TEXT,
+    reply_to_id INTEGER REFERENCES agent_messages(id)
   );
 
   CREATE INDEX IF NOT EXISTS idx_agent_messages_recipient
@@ -494,6 +496,11 @@ try {
         gateway_proxy_id TEXT,
         gateway_proxy_url TEXT,
         bio TEXT,
+        raw_results INTEGER DEFAULT 0,
+        channel_enabled INTEGER DEFAULT 0,
+        channel_id TEXT,
+        channel_key_hash TEXT,
+        channel_last_connected TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       );
     `);
