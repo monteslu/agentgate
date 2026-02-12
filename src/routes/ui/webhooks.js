@@ -447,7 +447,7 @@ function renderAddWebhookPage(agents = []) {
         <div class="webhook-name">${src.name}</div>
         <div class="webhook-meta">${src.events.length} event types available</div>
       </div>
-      <input type="radio" name="source" value="${key}" id="source-${key}" style="display: none;">
+      <input type="radio" name="source" value="${key}" id="source-${key}" style="display: none;" autocomplete="off">
     </div>`).join('');
 
   // Generate event checkboxes for each source
@@ -457,7 +457,7 @@ function renderAddWebhookPage(agents = []) {
       <div class="event-grid">
         ${src.events.map(e => `
           <label class="event-checkbox">
-            <input type="checkbox" name="events" value="${e.id}" checked>
+            <input type="checkbox" name="events" value="${e.id}" checked autocomplete="off">
             <div>
               <div class="event-name">${e.name}</div>
               <div class="event-desc">${e.description}</div>
@@ -471,7 +471,7 @@ function renderAddWebhookPage(agents = []) {
     ? '<p style="color: #9ca3af; font-style: italic;">No agents configured. Add agents in API Keys first.</p>'
     : agents.map(a => `
         <label class="agent-checkbox" onclick="updateAgentStyle(this)">
-          <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}">
+          <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}" autocomplete="off">
           <span class="agent-name">${escapeHtml(a.name)}</span>
         </label>`).join('');
 
@@ -492,7 +492,7 @@ ${renderStyles()}
     <div id="config-section" style="display: none;">
       <div class="card">
         <h3>2. Webhook Name</h3>
-        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input" style="width: 100%;">
+        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input" style="width: 100%;" autocomplete="off">
       </div>
       
       <div class="card">
@@ -568,7 +568,7 @@ function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
     const checked = (config.events || []).includes(e.id) ? 'checked' : '';
     return `
       <label class="event-checkbox">
-        <input type="checkbox" name="events" value="${e.id}" ${checked}>
+        <input type="checkbox" name="events" value="${e.id}" ${checked} autocomplete="off">
         <div>
           <div class="event-name">${e.name}</div>
           <div class="event-desc">${e.description}</div>
@@ -584,7 +584,7 @@ function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
       const selectedClass = checked ? 'selected' : '';
       return `
           <label class="agent-checkbox ${selectedClass}" onclick="updateAgentStyle(this)">
-            <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}" ${checked}>
+            <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}" ${checked} autocomplete="off">
             <span class="agent-name">${escapeHtml(a.name)}</span>
           </label>`;
     }).join('');
@@ -643,10 +643,10 @@ ${renderStyles()}
       <h3>Configuration</h3>
       <label style="display: block; margin-bottom: 16px;">
         <span style="color: #9ca3af;">Name</span>
-        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input" style="width: 100%; margin-top: 4px;">
+        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input" style="width: 100%; margin-top: 4px;" autocomplete="off">
       </label>
       <label style="display: flex; align-items: center; gap: 8px;">
-        <input type="checkbox" name="enabled" ${config.enabled ? 'checked' : ''}>
+        <input type="checkbox" name="enabled" ${config.enabled ? 'checked' : ''} autocomplete="off">
         <span>Enabled</span>
       </label>
     </div>
