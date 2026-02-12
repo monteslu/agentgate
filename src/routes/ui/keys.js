@@ -747,34 +747,40 @@ function getChatScript() {
   return `
     const MAX_MESSAGE_LENGTH = 10240; // 10KB limit
 
-    // Safe markdown renderer - validates URL schemes to prevent XSS
+    // Configure marked for safe rendering
+    if (typeof marked !== 'undefined') {
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+        mangle: false
+      });
+    }
+
+    // Safe markdown renderer using marked library with DOMPurify
     function renderMarkdown(text) {
       if (!text) return '';
-      let html = text
+      
+      // Use marked if available, otherwise basic escaping
+      if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+        const html = marked.parse(text);
+        return DOMPurify.sanitize(html, {
+          ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'del', 'span', 'div'],
+          ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+          ALLOW_DATA_ATTR: false,
+          ADD_ATTR: ['target'],
+          FORCE_BODY: true,
+          // Only allow safe URL schemes
+          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\\-]+(?:[^a-z+.\\-:]|$))/i
+        });
+      }
+      
+      // Fallback: basic escaping
+      return text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-      // Code blocks
-      html = html.replace(/\\\`\\\`\\\`([\\s\\S]*?)\\\`\\\`\\\`/g, '<pre style="background:#111827;padding:8px;border-radius:4px;overflow-x:auto;margin:8px 0;">$1</pre>');
-      // Inline code
-      html = html.replace(/\\\`([^\\\`]+)\\\`/g, '<code style="background:#374151;padding:2px 6px;border-radius:3px;">$1</code>');
-      // Bold
-      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-      // Italic
-      html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
-      // Links - ONLY allow http/https schemes (XSS fix)
-      html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
-        // Validate URL scheme
-        const lowerUrl = url.toLowerCase().trim();
-        if (lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://')) {
-          return '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="color:#60a5fa;">' + text + '</a>';
-        }
-        // Invalid scheme - render as plain text
-        return '[' + text + '](' + url + ')';
-      });
-      // Newlines
-      html = html.replace(/\\n/g, '<br>');
-      return html;
+        .replace(/>/g, '&gt;')
+        .replace(/\\n/g, '<br>');
     }
 
     function createChatController(channelId, opts) {
@@ -782,10 +788,16 @@ function getChatScript() {
       let ws = null;
       let reconnectAttempts = 0;
       const maxReconnectAttempts = 3;
+      
+      // Streaming state
+      let streamingContent = '';
+      let streamingMessageId = null;
 
       const controller = {
         onStatus: opts.onStatus || function() {},
         onMessage: opts.onMessage || function() {},
+        onChunk: opts.onChunk || function() {},       // Streaming chunk
+        onStreamEnd: opts.onStreamEnd || function() {}, // Stream complete
         onConnected: opts.onConnected || function() {},
         onDisconnected: opts.onDisconnected || function() {},
 
@@ -820,7 +832,22 @@ function getChatScript() {
                 } else {
                   controller.onStatus('Auth failed: ' + (msg.error || 'Invalid credentials'), 'error');
                 }
+              } else if (msg.type === 'chunk') {
+                // Streaming: accumulate chunks
+                const chunk = msg.content || msg.text || '';
+                streamingContent += chunk;
+                if (!streamingMessageId) {
+                  streamingMessageId = 'stream-' + Date.now();
+                }
+                controller.onChunk(streamingContent, streamingMessageId, msg.timestamp);
+              } else if (msg.type === 'done') {
+                // Streaming complete: finalize with full markdown render
+                const finalContent = msg.content || streamingContent;
+                controller.onStreamEnd(finalContent, streamingMessageId, msg.timestamp);
+                streamingContent = '';
+                streamingMessageId = null;
               } else if (msg.type === 'message' || msg.type === 'response') {
+                // Non-streaming message
                 const content = msg.content || msg.text || msg.message || JSON.stringify(msg);
                 controller.onMessage('agent', content, msg.timestamp);
               } else if (msg.type === 'error') {
@@ -834,8 +861,9 @@ function getChatScript() {
           ws.onclose = function() {
             controller.onStatus('Disconnected', 'error');
             controller.onDisconnected();
-            // Auto-reconnect for admin tokens (they're one-time, so don't reconnect)
-            // For regular keys we could reconnect, but keeping it simple
+            // Reset streaming state on disconnect
+            streamingContent = '';
+            streamingMessageId = null;
           };
 
           ws.onerror = function() {
@@ -891,7 +919,22 @@ function renderChatPopout(agent, adminToken) {
     .input-area button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
     .input-area button:hover { background: #2563eb; }
     .input-area button:disabled { background: #4b5563; cursor: not-allowed; }
+    .streaming { opacity: 0.8; }
+    .streaming::after { content: '▊'; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    /* Markdown styles */
+    #messages pre { background: #1f2937; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+    #messages pre code { background: none; padding: 0; }
+    #messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+    #messages th, #messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
+    #messages th { background: #1f2937; }
+    #messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
+    #messages a { color: #60a5fa; }
+    #messages ul, #messages ol { margin: 8px 0; padding-left: 24px; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 </head>
 <body>
   <div class="header">
@@ -927,12 +970,49 @@ function renderChatPopout(agent, adminToken) {
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
+    // Handle streaming chunks - update or create streaming message div
+    function handleChunk(content, messageId, timestamp) {
+      let div = document.getElementById(messageId);
+      if (!div) {
+        div = document.createElement('div');
+        div.id = messageId;
+        div.className = 'message streaming';
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+        div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="content" style="color:#e5e7eb;"></div>';
+        messagesDiv.appendChild(div);
+      }
+      // Update content with partial markdown (basic escaping during stream)
+      const contentDiv = div.querySelector('.content');
+      if (contentDiv) {
+        contentDiv.innerHTML = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>');
+      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Handle stream end - finalize with full markdown render
+    function handleStreamEnd(content, messageId, timestamp) {
+      let div = document.getElementById(messageId);
+      if (div) {
+        div.className = 'message'; // Remove streaming class
+        const contentDiv = div.querySelector('.content');
+        if (contentDiv) {
+          contentDiv.innerHTML = renderMarkdown(content);
+        }
+      } else {
+        // Fallback: create new message if no streaming div exists
+        addMessage('agent', content, timestamp);
+      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
     const chat = createChatController(channelId, {
       onStatus: function(text, cls) {
         statusEl.textContent = text;
         statusEl.className = 'status ' + (cls || '');
       },
       onMessage: addMessage,
+      onChunk: handleChunk,
+      onStreamEnd: handleStreamEnd,
       onConnected: function() {
         messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
         chatInput.disabled = false;
@@ -970,7 +1050,7 @@ function renderChatPopout(agent, adminToken) {
 }
 
 function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken = null) {
-  return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
+  return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true, includeMarkdown: agent.channel_enabled })}
 <style>
   .agent-header {
     display: flex;
@@ -1047,6 +1127,18 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
     white-space: pre-wrap;
     font-size: 14px;
   }
+
+  /* Chat markdown styles */
+  #chat-messages pre { background: #111827; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+  #chat-messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+  #chat-messages pre code { background: none; padding: 0; }
+  #chat-messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+  #chat-messages th, #chat-messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
+  #chat-messages th { background: #111827; }
+  #chat-messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
+  #chat-messages a { color: #60a5fa; }
+  #chat-messages ul, #chat-messages ol { margin: 8px 0; padding-left: 24px; }
+  #chat-messages h1, #chat-messages h2, #chat-messages h3, #chat-messages h4 { margin: 12px 0 8px 0; }
 
   .config-card {
     background: rgba(0,0,0,0.15);
@@ -1685,6 +1777,38 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
 
+      // Handle streaming chunks - progressive rendering
+      function handleChunk(content, messageId, timestamp) {
+        let div = document.getElementById(messageId);
+        if (!div) {
+          div = document.createElement('div');
+          div.id = messageId;
+          div.style.marginBottom = '12px';
+          const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+          div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="stream-content" style="color:#e5e7eb;"></div><span style="opacity:0.5;">▊</span>';
+          messagesDiv.appendChild(div);
+        }
+        const contentDiv = div.querySelector('.stream-content');
+        if (contentDiv) {
+          contentDiv.innerHTML = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>');
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      // Handle stream end - finalize with full markdown
+      function handleStreamEnd(content, messageId, timestamp) {
+        let div = document.getElementById(messageId);
+        if (div) {
+          const cursor = div.querySelector('span');
+          if (cursor) cursor.remove();
+          const contentDiv = div.querySelector('.stream-content');
+          if (contentDiv) contentDiv.innerHTML = renderMarkdown(content);
+        } else {
+          addMessage('agent', content, timestamp);
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
       const chat = createChatController(channelId, {
         onStatus: function(text, cls) {
           statusEl.textContent = text;
@@ -1692,6 +1816,8 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
           statusEl.style.color = colors[cls] || '#6b7280';
         },
         onMessage: addMessage,
+        onChunk: handleChunk,
+        onStreamEnd: handleStreamEnd,
         onConnected: function() {
           messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
           chatInput.disabled = false;
