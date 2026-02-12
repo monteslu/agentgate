@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel } from '../../lib/db.js';
+import { nanoid } from 'nanoid';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -387,6 +388,68 @@ router.post('/:id/regenerate-proxy', (req, res) => {
 
   const newProxyId = regenerateProxyId(id);
   res.json({ success: true, proxy_id: newProxyId });
+});
+
+// Channel configuration (for admin chat)
+router.post('/:id/channel', async (req, res) => {
+  const { id } = req.params;
+  const { enabled } = req.body;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const isEnabled = enabled === 'on' || enabled === '1' || enabled === true;
+  
+  // Generate a new channel key when enabling
+  const channelKey = isEnabled ? nanoid(32) : null;
+  const result = await updateChannel(id, isEnabled, channelKey);
+
+  res.json({
+    success: true,
+    channel_enabled: isEnabled,
+    channel_id: result.channelId,
+    // Return the plaintext key only on initial setup (won't be retrievable later)
+    channel_key: channelKey
+  });
+});
+
+// Regenerate channel key
+router.post('/:id/regenerate-channel-key', async (req, res) => {
+  const { id } = req.params;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  if (!agent.channel_enabled) {
+    return res.status(400).json({ error: 'Channel not enabled' });
+  }
+
+  const channelKey = nanoid(32);
+  await updateChannel(id, true, channelKey);
+  const updated = getApiKeyById(id);
+
+  res.json({
+    success: true,
+    channel_id: updated.channel_id,
+    channel_key: channelKey
+  });
+});
+
+// Chat popup window
+router.get('/:id/chat', (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).send('Agent not found');
+  }
+  if (!agent.channel_enabled || !agent.channel_id) {
+    return res.status(400).send('Channel not enabled for this agent');
+  }
+  res.send(renderChatPopup(agent, req.query.key || ''));
 });
 
 // Sessions routes for agent detail page
@@ -832,6 +895,20 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
   .service-chip img { width: 16px; height: 16px; }
   .service-chip .bypass-badge { font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 6px; border-radius: 8px; margin-left: 4px; }
   .no-access { color: #9ca3af; font-style: italic; font-size: 14px; padding: 12px 0; }
+
+  /* Chat styles */
+  .chat-msg { margin-bottom: 12px; padding: 8px 12px; border-radius: 8px; max-width: 85%; }
+  .chat-msg.user { background: #3b82f6; color: white; margin-left: auto; text-align: right; }
+  .chat-msg.agent { background: #374151; color: #e5e7eb; }
+  .chat-msg.system { background: rgba(245,158,11,0.15); color: #fbbf24; font-size: 13px; text-align: center; max-width: 100%; }
+  .chat-msg .msg-time { font-size: 10px; opacity: 0.7; margin-top: 4px; }
+  .chat-msg pre { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; overflow-x: auto; margin: 8px 0; font-size: 13px; }
+  .chat-msg code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+  .chat-msg pre code { background: none; padding: 0; }
+  .chat-msg p { margin: 0 0 8px 0; }
+  .chat-msg p:last-child { margin-bottom: 0; }
+  .chat-msg ul, .chat-msg ol { margin: 8px 0; padding-left: 20px; }
+  .chat-typing { color: #6b7280; font-style: italic; font-size: 13px; }
 </style>
 <body>
   ${navHeader()}
@@ -953,6 +1030,39 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       <div class="btn-row">
         <button type="button" class="btn-secondary" id="refresh-sessions-btn">🔄 Refresh</button>
         <button type="button" class="btn-danger" id="kill-all-sessions-btn" style="display:none;">Kill All Sessions</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
+      <h3>💬 Admin Chat</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.channel_enabled ? 'active' : 'inactive'}"></span> Channel</h4>
+        ${agent.channel_enabled ? `
+          <p style="color: #9ca3af; font-size: 14px; margin-bottom: 12px;">
+            Chat directly with this agent through their gateway.
+            ${agent.channel_last_connected ? `<br><span style="font-size: 12px;">Last connected: ${formatDate(agent.channel_last_connected)}</span>` : ''}
+          </p>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="open-chat-btn">💬 Open Chat</button>
+            <button type="button" class="btn-secondary" id="popout-chat-btn" title="Open in popup window">⧉ Popout</button>
+            <button type="button" class="btn-secondary" id="channel-settings-btn">⚙️ Settings</button>
+          </div>
+        ` : `
+          <p class="value muted">Channel not enabled. Enable to chat with this agent directly.</p>
+          <div class="btn-row">
+            <button type="button" class="btn-secondary" id="enable-channel-btn">Enable Channel</button>
+          </div>
+        `}
+      </div>
+      <div id="chat-container" style="display: none; margin-top: 16px;">
+        <div id="chat-messages" style="height: 300px; overflow-y: auto; background: #111827; border: 1px solid #374151; border-radius: 8px; padding: 12px; margin-bottom: 12px;"></div>
+        <div style="display: flex; gap: 8px;">
+          <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding: 10px 12px; border: 1px solid #374151; border-radius: 6px; background: #1f2937; color: #f3f4f6;">
+          <button type="button" class="btn-primary" id="chat-send-btn">Send</button>
+        </div>
+        <div id="chat-status" style="font-size: 12px; color: #6b7280; margin-top: 8px;"></div>
       </div>
     </div>
   </div>
@@ -1083,6 +1193,46 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('delete-avatar-modal')">Cancel</button>
         <button type="button" class="btn-danger" onclick="confirmDeleteAvatar()">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel Key Modal (for entering saved key) -->
+  <div id="channel-key-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Enter Channel Key</h3>
+      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">
+        Enter the channel key to connect. If you don't have it, you can regenerate a new one (this will invalidate the old key).
+      </p>
+      <label>Channel Key</label>
+      <input type="password" id="channel-key-input" placeholder="Enter channel key">
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('channel-key-modal')">Cancel</button>
+        <button type="button" class="btn-secondary" onclick="regenerateChannelKey()">🔄 Regenerate</button>
+        <button type="button" class="btn-primary" onclick="useChannelKey()">Connect</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel Settings Modal -->
+  <div id="channel-settings-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Channel Settings</h3>
+      <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #9ca3af; margin-bottom: 4px;">Channel ID</div>
+        <code style="color: #67e8f9; word-break: break-all;">${escapeHtml(agent.channel_id || 'Not set')}</code>
+      </div>
+      <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+        <div style="font-size: 13px; color: #9ca3af; margin-bottom: 4px;">WebSocket URL</div>
+        <code style="color: #67e8f9; word-break: break-all;">${agent.channel_id ? getChannelWsUrl(agent.channel_id) : 'Not configured'}</code>
+      </div>
+      <p style="color: #fbbf24; background: rgba(245,158,11,0.1); padding: 10px; border-radius: 6px; font-size: 13px; margin-bottom: 16px;">
+        ⚠️ Regenerating the key will disconnect any existing connections and require re-authentication.
+      </p>
+      <div class="modal-buttons">
+        <button type="button" class="btn-secondary" onclick="closeModal('channel-settings-modal')">Close</button>
+        <button type="button" class="btn-secondary" onclick="regenerateChannelKey()">🔄 Regenerate Key</button>
+        <button type="button" class="btn-danger" onclick="disableChannel()">Disable Channel</button>
       </div>
     </div>
   </div>
@@ -1373,6 +1523,232 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       const res = await fetch('/ui/keys/' + agentId + '/avatar', { method: 'DELETE', headers: { 'Accept': 'application/json' } });
       if ((await res.json()).success) location.reload();
     }
+
+    // === Admin Chat ===
+    const channelEnabled = ${agent.channel_enabled ? 'true' : 'false'};
+    const channelId = ${JSON.stringify(agent.channel_id || '')};
+    let chatSocket = null;
+    let chatKey = null;
+
+    // Simple markdown parser (handles **bold**, *italic*, \`code\`, \`\`\`code blocks\`\`\`, and lists)
+    function parseMarkdown(text) {
+      if (!text) return '';
+      let html = text
+        // Escape HTML first
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        // Code blocks
+        .replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>')
+        // Inline code
+        .replace(/\`([^\`]+)\`/g, '<code>$1</code>')
+        // Bold
+        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\\*([^*]+)\\*/g, '<em>$1</em>')
+        // Line breaks
+        .replace(/\\n/g, '<br>');
+      return html;
+    }
+
+    function addChatMessage(content, type, time) {
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + type;
+      div.innerHTML = parseMarkdown(content) + '<div class="msg-time">' + (time || new Date().toLocaleTimeString()) + '</div>';
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function setChatStatus(msg) {
+      document.getElementById('chat-status').textContent = msg;
+    }
+
+    function connectChat() {
+      if (chatSocket && chatSocket.readyState === WebSocket.OPEN) return;
+      if (!channelId || !chatKey) {
+        setChatStatus('Channel not configured');
+        return;
+      }
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = wsProtocol + '//' + location.host + '/channel/' + channelId;
+      setChatStatus('Connecting...');
+
+      chatSocket = new WebSocket(wsUrl);
+
+      chatSocket.onopen = () => {
+        // Send auth message
+        chatSocket.send(JSON.stringify({ type: 'auth', key: chatKey }));
+      };
+
+      chatSocket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'auth') {
+            if (msg.success) {
+              setChatStatus('Connected');
+              addChatMessage('Connected to ' + agentName, 'system');
+            } else {
+              setChatStatus('Auth failed: ' + (msg.error || 'Invalid key'));
+              addChatMessage('Authentication failed', 'system');
+            }
+          } else if (msg.type === 'message' || msg.type === 'response') {
+            const content = msg.text || msg.content || msg.message || JSON.stringify(msg);
+            addChatMessage(content, 'agent');
+          } else if (msg.type === 'error') {
+            addChatMessage('Error: ' + (msg.error || 'Unknown error'), 'system');
+          }
+        } catch (e) {
+          addChatMessage(event.data, 'agent');
+        }
+      };
+
+      chatSocket.onclose = () => {
+        setChatStatus('Disconnected');
+        addChatMessage('Disconnected', 'system');
+      };
+
+      chatSocket.onerror = () => {
+        setChatStatus('Connection error');
+      };
+    }
+
+    function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      const msg = input.value.trim();
+      if (!msg) return;
+      if (!chatSocket || chatSocket.readyState !== WebSocket.OPEN) {
+        showToast('Not connected', 'error');
+        return;
+      }
+      chatSocket.send(JSON.stringify({ type: 'send', message: msg }));
+      addChatMessage(msg, 'user');
+      input.value = '';
+    }
+
+    // Enable channel
+    if (document.getElementById('enable-channel-btn')) {
+      document.getElementById('enable-channel-btn').onclick = async function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Enabling...';
+        try {
+          const res = await fetch('/ui/keys/' + agentId + '/channel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ enabled: true })
+          });
+          const data = await res.json();
+          if (data.success) {
+            // Store the key in sessionStorage for this session only
+            sessionStorage.setItem('channelKey_' + data.channel_id, data.channel_key);
+            showToast('Channel enabled! Key stored for this session.', 'success');
+            setTimeout(() => location.reload(), 1000);
+          } else {
+            showToast(data.error || 'Failed to enable channel', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Enable Channel';
+          }
+        } catch (err) {
+          showToast('Network error', 'error');
+          btn.disabled = false;
+          btn.textContent = 'Enable Channel';
+        }
+      };
+    }
+
+    // Chat buttons (when channel is enabled)
+    if (channelEnabled) {
+      // Try to get key from sessionStorage
+      chatKey = sessionStorage.getItem('channelKey_' + channelId);
+
+      document.getElementById('open-chat-btn').onclick = function() {
+        if (!chatKey) {
+          openModal('channel-key-modal');
+          return;
+        }
+        document.getElementById('chat-container').style.display = '';
+        connectChat();
+      };
+
+      document.getElementById('popout-chat-btn').onclick = function() {
+        const width = 450, height = 600;
+        const left = screen.width - width - 50;
+        const top = 100;
+        const key = chatKey || '';
+        window.open(
+          '/ui/keys/' + agentId + '/chat?popup=1' + (key ? '&key=' + encodeURIComponent(key) : ''),
+          'chat_' + agentId,
+          'width=' + width + ',height=' + height + ',left=' + left + ',top=' + top + ',resizable=yes'
+        );
+      };
+
+      document.getElementById('channel-settings-btn').onclick = () => openModal('channel-settings-modal');
+
+      document.getElementById('chat-send-btn').onclick = sendChatMessage;
+      document.getElementById('chat-input').onkeypress = function(e) {
+        if (e.key === 'Enter') sendChatMessage();
+      };
+    }
+
+    // Channel key modal handlers
+    function useChannelKey() {
+      const key = document.getElementById('channel-key-input').value.trim();
+      if (!key) {
+        showToast('Please enter a key', 'error');
+        return;
+      }
+      chatKey = key;
+      sessionStorage.setItem('channelKey_' + channelId, key);
+      closeModal('channel-key-modal');
+      document.getElementById('chat-container').style.display = '';
+      connectChat();
+    }
+
+    async function regenerateChannelKey() {
+      if (!confirm('Regenerate channel key? This will invalidate the current key.')) return;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/regenerate-channel-key', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json' }
+        });
+        const data = await res.json();
+        if (data.success) {
+          chatKey = data.channel_key;
+          sessionStorage.setItem('channelKey_' + data.channel_id, data.channel_key);
+          showToast('New key generated and stored for this session', 'success');
+          closeModal('channel-key-modal');
+          closeModal('channel-settings-modal');
+          document.getElementById('chat-container').style.display = '';
+          if (chatSocket) chatSocket.close();
+          connectChat();
+        } else {
+          showToast(data.error || 'Failed to regenerate key', 'error');
+        }
+      } catch (err) {
+        showToast('Network error', 'error');
+      }
+    }
+
+    async function disableChannel() {
+      if (!confirm('Disable channel? You will need to re-enable to chat again.')) return;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/channel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ enabled: false })
+        });
+        const data = await res.json();
+        if (data.success) {
+          sessionStorage.removeItem('channelKey_' + channelId);
+          showToast('Channel disabled', 'success');
+          setTimeout(() => location.reload(), 500);
+        } else {
+          showToast(data.error || 'Failed to disable channel', 'error');
+        }
+      } catch (err) {
+        showToast('Network error', 'error');
+      }
+    }
   </script>
   ${socketScript()}
   ${menuScript()}
@@ -1384,6 +1760,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
 function getProxyUrl(proxyId) {
   if (!proxyId) return '';
   return BASE_URL + '/px/' + proxyId + '/';
+}
+
+function getChannelWsUrl(channelId) {
+  if (!channelId) return '';
+  const wsBase = BASE_URL.replace(/^http/, 'ws');
+  return wsBase + '/channel/' + channelId;
 }
 
 function getServiceIcon(service) {
@@ -1418,6 +1800,147 @@ function getServiceDisplayName(service) {
     google_search: 'Google Search'
   };
   return names[service] || service;
+}
+
+function renderChatPopup(agent, initialKey) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat - ${escapeHtml(agent.name)}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; height: 100vh; display: flex; flex-direction: column; }
+    .header { padding: 12px 16px; background: #1f2937; border-bottom: 1px solid #374151; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 16px; font-weight: 600; flex: 1; }
+    .status { font-size: 12px; color: #6b7280; }
+    .status.connected { color: #10b981; }
+    .messages { flex: 1; overflow-y: auto; padding: 16px; }
+    .input-area { padding: 12px 16px; background: #1f2937; border-top: 1px solid #374151; display: flex; gap: 8px; }
+    .input-area input { flex: 1; padding: 10px 12px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; font-size: 14px; }
+    .input-area input:focus { border-color: #6366f1; outline: none; }
+    .input-area button { padding: 10px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    .input-area button:hover { background: #4f46e5; }
+    .input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chat-msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 12px; max-width: 85%; line-height: 1.4; }
+    .chat-msg.user { background: #3b82f6; color: white; margin-left: auto; }
+    .chat-msg.agent { background: #374151; color: #e5e7eb; }
+    .chat-msg.system { background: rgba(245,158,11,0.15); color: #fbbf24; font-size: 13px; text-align: center; max-width: 100%; }
+    .chat-msg .msg-time { font-size: 10px; opacity: 0.6; margin-top: 6px; }
+    .chat-msg pre { background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; overflow-x: auto; margin: 8px 0; font-size: 13px; white-space: pre-wrap; }
+    .chat-msg code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+    .chat-msg pre code { background: none; padding: 0; }
+    .key-prompt { padding: 20px; text-align: center; }
+    .key-prompt input { width: 100%; max-width: 300px; padding: 10px 12px; margin: 12px 0; border: 1px solid #374151; border-radius: 6px; background: #1f2937; color: #f3f4f6; }
+    .key-prompt button { padding: 10px 24px; background: #6366f1; color: white; border: none; border-radius: 6px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>💬 ${escapeHtml(agent.name)}</h1>
+    <span id="status" class="status">Disconnected</span>
+  </div>
+  
+  <div id="key-prompt" class="key-prompt" style="${initialKey ? 'display:none;' : ''}">
+    <p style="color: #9ca3af; margin-bottom: 8px;">Enter channel key to connect</p>
+    <input type="password" id="key-input" placeholder="Channel key" value="${escapeHtml(initialKey)}">
+    <br>
+    <button onclick="startChat()">Connect</button>
+  </div>
+  
+  <div id="chat-area" style="${initialKey ? '' : 'display:none;'} flex: 1; display: flex; flex-direction: column;">
+    <div id="messages" class="messages"></div>
+    <div class="input-area">
+      <input type="text" id="msg-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendMsg()">
+      <button onclick="sendMsg()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    const channelId = ${JSON.stringify(agent.channel_id)};
+    const agentName = ${JSON.stringify(agent.name)};
+    let ws = null;
+    let chatKey = ${JSON.stringify(initialKey || '')};
+
+    function parseMarkdown(text) {
+      if (!text) return '';
+      return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\\\`\\\`\\\`([\\s\\S]*?)\\\`\\\`\\\`/g, '<pre><code>$1</code></pre>')
+        .replace(/\\\`([^\\\`]+)\\\`/g, '<code>$1</code>')
+        .replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>')
+        .replace(/\\*([^*]+)\\*/g, '<em>$1</em>')
+        .replace(/\\n/g, '<br>');
+    }
+
+    function addMsg(content, type, time) {
+      const div = document.createElement('div');
+      div.className = 'chat-msg ' + type;
+      div.innerHTML = parseMarkdown(content) + '<div class="msg-time">' + (time || new Date().toLocaleTimeString()) + '</div>';
+      document.getElementById('messages').appendChild(div);
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+    }
+
+    function setStatus(msg, connected) {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = 'status' + (connected ? ' connected' : '');
+    }
+
+    function connect() {
+      if (!chatKey) return;
+      const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(wsProto + '//' + location.host + '/channel/' + channelId);
+      setStatus('Connecting...');
+
+      ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', key: chatKey }));
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'auth') {
+            if (msg.success) {
+              setStatus('Connected', true);
+              addMsg('Connected to ' + agentName, 'system');
+            } else {
+              setStatus('Auth failed');
+              addMsg('Authentication failed: ' + (msg.error || 'Invalid key'), 'system');
+            }
+          } else if (msg.type === 'message' || msg.type === 'response') {
+            addMsg(msg.text || msg.content || msg.message || JSON.stringify(msg), 'agent');
+          } else if (msg.type === 'error') {
+            addMsg('Error: ' + (msg.error || 'Unknown'), 'system');
+          }
+        } catch { addMsg(e.data, 'agent'); }
+      };
+
+      ws.onclose = () => { setStatus('Disconnected'); addMsg('Disconnected', 'system'); };
+      ws.onerror = () => setStatus('Error');
+    }
+
+    function sendMsg() {
+      const input = document.getElementById('msg-input');
+      const msg = input.value.trim();
+      if (!msg || !ws || ws.readyState !== WebSocket.OPEN) return;
+      ws.send(JSON.stringify({ type: 'send', message: msg }));
+      addMsg(msg, 'user');
+      input.value = '';
+    }
+
+    function startChat() {
+      chatKey = document.getElementById('key-input').value.trim();
+      if (!chatKey) return;
+      document.getElementById('key-prompt').style.display = 'none';
+      document.getElementById('chat-area').style.display = 'flex';
+      connect();
+    }
+
+    // Auto-connect if key provided
+    if (chatKey) connect();
+  </script>
+</body>
+</html>`;
 }
 
 export default router;
