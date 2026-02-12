@@ -151,6 +151,14 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteWebhookSecret: jest.fn(),
   listWebhookSecrets: jest.fn(() => []),
 
+  // Channel functions
+  getChannel: jest.fn(),
+  getChannelByAgentId: jest.fn(),
+  updateChannel: jest.fn(() => ({ channelId: 'test-channel-id', keyHash: 'test-hash' })),
+  disableChannel: jest.fn(),
+  markChannelConnected: jest.fn(),
+  listChannels: jest.fn(() => []),
+
   // MCP Session functions
   upsertMcpSession: jest.fn(),
   touchMcpSession: jest.fn(),
