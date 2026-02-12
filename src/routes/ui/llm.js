@@ -49,7 +49,7 @@ router.get('/', (req, res) => {
           <div class="form-grid">
             <div class="form-group">
               <label for="edit-name-${p.id}">Name</label>
-              <input type="text" id="edit-name-${p.id}" value="${escapeHtml(p.name)}">
+              <input type="text" id="edit-name-${p.id}" value="${escapeHtml(p.name)}" autocomplete="off">
             </div>
             <div class="form-group">
               <label for="edit-type-${p.id}">Type</label>
@@ -62,11 +62,11 @@ router.get('/', (req, res) => {
             </div>
             <div class="form-group">
               <label for="edit-key-${p.id}">API Key</label>
-              <input type="password" id="edit-key-${p.id}" placeholder="Leave blank to keep current">
+              <input type="password" id="edit-key-${p.id}" placeholder="Leave blank to keep current" autocomplete="off">
             </div>
             <div class="form-group">
               <label for="edit-url-${p.id}">Base URL (optional) <span class="help-hint" title="Only needed for self-hosted or custom API endpoints (e.g. local LLM servers, Azure OpenAI). Leave blank for standard providers like OpenAI, Anthropic, or Google.">?</span></label>
-              <input type="text" id="edit-url-${p.id}" value="${escapeHtml(p.base_url || '')}" placeholder="https://api.example.com">
+              <input type="text" id="edit-url-${p.id}" value="${escapeHtml(p.base_url || '')}" placeholder="https://api.example.com" autocomplete="off">
             </div>
           </div>
           <div class="form-actions">
@@ -210,7 +210,7 @@ router.get('/', (req, res) => {
       <div class="form-grid">
         <div class="form-group">
           <label for="add-name">Name</label>
-          <input type="text" id="add-name" placeholder="my-openai">
+          <input type="text" id="add-name" placeholder="my-openai" autocomplete="off">
         </div>
         <div class="form-group">
           <label for="add-type">Type</label>
@@ -223,11 +223,11 @@ router.get('/', (req, res) => {
         </div>
         <div class="form-group">
           <label for="add-key">API Key</label>
-          <input type="password" id="add-key" placeholder="sk-...">
+          <input type="password" id="add-key" placeholder="sk-..." autocomplete="off">
         </div>
         <div class="form-group">
           <label for="add-url">Base URL (optional) <span class="help-hint" title="Only needed for self-hosted or custom API endpoints (e.g. local LLM servers, Azure OpenAI). Leave blank for standard providers like OpenAI, Anthropic, or Google.">?</span></label>
-          <input type="text" id="add-url" placeholder="https://api.example.com">
+          <input type="text" id="add-url" placeholder="https://api.example.com" autocomplete="off">
         </div>
       </div>
       <button class="btn-primary" onclick="addProvider()">Add Provider</button>
@@ -256,12 +256,12 @@ router.get('/', (req, res) => {
         </div>
         <div class="form-group">
           <label for="assign-model">Model ID</label>
-          <input type="text" id="assign-model" placeholder="gpt-4o">
+          <input type="text" id="assign-model" placeholder="gpt-4o" autocomplete="off">
         </div>
       </div>
       <div style="display: flex; align-items: center; gap: 16px;">
         <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; color: #9ca3af;">
-          <input type="checkbox" id="assign-default" style="width: 18px; height: 18px; margin: 0;">
+          <input type="checkbox" id="assign-default" style="width: 18px; height: 18px; margin: 0;" autocomplete="off">
           Set as default <span class="help-hint" title="When checked, this becomes the agent's default model. If another model was previously the default for this agent, it will be replaced.">?</span>
         </label>
         <button class="btn-primary" onclick="assignModel()">Assign Model</button>
