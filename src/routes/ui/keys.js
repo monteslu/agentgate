@@ -496,7 +496,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
       <td>${formatDate(k.created_at)}</td>
       <td style="white-space: nowrap;">
         <label class="toggle">
-          <input type="checkbox" ${k.enabled ? 'checked' : ''} onchange="toggleEnabled('${k.id}', this)">
+          <input type="checkbox" ${k.enabled ? 'checked' : ''} onchange="toggleEnabled('${k.id}', this)" autocomplete="off">
           <span class="toggle-slider"></span>
         </label>
       </td>
@@ -597,7 +597,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
 
   <form method="POST" action="/ui/keys/create" class="add-agent-box">
     <label>New Agent</label>
-    <input type="text" name="name" placeholder="e.g., johnny-5, clawdbot, Her, Hal" required>
+    <input type="text" name="name" placeholder="e.g., johnny-5, clawdbot, Her, Hal" required autocomplete="off">
     <button type="submit" class="btn-primary">Create</button>
   </form>
 
@@ -873,14 +873,14 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     <div class="toggle-wrapper">
       <span class="toggle-label" id="toggle-label">${agent.enabled ? 'Enabled' : 'Disabled'}</span>
       <label class="toggle">
-        <input type="checkbox" id="enabled-toggle" ${agent.enabled ? 'checked' : ''}>
+        <input type="checkbox" id="enabled-toggle" ${agent.enabled ? 'checked' : ''} autocomplete="off">
         <span class="toggle-slider"></span>
       </label>
     </div>
     <div class="toggle-wrapper">
       <span class="toggle-label" id="raw-results-label">Raw Results <span class="help-hint" title="When enabled, this agent receives full upstream API responses by default. When disabled, responses are simplified to save tokens. Per-request override is still available via the raw parameter (MCP) or X-Agentgate-Raw header (REST).">?</span></span>
       <label class="toggle">
-        <input type="checkbox" id="raw-results-toggle" ${agent.raw_results ? 'checked' : ''}>
+        <input type="checkbox" id="raw-results-toggle" ${agent.raw_results ? 'checked' : ''} autocomplete="off">
         <span class="toggle-slider"></span>
       </label>
     </div>
@@ -1036,7 +1036,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     <div class="modal">
       <h3>Edit Bio</h3>
       <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">Describe this agent's role. Shown via <code>whoami</code>.</p>
-      <textarea id="bio-text" rows="4" placeholder="e.g., You are a cybersecurity expert...">${escapeHtml(agent.bio || '')}</textarea>
+      <textarea id="bio-text" rows="4" placeholder="e.g., You are a cybersecurity expert..." autocomplete="off">${escapeHtml(agent.bio || '')}</textarea>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('bio-modal')">Cancel</button>
         <button type="button" class="btn-primary" onclick="saveBio()">Save</button>
@@ -1049,10 +1049,10 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     <div class="modal">
       <h3>Configure Outbound Webhook</h3>
       <label>Notification URL</label>
-      <input type="url" id="webhook-url" value="${escapeHtml(agent.webhook_url || '')}" placeholder="https://your-agent.com/webhook">
+      <input type="url" id="webhook-url" value="${escapeHtml(agent.webhook_url || '')}" placeholder="https://your-agent.com/webhook" autocomplete="off">
       <p class="help-text">Receives POST notifications for messages and queue updates</p>
       <label>Authorization Token (optional)</label>
-      <input type="text" id="webhook-token" value="${escapeHtml(agent.webhook_token || '')}" placeholder="secret-token">
+      <input type="text" id="webhook-token" value="${escapeHtml(agent.webhook_token || '')}" placeholder="secret-token" autocomplete="off">
       <p class="help-text">Sent as Bearer token in Authorization header</p>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('webhook-modal')">Cancel</button>
@@ -1066,12 +1066,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     <div class="modal">
       <h3>Configure Gateway Proxy</h3>
       <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
-        <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;">
+        <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;" autocomplete="off">
         <span>Enable gateway proxy <span class="help-hint" title="When enabled, this agent's own gateway becomes accessible through AgentGate via a proxy URL. Other agents can call this agent's gateway without direct network access.">?</span></span>
       </label>
       <div id="proxy-fields" style="${agent.gateway_proxy_enabled ? '' : 'display: none;'}">
         <label>Internal Gateway URL</label>
-        <input type="url" id="proxy-url-input" value="${escapeHtml(agent.gateway_proxy_url || '')}" placeholder="http://localhost:18789">
+        <input type="url" id="proxy-url-input" value="${escapeHtml(agent.gateway_proxy_url || '')}" placeholder="http://localhost:18789" autocomplete="off">
         <p class="help-text">The internal URL of the agent's gateway <span class="help-hint" title="The URL where this agent's gateway is running locally, e.g. http://localhost:18789. AgentGate will forward proxy requests to this address.">?</span></p>
       </div>
       <div class="modal-buttons">
@@ -1118,7 +1118,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
           ${renderAvatar(agent.name, { size: 80 })}
         </div>
       </div>
-      <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp">
+      <input type="file" id="avatar-file" accept="image/png,image/jpeg,image/gif,image/webp" autocomplete="off">
       <p class="help-text">PNG, JPG, GIF, WebP. Max 500KB.</p>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('avatar-modal')">Cancel</button>
