@@ -3,10 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import { hasAdminPassword, setAdminPassword } from '../lib/db.js';
+import { MenuList, TextInput } from './helpers.js';
 import { KeysScreen } from './screens/keys.js';
 import { ServicesScreen } from './screens/services.js';
 import { SettingsScreen } from './screens/settings.js';
 import { TunnelScreen } from './screens/tunnel.js';
+
+// Re-export shared components for any external consumers
+export { MenuList, TextInput, StatusLine, Message } from './helpers.js';
 
 const e = React.createElement;
 
@@ -28,55 +32,6 @@ function Banner() {
     ),
     e(Text, { color: 'gray' }, '  🔒 Secure gateway for AI agents')
   );
-}
-
-export function MenuList({ items, selectedIndex }) {
-  return e(Box, { flexDirection: 'column' },
-    ...items.map((item, i) =>
-      e(Text, {
-        key: item.name || i,
-        color: i === selectedIndex ? 'cyan' : undefined,
-        bold: i === selectedIndex
-      },
-      i === selectedIndex ? '❯ ' : '  ',
-      item.message || item.name
-      )
-    )
-  );
-}
-
-export function StatusLine({ label, value, color }) {
-  return e(Text, null,
-    e(Text, { color: 'gray' }, '  • '),
-    e(Text, { bold: true }, label, ': '),
-    e(Text, { color: color || 'white' }, value)
-  );
-}
-
-export function TextInput({ label, value, onChange, onSubmit, masked }) {
-  useInput((input, key) => {
-    if (key.return) {
-      onSubmit(value);
-    } else if (key.backspace || key.delete) {
-      onChange(value.slice(0, -1));
-    } else if (key.escape) {
-      onSubmit(null);
-    } else if (input && !key.ctrl && !key.meta) {
-      onChange(value + input);
-    }
-  });
-
-  const display = masked ? '*'.repeat(value.length) : value;
-
-  return e(Box, null,
-    e(Text, { color: 'cyan' }, label, ': '),
-    e(Text, null, display),
-    e(Text, { color: 'gray' }, '█')
-  );
-}
-
-export function Message({ text, color }) {
-  return e(Text, { color: color || 'green' }, text);
 }
 
 // ─── Password Screen ────────────────────────────────────────────
@@ -151,9 +106,13 @@ function PasswordScreen({ onBack }) {
           }
           try {
             await setAdminPassword(password);
+            setPassword('');
+            setConfirm('');
             setMessage('✅ Admin password set');
             setStep('done');
           } catch (err) {
+            setPassword('');
+            setConfirm('');
             setMessage('Error: ' + err.message);
             setStep('done');
           }
