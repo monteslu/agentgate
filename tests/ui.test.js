@@ -160,7 +160,11 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteMcpSessionsForAgent: jest.fn(() => ({ changes: 0 })),
   deleteStaleMcpSessions: jest.fn(() => ({ changes: 0 })),
   getMcpSessionCounts: jest.fn(() => ({ total: 0, byAgent: {} })),
-  getMcpSessionCount: jest.fn(() => 0)
+  getMcpSessionCount: jest.fn(() => 0),
+
+  // Channel functions
+  updateChannel: jest.fn(),
+  getChannelByAgentId: jest.fn(() => null)
 }));
 
 // Mock hsyncManager
