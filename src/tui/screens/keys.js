@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { listApiKeys, createApiKey, deleteApiKey, setAgentEnabled } from '../../lib/db.js';
-import { MenuList, TextInput } from '../index.js';
+import { MenuList, TextInput } from '../helpers.js';
 
 const e = React.createElement;
 
