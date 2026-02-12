@@ -90,7 +90,7 @@ export function localizeScript() {
 }
 
 // Shared HTML head with common styles/scripts
-export function htmlHead(title, { includeSocket = false } = {}) {
+export function htmlHead(title, { includeSocket = false, includeMarkdown = false } = {}) {
   const safeTitle = escapeHtml(title);
   return `<!DOCTYPE html>
 <html>
@@ -101,6 +101,7 @@ export function htmlHead(title, { includeSocket = false } = {}) {
   <link rel="stylesheet" href="/public/style.css">
   <link rel="stylesheet" href="/public/mobile.css">
   ${includeSocket ? '<script src="/socket.io/socket.io.js"></script>' : ''}
+  ${includeMarkdown ? '<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script><script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>' : ''}
 </head>`;
 }
 
