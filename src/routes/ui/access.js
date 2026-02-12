@@ -88,13 +88,13 @@ function renderAccessPage(services, agents) {
           </td>
           <td>
             <label class="toggle">
-              <input type="checkbox" class="access-toggle" ${isAllowed ? 'checked' : ''}>
+              <input type="checkbox" class="access-toggle" ${isAllowed ? 'checked' : ''} autocomplete="off">
               <span class="toggle-slider"></span>
             </label>
           </td>
           <td>
             <label class="toggle ${!isAllowed ? 'disabled' : ''}">
-              <input type="checkbox" class="bypass-toggle" ${hasBypass ? 'checked' : ''} ${!isAllowed ? 'disabled' : ''}>
+              <input type="checkbox" class="bypass-toggle" ${hasBypass ? 'checked' : ''} ${!isAllowed ? 'disabled' : ''} autocomplete="off">
               <span class="toggle-slider bypass"></span>
             </label>
             ${hasBypass ? '<span class="bypass-badge">⚡ Bypass</span>' : ''}
