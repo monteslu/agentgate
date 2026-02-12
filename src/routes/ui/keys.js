@@ -27,7 +27,9 @@ router.get('/:id', (req, res, next) => {
   }
   const counts = getAgentDataCounts(agent.name);
   const serviceAccess = getAgentServiceAccess(agent.name);
-  res.send(renderAgentDetailPage(agent, counts, serviceAccess));
+  // Generate admin chat token if channel is enabled
+  const adminChatToken = agent.channel_enabled ? generateAdminChatToken(agent.channel_id) : null;
+  res.send(renderAgentDetailPage(agent, counts, serviceAccess, adminChatToken));
 });
 
 router.post('/create', async (req, res) => {
@@ -482,6 +484,54 @@ router.post('/:id/sessions/kill-all', async (req, res) => {
   res.json({ success: true, killed: result.killed });
 });
 
+// Admin chat token store (short-lived tokens for auto-connect)
+const adminChatTokens = new Map();
+const ADMIN_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
+
+function generateAdminChatToken(channelId) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expires = Date.now() + ADMIN_TOKEN_TTL;
+  adminChatTokens.set(token, { channelId, expires });
+  // Cleanup expired tokens periodically
+  if (adminChatTokens.size > 100) {
+    const now = Date.now();
+    for (const [k, v] of adminChatTokens) {
+      if (v.expires < now) adminChatTokens.delete(k);
+    }
+  }
+  return token;
+}
+
+function validateAdminChatToken(token, channelId) {
+  const entry = adminChatTokens.get(token);
+  if (!entry) return false;
+  if (entry.expires < Date.now()) {
+    adminChatTokens.delete(token);
+    return false;
+  }
+  if (entry.channelId !== channelId) return false;
+  adminChatTokens.delete(token); // One-time use
+  return true;
+}
+
+// Export for channel.js to use
+export { validateAdminChatToken };
+
+// Chat popout window
+router.get('/:id/chat', (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).send('Agent not found');
+  }
+  if (!agent.channel_enabled) {
+    return res.status(400).send('Channel not enabled for this agent');
+  }
+  // Generate one-time admin token for auto-connect
+  const adminToken = generateAdminChatToken(agent.channel_id);
+  res.send(renderChatPopout(agent, adminToken));
+});
+
 // Render function
 function renderKeysPage(keys, error = null, newKey = null) {
   const renderKeyRow = (k) => `
@@ -692,8 +742,315 @@ function renderAgentNotFound(id) {
 </html>`;
 }
 
-function renderAgentDetailPage(agent, counts, serviceAccess = []) {
-  return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
+// Shared chat script - fixes XSS, adds message limit, deduplicates code
+function getChatScript() {
+  return `
+    const MAX_MESSAGE_LENGTH = 10240; // 10KB limit
+
+    // Configure marked for safe rendering
+    if (typeof marked !== 'undefined') {
+      marked.setOptions({
+        breaks: true,
+        gfm: true,
+        headerIds: false,
+        mangle: false
+      });
+    }
+
+    // Safe markdown renderer using marked library with DOMPurify
+    function renderMarkdown(text) {
+      if (!text) return '';
+      
+      // Use marked if available, otherwise basic escaping
+      if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+        const html = marked.parse(text);
+        return DOMPurify.sanitize(html, {
+          ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr', 'del', 'span', 'div'],
+          ALLOWED_ATTR: ['href', 'target', 'rel', 'class'],
+          ALLOW_DATA_ATTR: false,
+          ADD_ATTR: ['target'],
+          FORCE_BODY: true,
+          // Only allow safe URL schemes
+          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\\-]+(?:[^a-z+.\\-:]|$))/i
+        });
+      }
+      
+      // Fallback: basic escaping
+      return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\\n/g, '<br>');
+    }
+
+    function createChatController(channelId, opts) {
+      opts = opts || {};
+      let ws = null;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 3;
+      
+      // Streaming state
+      let streamingContent = '';
+      let streamingMessageId = null;
+
+      const controller = {
+        onStatus: opts.onStatus || function() {},
+        onMessage: opts.onMessage || function() {},
+        onChunk: opts.onChunk || function() {},       // Streaming chunk
+        onStreamEnd: opts.onStreamEnd || function() {}, // Stream complete
+        onConnected: opts.onConnected || function() {},
+        onDisconnected: opts.onDisconnected || function() {},
+
+        connect: function(authKey, authType) {
+          if (ws) ws.close();
+          
+          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = protocol + '//' + location.host + '/channel/' + channelId;
+          
+          controller.onStatus('Connecting...', 'pending');
+          ws = new WebSocket(wsUrl);
+
+          ws.onopen = function() {
+            controller.onStatus('Authenticating...', 'pending');
+            const authMsg = { type: 'auth' };
+            if (authType === 'admin') {
+              authMsg.adminToken = authKey;
+            } else {
+              authMsg.key = authKey;
+            }
+            ws.send(JSON.stringify(authMsg));
+          };
+
+          ws.onmessage = function(e) {
+            try {
+              const msg = JSON.parse(e.data);
+              if (msg.type === 'auth') {
+                if (msg.success) {
+                  controller.onStatus('Connected', 'connected');
+                  reconnectAttempts = 0;
+                  controller.onConnected();
+                } else {
+                  controller.onStatus('Auth failed: ' + (msg.error || 'Invalid credentials'), 'error');
+                }
+              } else if (msg.type === 'chunk') {
+                // Streaming: accumulate chunks
+                const chunk = msg.content || msg.text || '';
+                streamingContent += chunk;
+                if (!streamingMessageId) {
+                  streamingMessageId = 'stream-' + Date.now();
+                }
+                controller.onChunk(streamingContent, streamingMessageId, msg.timestamp);
+              } else if (msg.type === 'done') {
+                // Streaming complete: finalize with full markdown render
+                const finalContent = msg.content || streamingContent;
+                controller.onStreamEnd(finalContent, streamingMessageId, msg.timestamp);
+                streamingContent = '';
+                streamingMessageId = null;
+              } else if (msg.type === 'message' || msg.type === 'response') {
+                // Non-streaming message
+                const content = msg.content || msg.text || msg.message || JSON.stringify(msg);
+                controller.onMessage('agent', content, msg.timestamp);
+              } else if (msg.type === 'error') {
+                controller.onMessage('agent', '⚠️ ' + (msg.error || msg.message || 'Unknown error'));
+              }
+            } catch (err) {
+              console.error('Chat message parse error:', err);
+            }
+          };
+
+          ws.onclose = function() {
+            controller.onStatus('Disconnected', 'error');
+            controller.onDisconnected();
+            // Reset streaming state on disconnect
+            streamingContent = '';
+            streamingMessageId = null;
+          };
+
+          ws.onerror = function() {
+            controller.onStatus('Connection error', 'error');
+          };
+        },
+
+        send: function(text) {
+          if (!text || !ws || ws.readyState !== WebSocket.OPEN) return false;
+          if (text.length > MAX_MESSAGE_LENGTH) {
+            controller.onMessage('system', '⚠️ Message too long (max ' + Math.round(MAX_MESSAGE_LENGTH/1024) + 'KB)');
+            return false;
+          }
+          ws.send(JSON.stringify({ type: 'send', content: text }));
+          return true;
+        },
+
+        close: function() {
+          if (ws) ws.close();
+        }
+      };
+
+      return controller;
+    }
+  `;
+}
+
+function renderChatPopout(agent, adminToken) {
+  const channelId = escapeHtml(agent.channel_id || '');
+  const agentName = escapeHtml(agent.name);
+  const safeAdminToken = escapeHtml(adminToken || '');
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat - ${agentName}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; height: 100vh; display: flex; flex-direction: column; }
+    .header { padding: 12px 16px; background: #1f2937; border-bottom: 1px solid #374151; display: flex; align-items: center; gap: 12px; }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .status { font-size: 12px; color: #6b7280; }
+    .status.connected { color: #34d399; }
+    .status.pending { color: #fbbf24; }
+    .status.error { color: #ef4444; }
+    #messages { flex: 1; overflow-y: auto; padding: 16px; font-family: monospace; font-size: 13px; }
+    .message { margin-bottom: 12px; }
+    .input-area { padding: 12px 16px; background: #1f2937; border-top: 1px solid #374151; display: flex; gap: 8px; }
+    .input-area input { flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px; outline: none; }
+    .input-area input:focus { border-color: #60a5fa; }
+    .input-area button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
+    .input-area button:hover { background: #2563eb; }
+    .input-area button:disabled { background: #4b5563; cursor: not-allowed; }
+    .streaming { opacity: 0.8; }
+    .streaming::after { content: '▊'; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+    /* Markdown styles */
+    #messages pre { background: #1f2937; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+    #messages pre code { background: none; padding: 0; }
+    #messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+    #messages th, #messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
+    #messages th { background: #1f2937; }
+    #messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
+    #messages a { color: #60a5fa; }
+    #messages ul, #messages ol { margin: 8px 0; padding-left: 24px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>💬 ${agentName}</h1>
+    <span id="status" class="status">Connecting...</span>
+  </div>
+  <div id="messages">
+    <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
+  </div>
+  <div class="input-area">
+    <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" disabled>
+    <button id="send-btn" disabled>Send</button>
+  </div>
+  <script>
+    ${getChatScript()}
+    
+    const channelId = '${channelId}';
+    const adminToken = '${safeAdminToken}';
+    
+    const statusEl = document.getElementById('status');
+    const messagesDiv = document.getElementById('messages');
+    const chatInput = document.getElementById('chat-input');
+    const sendBtn = document.getElementById('send-btn');
+
+    function addMessage(role, content, timestamp) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+      const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
+      const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
+      div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
+      messagesDiv.appendChild(div);
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Handle streaming chunks - update or create streaming message div
+    function handleChunk(content, messageId, timestamp) {
+      let div = document.getElementById(messageId);
+      if (!div) {
+        div = document.createElement('div');
+        div.id = messageId;
+        div.className = 'message streaming';
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+        div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="content" style="color:#e5e7eb;"></div>';
+        messagesDiv.appendChild(div);
+      }
+      // Update content with partial markdown (basic escaping during stream)
+      const contentDiv = div.querySelector('.content');
+      if (contentDiv) {
+        contentDiv.innerHTML = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>');
+      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    // Handle stream end - finalize with full markdown render
+    function handleStreamEnd(content, messageId, timestamp) {
+      let div = document.getElementById(messageId);
+      if (div) {
+        div.className = 'message'; // Remove streaming class
+        const contentDiv = div.querySelector('.content');
+        if (contentDiv) {
+          contentDiv.innerHTML = renderMarkdown(content);
+        }
+      } else {
+        // Fallback: create new message if no streaming div exists
+        addMessage('agent', content, timestamp);
+      }
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    const chat = createChatController(channelId, {
+      onStatus: function(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = 'status ' + (cls || '');
+      },
+      onMessage: addMessage,
+      onChunk: handleChunk,
+      onStreamEnd: handleStreamEnd,
+      onConnected: function() {
+        messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+        chatInput.focus();
+      },
+      onDisconnected: function() {
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
+      }
+    });
+
+    function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      if (chat.send(text)) {
+        addMessage('user', text);
+        chatInput.value = '';
+      }
+    }
+
+    sendBtn.onclick = sendMessage;
+    chatInput.onkeydown = function(e) { 
+      if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        sendMessage(); 
+      } 
+    };
+
+    // Auto-connect with admin token
+    chat.connect(adminToken, 'admin');
+  </script>
+</body>
+</html>`;
+}
+
+function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken = null) {
+  return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true, includeMarkdown: agent.channel_enabled })}
 <style>
   .agent-header {
     display: flex;
@@ -770,6 +1127,18 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     white-space: pre-wrap;
     font-size: 14px;
   }
+
+  /* Chat markdown styles */
+  #chat-messages pre { background: #111827; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+  #chat-messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
+  #chat-messages pre code { background: none; padding: 0; }
+  #chat-messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
+  #chat-messages th, #chat-messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
+  #chat-messages th { background: #111827; }
+  #chat-messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
+  #chat-messages a { color: #60a5fa; }
+  #chat-messages ul, #chat-messages ol { margin: 8px 0; padding-left: 24px; }
+  #chat-messages h1, #chat-messages h2, #chat-messages h3, #chat-messages h4 { margin: 12px 0 8px 0; }
 
   .config-card {
     background: rgba(0,0,0,0.15);
@@ -1011,6 +1380,26 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       </div>
     </div>
   </div>
+
+  ${agent.channel_enabled ? `
+  <div class="card" id="chat-card">
+    <div class="detail-section">
+      <h3 style="display: flex; align-items: center;">
+        💬 Admin Chat
+        <span id="chat-status" style="margin-left: 12px; font-size: 12px; font-weight: normal; color: #fbbf24;">Connecting...</span>
+        <button type="button" class="btn-secondary btn-sm" id="chat-popout-btn" style="margin-left: auto; font-size: 12px;">⧉ Popout</button>
+      </h3>
+      <div id="chat-messages" style="height: 300px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">
+        <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
+      </div>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" style="flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px;" disabled>
+        <button type="button" class="btn-primary" id="chat-send-btn" disabled>Send</button>
+      </div>
+    </div>
+  </div>
+  <script>const ADMIN_CHAT_TOKEN = '${escapeHtml(adminChatToken || '')}';</script>
+  ` : ''}
 
   <div class="card">
     <div class="detail-section">
@@ -1363,6 +1752,107 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       navigator.clipboard.writeText(document.getElementById('channel-key-value').textContent);
       showToast('Copied!', 'success');
     }
+
+    // Chat functionality (uses shared getChatScript from server)
+    ${agent.channel_enabled ? `
+    ${getChatScript()}
+    (function() {
+      const channelId = '${escapeHtml(agent.channel_id || '')}';
+      const adminToken = ADMIN_CHAT_TOKEN;
+      
+      const messagesDiv = document.getElementById('chat-messages');
+      const chatInput = document.getElementById('chat-input');
+      const sendBtn = document.getElementById('chat-send-btn');
+      const statusEl = document.getElementById('chat-status');
+      const popoutBtn = document.getElementById('chat-popout-btn');
+
+      function addMessage(role, content, timestamp) {
+        const div = document.createElement('div');
+        div.style.marginBottom = '12px';
+        const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+        const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
+        const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
+        div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
+        messagesDiv.appendChild(div);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      // Handle streaming chunks - progressive rendering
+      function handleChunk(content, messageId, timestamp) {
+        let div = document.getElementById(messageId);
+        if (!div) {
+          div = document.createElement('div');
+          div.id = messageId;
+          div.style.marginBottom = '12px';
+          const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+          div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="stream-content" style="color:#e5e7eb;"></div><span style="opacity:0.5;">▊</span>';
+          messagesDiv.appendChild(div);
+        }
+        const contentDiv = div.querySelector('.stream-content');
+        if (contentDiv) {
+          contentDiv.innerHTML = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\\n/g, '<br>');
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      // Handle stream end - finalize with full markdown
+      function handleStreamEnd(content, messageId, timestamp) {
+        let div = document.getElementById(messageId);
+        if (div) {
+          const cursor = div.querySelector('span');
+          if (cursor) cursor.remove();
+          const contentDiv = div.querySelector('.stream-content');
+          if (contentDiv) contentDiv.innerHTML = renderMarkdown(content);
+        } else {
+          addMessage('agent', content, timestamp);
+        }
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+      }
+
+      const chat = createChatController(channelId, {
+        onStatus: function(text, cls) {
+          statusEl.textContent = text;
+          const colors = { connected: '#34d399', pending: '#fbbf24', error: '#ef4444' };
+          statusEl.style.color = colors[cls] || '#6b7280';
+        },
+        onMessage: addMessage,
+        onChunk: handleChunk,
+        onStreamEnd: handleStreamEnd,
+        onConnected: function() {
+          messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+          chatInput.disabled = false;
+          sendBtn.disabled = false;
+          chatInput.focus();
+        },
+        onDisconnected: function() {
+          chatInput.disabled = true;
+          sendBtn.disabled = true;
+        }
+      });
+
+      function sendMessage() {
+        const text = chatInput.value.trim();
+        if (!text) return;
+        if (chat.send(text)) {
+          addMessage('user', text);
+          chatInput.value = '';
+        }
+      }
+
+      sendBtn.onclick = sendMessage;
+      chatInput.onkeydown = function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+      };
+
+      popoutBtn.onclick = function() {
+        const popoutUrl = '/ui/keys/' + agentId + '/chat';
+        window.open(popoutUrl, 'chat-' + agentId, 'width=500,height=600,menubar=no,toolbar=no');
+      };
+
+      // Auto-connect with admin token on page load
+      chat.connect(adminToken, 'admin');
+    })();
+    ` : ''}
 
     // Sessions (event delegation for kill buttons — no inline onclick, addresses XSS concern)
     async function loadSessions() {
