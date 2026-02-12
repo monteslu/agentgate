@@ -272,14 +272,18 @@ function buildHeaders(service, token, customHeaders = {}) {
 }
 
 // Helper to update status and send notification
-function finalizeEntry(entryId, status, results) {
+// Fix for #218: await notification to ensure DB is updated before returning
+async function finalizeEntry(entryId, status, results) {
   updateQueueStatus(entryId, status, { results });
 
-  // Send notification to Clawdbot (async, don't block)
+  // Send notification to agent and wait for completion
+  // This ensures notification status is recorded in DB before response is returned
   const updatedEntry = getQueueEntry(entryId);
-  notifyAgentQueueStatus(updatedEntry).catch(err => {
+  try {
+    await notifyAgentQueueStatus(updatedEntry);
+  } catch (err) {
     console.error('[agentNotifier] Failed to notify agent:', err.message);
-  });
+  }
 }
 
 // Execute a single queued entry (batch of requests)
@@ -302,7 +306,7 @@ export async function executeQueueEntry(entry) {
           ok: false,
           error: `Failed to get access token for ${service}/${account_name}`
         });
-        finalizeEntry(entry.id, 'failed', results);
+        await finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -314,7 +318,7 @@ export async function executeQueueEntry(entry) {
           ok: false,
           error: `Unknown service or invalid configuration: ${service}`
         });
-        finalizeEntry(entry.id, 'failed', results);
+        await finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -358,7 +362,7 @@ export async function executeQueueEntry(entry) {
 
       // Stop on first failure
       if (!response.ok) {
-        finalizeEntry(entry.id, 'failed', results);
+        await finalizeEntry(entry.id, 'failed', results);
         return { success: false, results };
       }
 
@@ -368,12 +372,12 @@ export async function executeQueueEntry(entry) {
         ok: false,
         error: err.message
       });
-      finalizeEntry(entry.id, 'failed', results);
+      await finalizeEntry(entry.id, 'failed', results);
       return { success: false, results };
     }
   }
 
   // All requests succeeded
-  finalizeEntry(entry.id, 'completed', results);
+  await finalizeEntry(entry.id, 'completed', results);
   return { success: true, results };
 }
