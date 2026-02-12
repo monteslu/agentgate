@@ -72,7 +72,7 @@ router.get('/', (req, res) => {
         ${agents.map(a => `<option value="${escapeHtml(a)}" ${agent === a ? 'selected' : ''}>${escapeHtml(a)}</option>`).join('')}
       </select>
       <input type="text" name="keyword" placeholder="Filter by keyword..." value="${escapeHtml(keyword || '')}"
-        style="padding: 8px 12px; background: #1e1e1e; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; width: 200px;">
+        style="padding: 8px 12px; background: #1e1e1e; border: 1px solid #333; border-radius: 4px; color: #e0e0e0; width: 200px;" autocomplete="off">
       <button type="submit" class="btn btn-primary">Filter</button>
       ${agent || keyword ? '<a href="/ui/mementos" class="btn btn-secondary">Clear</a>' : ''}
     </form>
