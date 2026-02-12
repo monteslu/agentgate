@@ -12,6 +12,15 @@ import { escapeHtml, renderMarkdownLinks, statusBadge, autoApprovedBadge, format
 
 const router = Router();
 
+// Allowed reaction emojis (must match UI picker)
+const ALLOWED_REACTION_EMOJIS = new Set(['❤️', '🔥', '👏', '⭐', '👎', '😠', '💀']);
+
+// Validate and sanitize reaction emoji
+function validateReactionEmoji(emoji) {
+  if (!emoji) return null;
+  return ALLOWED_REACTION_EMOJIS.has(emoji) ? emoji : null;
+}
+
 // Write Queue Management
 router.get('/', (req, res) => {
   const filter = req.query.filter || 'pending';
@@ -46,7 +55,7 @@ router.post('/:id/approve', async (req, res) => {
       : res.status(400).send('Can only approve pending requests');
   }
 
-  updateQueueStatus(id, 'approved', { reaction_emoji: emoji || null });
+  updateQueueStatus(id, 'approved', { reaction_emoji: validateReactionEmoji(emoji) });
 
   try {
     await executeQueueEntry(entry);
@@ -89,7 +98,7 @@ router.post('/:id/reject', async (req, res) => {
       : res.status(400).send('Can only reject pending requests');
   }
 
-  updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided', reaction_emoji: emoji || null });
+  updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided', reaction_emoji: validateReactionEmoji(emoji) });
 
   const updated = getQueueEntry(id);
   notifyAgentQueueStatus(updated).catch(err => {
