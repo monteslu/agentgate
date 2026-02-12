@@ -279,7 +279,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       actions = `
         <div class="message-actions">
           <button type="button" class="btn-primary btn-sm" onclick="approveMessage('${msg.id}')">Approve</button>
-          <input type="text" id="reason-${msg.id}" placeholder="Rejection reason (optional)" class="reject-input" style="width: 200px;">
+          <input type="text" id="reason-${msg.id}" placeholder="Rejection reason (optional)" class="reject-input" style="width: 200px;" autocomplete="off">
           <button type="button" class="btn-danger btn-sm" onclick="rejectMessage('${msg.id}')">Reject</button>
         </div>
       `;
@@ -362,7 +362,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     </h3>
     <p class="help" style="margin-bottom: 16px;">Send a message to all agents with webhooks configured.</p>
     <form method="POST" action="/ui/messages/broadcast" id="broadcast-form">
-      <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" style="width: 100%; margin-bottom: 12px; padding: 12px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #f3f4f6; font-family: inherit; resize: vertical;" required></textarea>
+      <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" style="width: 100%; margin-bottom: 12px; padding: 12px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #f3f4f6; font-family: inherit; resize: vertical;" required autocomplete="off"></textarea>
       <div style="display: flex; gap: 12px; align-items: center;">
         <button type="submit" class="btn-primary" id="broadcast-btn">Send Broadcast</button>
         <span id="broadcast-status" class="help" style="margin: 0;"></span>
