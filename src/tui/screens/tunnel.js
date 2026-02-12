@@ -4,7 +4,7 @@ import { Box, Text, useInput } from 'ink';
 import { getSetting, setSetting } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl } from '../../lib/hsyncManager.js';
 import { hasCloudflared, startCloudflared, stopCloudflared } from '../../lib/cloudflareManager.js';
-import { MenuList, TextInput } from '../index.js';
+import { MenuList, TextInput } from '../helpers.js';
 
 const e = React.createElement;
 const PORT = process.env.PORT || 3050;
@@ -148,6 +148,7 @@ function CloudflareConfigScreen({ onDone }) {
 export function TunnelScreen({ onBack }) {
   const [sub, setSub] = useState('menu');
   const [selected, setSelected] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const hsync = getSetting('hsync') || { enabled: false };
   const cf = getSetting('cloudflare_tunnel') || { enabled: false };
@@ -172,10 +173,13 @@ export function TunnelScreen({ onBack }) {
       if (item.name === 'disable') {
         const h = getSetting('hsync');
         const c = getSetting('cloudflare_tunnel');
-        if (h?.enabled) { setSetting('hsync', { ...h, enabled: false }); disconnectHsync(); }
-        if (c?.enabled) { setSetting('cloudflare_tunnel', { ...c, enabled: false }); stopCloudflared(); }
-        setSub('_refresh');
-        setTimeout(() => setSub('menu'), 0);
+        if (h?.enabled || c?.enabled) {
+          (async () => {
+            if (h?.enabled) { setSetting('hsync', { ...h, enabled: false }); await disconnectHsync(); }
+            if (c?.enabled) { setSetting('cloudflare_tunnel', { ...c, enabled: false }); stopCloudflared(); }
+            setRefreshKey(k => k + 1);
+          })();
+        }
         return;
       }
       setSub(item.name);
@@ -190,7 +194,7 @@ export function TunnelScreen({ onBack }) {
   if (sub === 'cloudflare') return e(CloudflareConfigScreen, { onDone: goMenu });
 
   return e(Box, { flexDirection: 'column', padding: 1 },
-    e(TunnelStatus),
+    e(TunnelStatus, { key: refreshKey }),
     e(Text, null, ''),
     e(Text, { bold: true, color: 'yellow' }, 'Remote Access'),
     e(Text, null, ''),
