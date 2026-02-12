@@ -30,6 +30,7 @@ router.get('/', (req, res) => {
 
 router.post('/:id/approve', async (req, res) => {
   const { id } = req.params;
+  const { emoji } = req.body;
   const entry = getQueueEntry(id);
   const wantsJson = req.headers.accept?.includes('application/json');
 
@@ -45,7 +46,7 @@ router.post('/:id/approve', async (req, res) => {
       : res.status(400).send('Can only approve pending requests');
   }
 
-  updateQueueStatus(id, 'approved');
+  updateQueueStatus(id, 'approved', { reaction_emoji: emoji || null });
 
   try {
     await executeQueueEntry(entry);
@@ -72,7 +73,7 @@ router.post('/:id/approve', async (req, res) => {
 
 router.post('/:id/reject', async (req, res) => {
   const { id } = req.params;
-  const { reason } = req.body;
+  const { reason, emoji } = req.body;
   const wantsJson = req.headers.accept?.includes('application/json');
 
   const entry = getQueueEntry(id);
@@ -88,7 +89,7 @@ router.post('/:id/reject', async (req, res) => {
       : res.status(400).send('Can only reject pending requests');
   }
 
-  updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided' });
+  updateQueueStatus(id, 'rejected', { rejection_reason: reason || 'No reason provided', reaction_emoji: emoji || null });
 
   const updated = getQueueEntry(id);
   notifyAgentQueueStatus(updated).catch(err => {
@@ -211,9 +212,24 @@ function renderQueuePage(entries, filter, counts = {}) {
     if (entry.status === 'pending') {
       actions = `
         <div class="queue-actions" id="actions-${entry.id}">
-          <button type="button" class="btn-primary btn-sm" onclick="approveEntry('${entry.id}')">Approve</button>
-          <input type="text" id="reason-${entry.id}" placeholder="Rejection reason (optional)" class="reject-input">
-          <button type="button" class="btn-danger btn-sm" onclick="rejectEntry('${entry.id}')">Reject</button>
+          <div class="action-row">
+            <button type="button" class="btn-primary btn-sm" onclick="approveEntry('${entry.id}')">Approve</button>
+            <div class="emoji-picker approve-emojis">
+              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '❤️')" title="Approve with love">❤️</button>
+              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '🔥')" title="Approve - fire">🔥</button>
+              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '👏')" title="Approve - applause">👏</button>
+              <button type="button" class="emoji-btn" onclick="approveEntry('${entry.id}', '⭐')" title="Approve - star">⭐</button>
+            </div>
+          </div>
+          <div class="action-row">
+            <input type="text" id="reason-${entry.id}" placeholder="Rejection reason (optional)" class="reject-input">
+            <button type="button" class="btn-danger btn-sm" onclick="rejectEntry('${entry.id}')">Reject</button>
+            <div class="emoji-picker reject-emojis">
+              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '👎')" title="Reject - thumbs down">👎</button>
+              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '😠')" title="Reject - angry">😠</button>
+              <button type="button" class="emoji-btn" onclick="rejectEntry('${entry.id}', '💀')" title="Reject - skull">💀</button>
+            </div>
+          </div>
         </div>
       `;
     }
@@ -260,7 +276,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
-            <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}</span>
+            <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}${entry.reaction_emoji ? `<span class="reaction-emoji">${escapeHtml(entry.reaction_emoji)}</span>` : ''}</span>
             ${warningBadge}
           </div>
           <div style="display: flex; align-items: center; gap: 12px;">
@@ -345,6 +361,14 @@ function renderQueuePage(entries, filter, counts = {}) {
     .warning-message { color: #e5e7eb; font-size: 14px; line-height: 1.5; }
     .queue-entry-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: right; }
     .entry-id { color: #6b7280; font-size: 11px; font-family: monospace; }
+    .queue-actions { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .action-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .emoji-picker { display: flex; gap: 4px; }
+    .emoji-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 4px 8px; font-size: 16px; cursor: pointer; transition: all 0.2s ease; }
+    .emoji-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.25); transform: scale(1.1); }
+    .approve-emojis .emoji-btn:hover { background: rgba(34, 197, 94, 0.2); border-color: rgba(34, 197, 94, 0.4); }
+    .reject-emojis .emoji-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
+    .reaction-emoji { font-size: 18px; margin-left: 6px; }
   </style>
 <body>
   ${navHeader()}
@@ -453,12 +477,17 @@ function renderQueuePage(entries, filter, counts = {}) {
       });
     }
 
-    async function approveEntry(id) {
+    async function approveEntry(id, emoji = null) {
       const btn = event.target;
       btn.disabled = true;
+      const originalText = btn.textContent;
       btn.textContent = 'Approving...';
       try {
-        const res = await fetch('/ui/queue/' + id + '/approve', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const res = await fetch('/ui/queue/' + id + '/approve', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emoji })
+        });
         const data = await res.json();
         if (data.success) {
           updateEntryStatus(id, data.entry);
@@ -466,26 +495,27 @@ function renderQueuePage(entries, filter, counts = {}) {
         } else {
           alert(data.error || 'Failed to approve');
           btn.disabled = false;
-          btn.textContent = 'Approve';
+          btn.textContent = originalText;
         }
       } catch (err) {
         alert('Error: ' + err.message);
         btn.disabled = false;
-        btn.textContent = 'Approve';
+        btn.textContent = originalText;
       }
     }
 
-    async function rejectEntry(id) {
+    async function rejectEntry(id, emoji = null) {
       const btn = event.target;
       const reasonInput = document.getElementById('reason-' + id);
       const reason = reasonInput ? reasonInput.value : '';
       btn.disabled = true;
+      const originalText = btn.textContent;
       btn.textContent = 'Rejecting...';
       try {
         const res = await fetch('/ui/queue/' + id + '/reject', {
           method: 'POST',
           headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason })
+          body: JSON.stringify({ reason, emoji })
         });
         const data = await res.json();
         if (data.success) {
@@ -494,12 +524,12 @@ function renderQueuePage(entries, filter, counts = {}) {
         } else {
           alert(data.error || 'Failed to reject');
           btn.disabled = false;
-          btn.textContent = 'Reject';
+          btn.textContent = originalText;
         }
       } catch (err) {
         alert('Error: ' + err.message);
         btn.disabled = false;
-        btn.textContent = 'Reject';
+        btn.textContent = originalText;
       }
     }
 
