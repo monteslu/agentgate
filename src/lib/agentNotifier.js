@@ -186,8 +186,16 @@ export async function notifyAgentQueueWarning(entry, warningAgent, warningMessag
 }
 
 // Notify agent about a new message (delivered to recipient)
+// Option B from #203: adds response_expected flag to prompt agent response
+// Option C from #203: replies don't trigger webhooks (prevents loops, picked up via polling)
 export async function notifyAgentMessage(message) {
   const agentName = message.to_agent;
+
+  // Don't webhook for replies - prevents token-burning loops
+  // Replies are picked up on next heartbeat/inbox check
+  if (message.reply_to_id) {
+    return { success: true, skipped: true, reason: 'Reply messages do not trigger webhooks' };
+  }
 
   const agent = getApiKeyByName(agentName);
   if (!agent?.webhook_url) {
@@ -203,6 +211,9 @@ export async function notifyAgentMessage(message) {
       created_at: message.created_at,
       delivered_at: message.delivered_at
     },
+    // Option B: signal that this message expects a response
+    response_expected: true,
+    reply_to: message.from_agent,
     // Human-readable for Clawdbot-style gateways
     text: `💬 [agentgate] Message from ${message.from_agent}:\n${message.message.substring(0, 500)}`,
     mode: 'now'
