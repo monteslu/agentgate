@@ -1,7 +1,5 @@
 // Tunnel configuration screen for TUI
-// Supports hsync (Node-native) and Cloudflare Tunnel (cloudflared binary)
-
-import { selectPrompt, inputPrompt, passwordPrompt, asyncAction, handleCancel } from '../helpers.js';
+import { term, selectPrompt, inputPrompt, passwordPrompt, asyncAction, handleCancel } from '../helpers.js';
 import { getSetting, setSetting } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl } from '../../lib/hsyncManager.js';
 import { hasCloudflared, startCloudflared, stopCloudflared } from '../../lib/cloudflareManager.js';
@@ -16,7 +14,7 @@ async function testLocal() {
     });
     return true;
   } catch {
-    console.log('  AgentGate does not appear to be running locally.\n');
+    term('  AgentGate does not appear to be running locally.\n\n');
     return false;
   }
 }
@@ -36,9 +34,9 @@ async function testPublicUrl(url) {
     return true;
   } catch (err) {
     if (err.message === 'timeout') {
-      console.log('  ❌ Timeout — tunnel may not be connected\n');
+      term.red('  ❌ Timeout — tunnel may not be connected\n\n');
     } else {
-      console.log(`  ❌ Failed: ${err.message}\n`);
+      term.red(`  ❌ Failed: ${err.message}\n\n`);
     }
     return false;
   }
@@ -52,15 +50,15 @@ function getCurrentConfig() {
 }
 
 function showCurrentStatus(config) {
-  console.log('\n  Current tunnel configuration:');
+  term('\n  ').bold('Current tunnel configuration:')('\n');
   if (config.hsync?.enabled) {
-    console.log(`  ✅ hsync — ${config.hsync.url || 'configured'}`);
+    term.green(`  ✅ hsync — ${config.hsync.url || 'configured'}\n`);
   } else if (config.cloudflare?.enabled) {
-    console.log('  ✅ Cloudflare Tunnel — configured');
+    term.green('  ✅ Cloudflare Tunnel — configured\n');
   } else {
-    console.log('  ⚠  No tunnel configured — AgentGate is only accessible locally');
+    term.yellow('  ⚠  No tunnel configured — AgentGate is only accessible locally\n');
   }
-  console.log();
+  term('\n');
 }
 
 async function hsyncConfigScreen(current) {
@@ -78,22 +76,19 @@ async function hsyncConfigScreen(current) {
     };
 
     setSetting('hsync', config);
-    // Disable cloudflare if switching
     const cf = getSetting('cloudflare_tunnel');
     if (cf?.enabled) {
       setSetting('cloudflare_tunnel', { ...cf, enabled: false });
       stopCloudflared();
     }
 
-    console.log('\n✅ hsync configuration saved\n');
+    term.green('\n  ✅ hsync configuration saved\n\n');
 
-    // Connect immediately
     await asyncAction('Connecting hsync...', async () => {
       await disconnectHsync();
       await connectHsync(PORT);
     });
 
-    // Auto-test through the public URL
     const publicUrl = getHsyncUrl() || url;
     if (publicUrl) {
       await testPublicUrl(publicUrl);
@@ -109,18 +104,18 @@ async function hsyncConfigScreen(current) {
 async function cloudflareConfigScreen() {
   try {
     if (!hasCloudflared()) {
-      console.log('\n  ⚠  cloudflared binary not found in PATH');
-      console.log('  Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/');
-      console.log('  Docker users: cloudflared is included in the agentgate image.\n');
+      term.yellow('\n  ⚠  cloudflared binary not found in PATH\n');
+      term('  Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/\n');
+      term('  Docker users: cloudflared is included in the agentgate image.\n\n');
       return null;
     }
 
-    console.log('\n  Note: Cloudflare Tunnels require your own domain on Cloudflare.');
-    console.log('  You need a public hostname configured in the Cloudflare dashboard.\n');
+    term('\n  Note: Cloudflare Tunnels require your own domain on Cloudflare.\n');
+    term('  You need a public hostname configured in the Cloudflare dashboard.\n\n');
 
     const token = await passwordPrompt('Cloudflare Tunnel token');
     if (!token) {
-      console.log('Token cannot be empty.\n');
+      term('  Token cannot be empty.\n\n');
       return null;
     }
 
@@ -130,19 +125,16 @@ async function cloudflareConfigScreen() {
     };
 
     setSetting('cloudflare_tunnel', config);
-    // Disable hsync if switching
     const hsync = getSetting('hsync');
     if (hsync?.enabled) {
       setSetting('hsync', { ...hsync, enabled: false });
       await disconnectHsync();
     }
 
-    console.log('\n✅ Cloudflare Tunnel configuration saved\n');
+    term.green('\n  ✅ Cloudflare Tunnel configuration saved\n\n');
 
-    // Start immediately
     await asyncAction('Starting cloudflared...', async () => {
       startCloudflared();
-      // Give it a moment to connect
       await new Promise(resolve => setTimeout(resolve, 3000));
     });
 
@@ -170,7 +162,7 @@ async function disableTunnel() {
     setSetting('cloudflare_tunnel', { ...cf, enabled: false });
     stopCloudflared();
   }
-  console.log('\n✅ Tunnel disabled\n');
+  term.green('\n  ✅ Tunnel disabled\n\n');
 }
 
 export async function tunnelScreen() {
@@ -178,7 +170,6 @@ export async function tunnelScreen() {
     const config = getCurrentConfig();
     showCurrentStatus(config);
 
-    // Quick local health check first
     await testLocal();
 
     const choices = [
@@ -186,7 +177,6 @@ export async function tunnelScreen() {
       { name: 'cloudflare', message: 'Configure Cloudflare Tunnel' }
     ];
 
-    // Add test option if a tunnel is configured
     if (config.hsync?.enabled || config.cloudflare?.enabled) {
       choices.push({ name: 'test', message: 'Test connection' });
     }
@@ -215,6 +205,6 @@ export async function tunnelScreen() {
     }
   } catch (err) {
     if (handleCancel(err)) return;
-    console.error('Error:', err.message);
+    term.red(`  Error: ${err.message}\n`);
   }
 }
