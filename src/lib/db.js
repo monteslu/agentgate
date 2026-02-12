@@ -455,6 +455,22 @@ try {
   }
 }
 
+// Migrate agent_messages table to add reply_to_id column (for reply tracking)
+try {
+  const msgInfo = db.prepare('PRAGMA table_info(agent_messages)').all();
+  const hasReplyTo = msgInfo.some(col => col.name === 'reply_to_id');
+
+  if (msgInfo.length > 0 && !hasReplyTo) {
+    console.log('Migrating agent_messages table to add reply_to_id column...');
+    db.exec('ALTER TABLE agent_messages ADD COLUMN reply_to_id INTEGER REFERENCES agent_messages(id);');
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating agent_messages reply_to_id:', err.message);
+  }
+}
+
 // Initialize api_keys table with migration support for old schema
 // Schema evolution:
 // v1: id, name, key, created_at
@@ -1097,7 +1113,7 @@ export function setMessagingMode(mode) {
   setSetting('agent_messaging', { mode });
 }
 
-export function createAgentMessage(fromAgent, toAgent, message) {
+export function createAgentMessage(fromAgent, toAgent, message, { replyToId = null } = {}) {
   const mode = getMessagingMode();
 
   if (mode === 'off') {
@@ -1109,11 +1125,11 @@ export function createAgentMessage(fromAgent, toAgent, message) {
   const deliveredAt = mode === 'open' ? new Date().toISOString() : null;
 
   const result = db.prepare(`
-    INSERT INTO agent_messages (from_agent, to_agent, message, status, delivered_at)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(fromAgent, toAgent, message, status, deliveredAt);
+    INSERT INTO agent_messages (from_agent, to_agent, message, status, delivered_at, reply_to_id)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(fromAgent, toAgent, message, status, deliveredAt, replyToId);
 
-  return { id: Number(result.lastInsertRowid), status };
+  return { id: Number(result.lastInsertRowid), status, isReply: !!replyToId };
 }
 
 export function getAgentMessage(id) {
