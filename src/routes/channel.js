@@ -19,6 +19,12 @@ import http from 'http';
 import https from 'https';
 import { getChannel, markChannelConnected } from '../lib/db.js';
 
+// Admin token validation is injected at runtime to avoid circular imports
+let validateAdminChatToken = null;
+export function setAdminTokenValidator(fn) {
+  validateAdminChatToken = fn;
+}
+
 // Configuration
 const AUTH_TIMEOUT_MS = 30000;  // 30 seconds to authenticate
 const MAX_AUTH_ATTEMPTS = 3;    // Max failed auth attempts before disconnect
@@ -233,12 +239,25 @@ function completeHandshakeAndWaitForAuth(channel, req, socket) {
       const firstMsg = messages[0];
       try {
         const parsed = JSON.parse(firstMsg);
-        if (parsed.type === 'auth' && parsed.key) {
-          const valid = await verifyChannelKey(channel, parsed.key);
+        if (parsed.type === 'auth') {
+          let valid = false;
+          let authMethod = '';
+          
+          // Check for admin token first (one-time tokens from admin UI)
+          if (parsed.adminToken && validateAdminChatToken) {
+            valid = validateAdminChatToken(parsed.adminToken, channelId);
+            authMethod = 'admin_token';
+          }
+          // Fall back to channel key
+          else if (parsed.key) {
+            valid = await verifyChannelKey(channel, parsed.key);
+            authMethod = 'channel_key';
+          }
+          
           if (valid) {
             clearTimeout(authTimeout);
             authenticated = true;
-            channelLog(channelId, 'auth_success', 'via message');
+            channelLog(channelId, 'auth_success', `via ${authMethod}`);
             socket.write(createWebSocketFrame(JSON.stringify({ type: 'auth', success: true })));
             gatewaySocket = await connectToGatewayFilteredInternal(channel, socket);
             markChannelConnected(channel.id);
@@ -258,7 +277,7 @@ function completeHandshakeAndWaitForAuth(channel, req, socket) {
               socket.write(createWebSocketFrame(JSON.stringify({ 
                 type: 'auth', 
                 success: false, 
-                error: 'Invalid key',
+                error: 'Invalid credentials',
                 attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts
               })));
               // Clear buffer to allow retry
