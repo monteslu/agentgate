@@ -653,7 +653,7 @@ export function getApiKeyByName(name) {
 }
 
 export function getApiKeyById(id) {
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at FROM api_keys WHERE id = ?').get(id);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at, channel_enabled, channel_id, channel_last_connected FROM api_keys WHERE id = ?').get(id);
 }
 
 // Get counts of all data associated with an agent (for delete warning)

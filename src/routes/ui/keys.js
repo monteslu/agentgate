@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions } from '../../lib/db.js';
+import crypto from 'crypto';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel, disableChannel } from '../../lib/db.js';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -387,6 +388,34 @@ router.post('/:id/regenerate-proxy', (req, res) => {
 
   const newProxyId = regenerateProxyId(id);
   res.json({ success: true, proxy_id: newProxyId });
+});
+
+// Channel WebSocket management
+router.post('/:id/channel', async (req, res) => {
+  const { id } = req.params;
+  const { enabled } = req.body;
+  const agent = getApiKeyById(id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+
+  if (enabled) {
+    const channelKey = crypto.randomBytes(24).toString('base64url');
+    const result = await updateChannel(id, true, channelKey);
+    res.json({ success: true, channel_id: result.channelId, channel_key: channelKey });
+  } else {
+    disableChannel(id);
+    res.json({ success: true, disabled: true });
+  }
+});
+
+router.post('/:id/channel/regenerate', async (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  if (!agent.channel_enabled) return res.status(400).json({ error: 'Channel not enabled' });
+
+  const channelKey = crypto.randomBytes(24).toString('base64url');
+  const result = await updateChannel(id, true, channelKey);
+  res.json({ success: true, channel_id: result.channelId, channel_key: channelKey });
 });
 
 // Sessions routes for agent detail page
@@ -946,6 +975,45 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
 
   <div class="card">
     <div class="detail-section">
+      <h3>Channel WebSocket</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.channel_enabled ? 'active' : 'inactive'}"></span> Channel</h4>
+        ${agent.channel_enabled ? `
+          <div class="detail-row">
+            <span class="label">Channel ID</span>
+            <span class="value" style="font-size: 12px; word-break: break-all;">${escapeHtml(agent.channel_id || '')}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">WebSocket URL</span>
+            <span class="value" style="font-size: 12px; word-break: break-all;">ws[s]://&lt;host&gt;/channel/${escapeHtml(agent.channel_id || '')}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Last Connected</span>
+            <span class="value ${agent.channel_last_connected ? '' : 'muted'}">${agent.channel_last_connected ? formatDate(agent.channel_last_connected) : 'Never'}</span>
+          </div>
+          <div id="channel-key-display" style="display: none;">
+            <div class="proxy-url-box">
+              <code id="channel-key-value"></code>
+              <button type="button" class="btn-copy-sm" onclick="copyChannelKey()">Copy</button>
+            </div>
+            <p class="help-text" style="color: #fbbf24;">⚠️ Save this key — it won't be shown again.</p>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="btn-secondary" id="channel-regen-btn">🔑 Regenerate Key</button>
+            <button type="button" class="btn-danger btn-sm" id="channel-disable-btn">Disable</button>
+          </div>
+        ` : `
+          <p class="value muted">Not enabled. Channel provides a filtered WebSocket endpoint for chat clients.</p>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="channel-enable-btn">Enable Channel</button>
+          </div>
+        `}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
       <h3>MCP Sessions</h3>
       <div id="sessions-container">
         <p style="color: #9ca3af;">Loading sessions...</p>
@@ -1241,6 +1309,59 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       }
       const res = await fetch('/ui/keys/' + agentId, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
       if ((await res.json()).success) location.href = '/ui/keys';
+    }
+
+    // Channel WebSocket
+    ${agent.channel_enabled ? `
+    document.getElementById('channel-regen-btn').onclick = async function() {
+      if (!confirm('Regenerate channel key? The old key will stop working immediately.')) return;
+      this.disabled = true;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/channel/regenerate', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('channel-key-value').textContent = data.channel_key;
+          document.getElementById('channel-key-display').style.display = '';
+          showToast('Channel key regenerated', 'success');
+        } else {
+          showToast(data.error || 'Failed', 'error');
+        }
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+      this.disabled = false;
+    };
+    document.getElementById('channel-disable-btn').onclick = async function() {
+      if (!confirm('Disable channel? Active connections will be dropped.')) return;
+      const res = await fetch('/ui/keys/' + agentId + '/channel', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false })
+      });
+      if ((await res.json()).success) location.reload();
+    };
+    ` : `
+    document.getElementById('channel-enable-btn').onclick = async function() {
+      this.disabled = true;
+      const res = await fetch('/ui/keys/' + agentId + '/channel', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('channel-enable-btn').style.display = 'none';
+        // Show key in a display+copy pattern inline
+        const card = document.getElementById('channel-enable-btn').closest('.config-card');
+        const keyDiv = document.createElement('div');
+        keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\\'' + data.channel_key + '\\');showToast(\\'Copied!\\',\\'success\\')">Copy</button></div><p class="help-text" style="color: #fbbf24;">⚠️ Save this key — it won\\'t be shown again. Page will reload in 5s.</p>';
+        card.appendChild(keyDiv);
+        setTimeout(() => location.reload(), 5000);
+      } else {
+        showToast(data.error || 'Failed', 'error');
+        this.disabled = false;
+      }
+    };
+    `}
+    function copyChannelKey() {
+      navigator.clipboard.writeText(document.getElementById('channel-key-value').textContent);
+      showToast('Copied!', 'success');
     }
 
     // Sessions (event delegation for kill buttons — no inline onclick, addresses XSS concern)
