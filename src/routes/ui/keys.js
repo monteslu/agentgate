@@ -2,7 +2,8 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel, getChannelByAgentId } from '../../lib/db.js';
+import { nanoid } from 'nanoid';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -387,6 +388,55 @@ router.post('/:id/regenerate-proxy', (req, res) => {
 
   const newProxyId = regenerateProxyId(id);
   res.json({ success: true, proxy_id: newProxyId });
+});
+
+// Channel WebSocket configuration
+router.post('/:id/channel', async (req, res) => {
+  const { id } = req.params;
+  const { channel_enabled } = req.body;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const enabled = channel_enabled === 'on' || channel_enabled === '1' || channel_enabled === true;
+  
+  // Generate a new channel key when enabling
+  const channelKey = enabled ? nanoid(32) : null;
+  const result = await updateChannel(id, enabled, channelKey);
+  
+  res.json({
+    success: true,
+    channel_enabled: enabled,
+    channel_id: result.channelId,
+    // Only return the key on initial enable - it's hashed in DB
+    channel_key: enabled ? channelKey : null
+  });
+});
+
+// Regenerate channel key
+router.post('/:id/regenerate-channel-key', async (req, res) => {
+  const { id } = req.params;
+
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  if (!agent.channel_enabled) {
+    return res.status(400).json({ error: 'Channel not enabled' });
+  }
+
+  const channelKey = nanoid(32);
+  await updateChannel(id, true, channelKey);
+  const updated = getChannelByAgentId(id);
+  
+  res.json({
+    success: true,
+    channel_id: updated.channel_id,
+    channel_key: channelKey
+  });
 });
 
 // Sessions routes for agent detail page
@@ -946,6 +996,34 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
 
   <div class="card">
     <div class="detail-section">
+      <h3>Channel WebSocket</h3>
+      <div class="config-card">
+        <h4><span class="status-dot ${agent.channel_enabled ? 'active' : 'inactive'}"></span> Channel</h4>
+        ${agent.channel_enabled ? `
+          <div class="detail-row">
+            <span class="label">WebSocket URL</span>
+            <span class="value" style="font-size: 12px;">ws://${BASE_URL.replace(/^https?:\/\//, '')}/channel/${escapeHtml(agent.channel_id)}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Last Connected</span>
+            <span class="value">${agent.channel_last_connected ? formatDate(agent.channel_last_connected) : 'Never'}</span>
+          </div>
+          <div class="channel-url-box" style="background: #111827; padding: 12px; border-radius: 8px; margin: 12px 0;">
+            <code id="channel-url" style="font-size: 11px; word-break: break-all;">${escapeHtml(BASE_URL.replace(/^http/, 'ws'))}/channel/${escapeHtml(agent.channel_id)}</code>
+            <button type="button" class="btn-copy-sm" onclick="copyChannelUrl()">Copy</button>
+          </div>
+          <p style="color: #6b7280; font-size: 12px; margin-top: 8px;">⚠️ Channel key shown only once when enabled. Use "Regenerate Key" if lost.</p>
+        ` : '<p class="value muted">Not enabled. Channel allows real-time WebSocket communication with this agent.</p>'}
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" id="channel-btn">${agent.channel_enabled ? 'Manage' : 'Enable'}</button>
+          ${agent.channel_enabled ? '<button type="button" class="btn-secondary" id="regen-channel-btn">Regenerate Key</button>' : ''}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="detail-section">
       <h3>MCP Sessions</h3>
       <div id="sessions-container">
         <p style="color: #9ca3af;">Loading sessions...</p>
@@ -1009,6 +1087,69 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('proxy-modal')">Cancel</button>
         <button type="button" class="btn-primary" onclick="saveProxy()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel Modal -->
+  <div id="channel-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>Configure Channel WebSocket</h3>
+      <div id="channel-config">
+        <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
+          <input type="checkbox" id="channel-enabled" ${agent.channel_enabled ? 'checked' : ''} style="width: auto; margin: 0;">
+          <span>Enable channel <span class="help-hint" title="When enabled, creates a WebSocket endpoint for real-time communication with this agent. Used for chat interfaces and live updates.">?</span></span>
+        </label>
+        <p class="help-text" style="margin-bottom: 16px;">Channel provides a WebSocket connection for real-time messaging with this agent.</p>
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeModal('channel-modal')">Cancel</button>
+          <button type="button" class="btn-primary" onclick="saveChannel()">Save</button>
+        </div>
+      </div>
+      <div id="channel-success" style="display: none;">
+        <p style="color: #34d399; background: rgba(16,185,129,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.3); margin-bottom: 16px;">
+          ✅ Channel enabled! Copy these credentials now - the key won't be shown again.
+        </p>
+        <div style="background: #111827; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+          <div style="margin-bottom: 8px;"><span style="color: #9ca3af;">URL:</span></div>
+          <code id="new-channel-url" style="color: #60a5fa; font-size: 11px; word-break: break-all;"></code>
+        </div>
+        <div style="background: #111827; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+          <div style="margin-bottom: 8px;"><span style="color: #9ca3af;">Key:</span></div>
+          <code id="new-channel-key" style="color: #34d399; word-break: break-all;"></code>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" class="btn-primary" onclick="copyChannelCreds()">Copy Both</button>
+          <button type="button" class="btn-secondary" onclick="location.reload()">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Regenerate Channel Key Modal -->
+  <div id="regen-channel-modal" class="modal-overlay">
+    <div class="modal">
+      <h3>🔄 Regenerate Channel Key</h3>
+      <div id="regen-channel-confirm">
+        <p style="color: #fbbf24; background: rgba(245,158,11,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245,158,11,0.3); margin-bottom: 16px;">
+          ⚠️ This will invalidate the current channel key. Any connected clients will be disconnected.
+        </p>
+        <div class="modal-buttons">
+          <button type="button" class="btn-secondary" onclick="closeModal('regen-channel-modal')">Cancel</button>
+          <button type="button" class="btn-danger" onclick="confirmRegenChannel()">Regenerate</button>
+        </div>
+      </div>
+      <div id="regen-channel-success" style="display: none;">
+        <p style="color: #34d399; background: rgba(16,185,129,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.3); margin-bottom: 16px;">
+          ✅ Channel key regenerated! Copy it now - you won't see it again.
+        </p>
+        <div style="background: #111827; padding: 12px; border-radius: 8px; margin-bottom: 16px; word-break: break-all;">
+          <code id="new-channel-key-regen" style="color: #34d399;"></code>
+        </div>
+        <div class="modal-buttons">
+          <button type="button" class="btn-primary" onclick="copyNewChannelKey()">Copy</button>
+          <button type="button" class="btn-secondary" onclick="location.reload()">Done</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1166,6 +1307,56 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     function copyProxyUrl() {
       const url = document.getElementById('proxy-url').textContent;
       navigator.clipboard.writeText(url);
+      showToast('Copied!', 'success');
+    }
+
+    // Channel
+    document.getElementById('channel-btn').onclick = () => openModal('channel-modal');
+    const regenChannelBtn = document.getElementById('regen-channel-btn');
+    if (regenChannelBtn) regenChannelBtn.onclick = () => openModal('regen-channel-modal');
+    
+    async function saveChannel() {
+      const enabled = document.getElementById('channel-enabled').checked;
+      const res = await fetch('/ui/keys/' + agentId + '/channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ channel_enabled: enabled ? 'on' : '' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (data.channel_key) {
+          // Show the key only on enable
+          document.getElementById('new-channel-url').textContent = location.origin.replace(/^http/, 'ws') + '/channel/' + data.channel_id;
+          document.getElementById('new-channel-key').textContent = data.channel_key;
+          document.getElementById('channel-config').style.display = 'none';
+          document.getElementById('channel-success').style.display = '';
+        } else {
+          location.reload();
+        }
+      }
+    }
+    function copyChannelUrl() {
+      const url = document.getElementById('channel-url').textContent;
+      navigator.clipboard.writeText(url);
+      showToast('Copied!', 'success');
+    }
+    function copyChannelCreds() {
+      const url = document.getElementById('new-channel-url').textContent;
+      const key = document.getElementById('new-channel-key').textContent;
+      navigator.clipboard.writeText('URL: ' + url + '\\nKey: ' + key);
+      showToast('Copied!', 'success');
+    }
+    async function confirmRegenChannel() {
+      const res = await fetch('/ui/keys/' + agentId + '/regenerate-channel-key', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('new-channel-key-regen').textContent = data.channel_key;
+        document.getElementById('regen-channel-confirm').style.display = 'none';
+        document.getElementById('regen-channel-success').style.display = '';
+      }
+    }
+    function copyNewChannelKey() {
+      navigator.clipboard.writeText(document.getElementById('new-channel-key-regen').textContent);
       showToast('Copied!', 'success');
     }
 
