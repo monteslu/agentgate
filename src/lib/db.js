@@ -2129,6 +2129,78 @@ export function clearBroadcasts() {
 }
 
 // ============================================
+// MCP Sessions (persistent session tracking)
+// ============================================
+
+// Create table via migration pattern
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS mcp_sessions (
+      session_id TEXT PRIMARY KEY,
+      agent_name TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_mcp_sessions_agent ON mcp_sessions(agent_name);
+    CREATE INDEX IF NOT EXISTS idx_mcp_sessions_last_seen ON mcp_sessions(last_seen_at);
+  `);
+} catch (err) {
+  console.error('Error creating mcp_sessions table:', err.message);
+}
+
+export function upsertMcpSession(sessionId, agentName) {
+  db.prepare(`
+    INSERT INTO mcp_sessions (session_id, agent_name)
+    VALUES (?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      last_seen_at = CURRENT_TIMESTAMP
+  `).run(sessionId, agentName);
+}
+
+export function touchMcpSession(sessionId) {
+  db.prepare(`
+    UPDATE mcp_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE session_id = ?
+  `).run(sessionId);
+}
+
+export function getMcpSession(sessionId) {
+  return db.prepare('SELECT * FROM mcp_sessions WHERE session_id = ?').get(sessionId);
+}
+
+export function listMcpSessions(agentName = null) {
+  if (agentName) {
+    return db.prepare('SELECT * FROM mcp_sessions WHERE LOWER(agent_name) = LOWER(?) ORDER BY last_seen_at DESC').all(agentName);
+  }
+  return db.prepare('SELECT * FROM mcp_sessions ORDER BY last_seen_at DESC').all();
+}
+
+export function deleteMcpSession(sessionId) {
+  return db.prepare('DELETE FROM mcp_sessions WHERE session_id = ?').run(sessionId);
+}
+
+export function deleteMcpSessionsForAgent(agentName) {
+  return db.prepare('DELETE FROM mcp_sessions WHERE LOWER(agent_name) = LOWER(?)').run(agentName);
+}
+
+export function deleteStaleMcpSessions(ttlMs) {
+  const cutoff = new Date(Date.now() - ttlMs).toISOString();
+  return db.prepare('DELETE FROM mcp_sessions WHERE last_seen_at < ?').run(cutoff);
+}
+
+export function getMcpSessionCounts() {
+  const rows = db.prepare(`
+    SELECT agent_name, COUNT(*) as count FROM mcp_sessions GROUP BY agent_name ORDER BY count DESC
+  `).all();
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  return { total, byAgent: rows.reduce((acc, r) => { acc[r.agent_name] = r.count; return acc; }, {}) };
+}
+
+export function getMcpSessionCount() {
+  const row = db.prepare('SELECT COUNT(*) as count FROM mcp_sessions').get();
+  return row.count;
+}
+
+// ============================================
 // LLM Providers
 // ============================================
 

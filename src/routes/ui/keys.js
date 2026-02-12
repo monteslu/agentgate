@@ -2,7 +2,7 @@
 import { Router } from 'express';
 import { join } from 'path';
 import { writeFileSync } from 'fs';
-import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess } from '../../lib/db.js';
+import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions } from '../../lib/db.js';
 import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
 
 const router = Router();
@@ -387,6 +387,70 @@ router.post('/:id/regenerate-proxy', (req, res) => {
 
   const newProxyId = regenerateProxyId(id);
   res.json({ success: true, proxy_id: newProxyId });
+});
+
+// Sessions routes for agent detail page
+// Uses dynamic import to avoid circular dependency with mcp.js
+router.get('/:id/sessions', async (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const { getActiveSessionsInfo } = await import('../mcp.js');
+  const activeSessionsList = getActiveSessionsInfo().filter(
+    s => s.agentName.toLowerCase() === agent.name.toLowerCase()
+  );
+  const dbSessions = listMcpSessions(agent.name);
+
+  // Merge: use active session info where available, fall back to DB
+  const sessionMap = new Map();
+  for (const dbS of dbSessions) {
+    sessionMap.set(dbS.session_id, {
+      sessionId: dbS.session_id,
+      agentName: dbS.agent_name,
+      createdAt: dbS.created_at,
+      lastSeen: dbS.last_seen_at,
+      active: false
+    });
+  }
+  for (const activeS of activeSessionsList) {
+    const existing = sessionMap.get(activeS.sessionId) || {};
+    sessionMap.set(activeS.sessionId, {
+      sessionId: activeS.sessionId,
+      agentName: activeS.agentName,
+      createdAt: activeS.createdAt || existing.createdAt || null,
+      lastSeen: activeS.lastSeen,
+      active: true
+    });
+  }
+
+  res.json({ sessions: Array.from(sessionMap.values()) });
+});
+
+router.post('/:id/sessions/:sessionId/kill', async (req, res) => {
+  const { id, sessionId } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const { killSession } = await import('../mcp.js');
+  const result = killSession(sessionId);
+  res.json({ success: true, found: result.found });
+});
+
+router.post('/:id/sessions/kill-all', async (req, res) => {
+  const { id } = req.params;
+  const agent = getApiKeyById(id);
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not found' });
+  }
+
+  const { killAgentSessions } = await import('../mcp.js');
+  const result = killAgentSessions(agent.name);
+  res.json({ success: true, killed: result.killed });
 });
 
 // Render function
@@ -873,6 +937,19 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
     </div>
   </div>
 
+  <div class="card">
+    <div class="detail-section">
+      <h3>MCP Sessions</h3>
+      <div id="sessions-container">
+        <p style="color: #9ca3af;">Loading sessions...</p>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn-secondary" id="refresh-sessions-btn">🔄 Refresh</button>
+        <button type="button" class="btn-danger" id="kill-all-sessions-btn" style="display:none;">Kill All Sessions</button>
+      </div>
+    </div>
+  </div>
+
   <div class="danger-zone">
     <h3>Danger Zone</h3>
     <p>Deleting this agent will remove the API key and all associated data (${counts.messages} messages, ${counts.mementos} mementos, ${counts.queueEntries} queue entries).</p>
@@ -1158,6 +1235,68 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       const res = await fetch('/ui/keys/' + agentId, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
       if ((await res.json()).success) location.href = '/ui/keys';
     }
+
+    // Sessions (event delegation for kill buttons — no inline onclick, addresses XSS concern)
+    async function loadSessions() {
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/sessions');
+        const data = await res.json();
+        const container = document.getElementById('sessions-container');
+        const killAllBtn = document.getElementById('kill-all-sessions-btn');
+
+        if (!data.sessions || data.sessions.length === 0) {
+          container.innerHTML = '<p style="color: #6b7280; font-style: italic;">No active sessions.</p>';
+          killAllBtn.style.display = 'none';
+          return;
+        }
+
+        killAllBtn.style.display = '';
+        let html = '<table class="agents-table"><thead><tr><th>Session ID</th><th>Created</th><th>Last Seen</th><th>Status</th><th></th></tr></thead><tbody>';
+        for (const s of data.sessions) {
+          const shortId = s.sessionId.substring(0, 8) + '...';
+          const status = s.active ? '<span style="color: #10b981;">● Active</span>' : '<span style="color: #6b7280;">○ DB Only</span>';
+          html += '<tr><td title="' + s.sessionId + '"><code>' + shortId + '</code></td><td>' + (s.createdAt || '-') + '</td><td>' + (s.lastSeen || '-') + '</td><td>' + status + '</td><td><button class="btn-sm btn-danger kill-session-btn" data-session-id="' + s.sessionId + '">Kill</button></td></tr>';
+        }
+        html += '</tbody></table>';
+        container.innerHTML = html;
+      } catch (err) {
+        document.getElementById('sessions-container').innerHTML = '<p style="color: #f87171;">Failed to load sessions.</p>';
+      }
+    }
+
+    // Event delegation for session kill buttons
+    document.getElementById('sessions-container').addEventListener('click', async function(e) {
+      const btn = e.target.closest('.kill-session-btn');
+      if (!btn) return;
+      const sid = btn.dataset.sessionId;
+      btn.disabled = true;
+      btn.textContent = '...';
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/sessions/' + encodeURIComponent(sid) + '/kill', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        showToast(data.found ? 'Session killed' : 'Session not found (already expired?)', data.found ? 'success' : 'error');
+        loadSessions();
+      } catch (err) {
+        showToast('Failed to kill session', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Kill';
+      }
+    });
+
+    document.getElementById('kill-all-sessions-btn').onclick = async function() {
+      if (!confirm('Kill all MCP sessions for ' + agentName + '?')) return;
+      try {
+        const res = await fetch('/ui/keys/' + agentId + '/sessions/kill-all', { method: 'POST', headers: { 'Accept': 'application/json' } });
+        const data = await res.json();
+        showToast('Killed ' + data.killed + ' session(s)', 'success');
+        loadSessions();
+      } catch (err) {
+        showToast('Failed to kill sessions', 'error');
+      }
+    };
+
+    document.getElementById('refresh-sessions-btn').onclick = loadSessions;
+    loadSessions();
 
     // Avatar
     document.getElementById('avatar-clickable').onclick = () => openModal('avatar-modal');

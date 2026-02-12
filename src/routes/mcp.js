@@ -33,7 +33,13 @@ import {
   markMessageRead,
   listBroadcastsWithRecipients,
   getBroadcast,
-  createAgentMessage
+  createAgentMessage,
+  upsertMcpSession,
+  touchMcpSession as dbTouchMcpSession,
+  getMcpSession,
+  deleteMcpSession,
+  deleteMcpSessionsForAgent,
+  deleteStaleMcpSessions
 } from '../lib/db.js';
 import { notifyAgent } from '../lib/agentNotifier.js';
 import { SERVICE_READERS, SERVICE_CATEGORIES } from '../lib/serviceRegistry.js';
@@ -42,9 +48,25 @@ const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const MAX_SESSIONS = 1000;
+const TOUCH_DEBOUNCE_MS = 30 * 1000; // 30 seconds debounce for DB writes
 
-// Store active MCP sessions (sessionId -> { transport, server, agentName, lastSeen })
+// Store active MCP sessions (sessionId -> { transport, server, agentName, lastSeen, lastDbWrite, createdAt })
 const activeSessions = new Map();
+
+// Locks for lazy session recreation to prevent race conditions
+const recreatingSessionLocks = new Map();
+
+/**
+ * Debounced touch — always updates in-memory lastSeen,
+ * but only writes to DB if >TOUCH_DEBOUNCE_MS since last DB write.
+ */
+function debouncedTouchSession(sessionId, session) {
+  session.lastSeen = Date.now();
+  if (Date.now() - (session.lastDbWrite || 0) >= TOUCH_DEBOUNCE_MS) {
+    session.lastDbWrite = Date.now();
+    dbTouchMcpSession(sessionId);
+  }
+}
 
 // Periodic cleanup of stale sessions
 setInterval(() => {
@@ -54,9 +76,63 @@ setInterval(() => {
       console.log(`Cleaning up stale MCP session: ${sessionId}`);
       session.transport.close().catch(() => {});
       activeSessions.delete(sessionId);
+      deleteMcpSession(sessionId);
     }
   }
+  // Also clean stale DB records (e.g., from crashed processes)
+  deleteStaleMcpSessions(SESSION_TTL_MS);
 }, 60 * 1000); // Check every minute
+
+/**
+ * Get info about all active sessions (for admin UI).
+ */
+export function getActiveSessionsInfo() {
+  const result = [];
+  for (const [sessionId, session] of activeSessions) {
+    result.push({
+      sessionId,
+      agentName: session.agentName,
+      lastSeen: new Date(session.lastSeen).toISOString(),
+      createdAt: session.createdAt || null
+    });
+  }
+  return result;
+}
+
+/**
+ * Kill a specific session by ID.
+ * Returns { found: boolean }
+ */
+export function killSession(sessionId) {
+  const session = activeSessions.get(sessionId);
+  if (!session) {
+    // Still try to clean up DB record
+    const dbResult = deleteMcpSession(sessionId);
+    return { found: dbResult.changes > 0 };
+  }
+  session.transport.close().catch(() => {});
+  activeSessions.delete(sessionId);
+  deleteMcpSession(sessionId);
+  return { found: true };
+}
+
+/**
+ * Kill all sessions for an agent.
+ * Returns { killed: number }
+ */
+export function killAgentSessions(agentName) {
+  let killed = 0;
+  for (const [sessionId, session] of activeSessions) {
+    if (session.agentName.toLowerCase() === agentName.toLowerCase()) {
+      session.transport.close().catch(() => {});
+      activeSessions.delete(sessionId);
+      killed++;
+    }
+  }
+  // Also clean DB records for this agent
+  deleteMcpSessionsForAgent(agentName);
+  return { killed };
+}
 
 /**
  * Create MCP POST handler — handles initialization and all subsequent messages.
@@ -74,7 +150,61 @@ export function createMCPPostHandler() {
     try {
       if (sessionId) {
         // Existing session — route message to its transport
-        const session = activeSessions.get(sessionId);
+        let session = activeSessions.get(sessionId);
+
+        // Lazy recreation: session in DB but not in memory (e.g., after restart)
+        if (!session) {
+          const dbSession = getMcpSession(sessionId);
+          if (dbSession && dbSession.agent_name === agentName) {
+            // Use a lock to prevent concurrent recreation of the same session
+            if (recreatingSessionLocks.has(sessionId)) {
+              // Another request is already recreating this session — wait for it
+              try {
+                await recreatingSessionLocks.get(sessionId);
+                session = activeSessions.get(sessionId);
+              } catch {
+                // Recreation failed
+              }
+            } else {
+              // We're the first — recreate
+              const lockPromise = (async () => {
+                const transport = new StreamableHTTPServerTransport({
+                  sessionIdGenerator: () => sessionId
+                });
+
+                const server = createMCPServer(agentName);
+                // Connect server to transport BEFORE adding to activeSessions (Luthien #2)
+                await server.connect(transport);
+
+                transport.onclose = () => {
+                  activeSessions.delete(sessionId);
+                  deleteMcpSession(sessionId);
+                };
+
+                const now = Date.now();
+                activeSessions.set(sessionId, {
+                  transport,
+                  server,
+                  agentName,
+                  lastSeen: now,
+                  lastDbWrite: now,
+                  createdAt: dbSession.created_at
+                });
+                dbTouchMcpSession(sessionId);
+              })();
+              recreatingSessionLocks.set(sessionId, lockPromise);
+              try {
+                await lockPromise;
+                session = activeSessions.get(sessionId);
+              } catch (err) {
+                console.error(`[MCP] Failed to recreate session ${sessionId}:`, err);
+              } finally {
+                recreatingSessionLocks.delete(sessionId);
+              }
+            }
+          }
+        }
+
         if (!session) {
           return res.status(404).json({
             jsonrpc: '2.0',
@@ -87,7 +217,7 @@ export function createMCPPostHandler() {
           return res.status(403).json({ error: 'Session belongs to different agent' });
         }
 
-        session.lastSeen = Date.now();
+        debouncedTouchSession(sessionId, session);
         await session.transport.handleRequest(req, res, req.body);
       } else if (isInitializeRequest(req.body)) {
         // New session initialization
@@ -99,13 +229,19 @@ export function createMCPPostHandler() {
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
-            activeSessions.set(sid, { transport, server, agentName, lastSeen: Date.now() });
+            const now = Date.now();
+            const createdAt = new Date(now).toISOString();
+            activeSessions.set(sid, { transport, server, agentName, lastSeen: now, lastDbWrite: now, createdAt });
+            upsertMcpSession(sid, agentName);
           }
         });
 
         transport.onclose = () => {
           const sid = transport.sessionId;
-          if (sid) activeSessions.delete(sid);
+          if (sid) {
+            activeSessions.delete(sid);
+            deleteMcpSession(sid);
+          }
         };
 
         const server = createMCPServer(agentName);
