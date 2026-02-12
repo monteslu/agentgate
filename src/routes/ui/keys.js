@@ -27,7 +27,9 @@ router.get('/:id', (req, res, next) => {
   }
   const counts = getAgentDataCounts(agent.name);
   const serviceAccess = getAgentServiceAccess(agent.name);
-  res.send(renderAgentDetailPage(agent, counts, serviceAccess));
+  // Generate admin chat token if channel is enabled
+  const adminChatToken = agent.channel_enabled ? generateAdminChatToken(agent.channel_id) : null;
+  res.send(renderAgentDetailPage(agent, counts, serviceAccess, adminChatToken));
 });
 
 router.post('/create', async (req, res) => {
@@ -482,6 +484,39 @@ router.post('/:id/sessions/kill-all', async (req, res) => {
   res.json({ success: true, killed: result.killed });
 });
 
+// Admin chat token store (short-lived tokens for auto-connect)
+const adminChatTokens = new Map();
+const ADMIN_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
+
+function generateAdminChatToken(channelId) {
+  const token = crypto.randomBytes(32).toString('base64url');
+  const expires = Date.now() + ADMIN_TOKEN_TTL;
+  adminChatTokens.set(token, { channelId, expires });
+  // Cleanup expired tokens periodically
+  if (adminChatTokens.size > 100) {
+    const now = Date.now();
+    for (const [k, v] of adminChatTokens) {
+      if (v.expires < now) adminChatTokens.delete(k);
+    }
+  }
+  return token;
+}
+
+function validateAdminChatToken(token, channelId) {
+  const entry = adminChatTokens.get(token);
+  if (!entry) return false;
+  if (entry.expires < Date.now()) {
+    adminChatTokens.delete(token);
+    return false;
+  }
+  if (entry.channelId !== channelId) return false;
+  adminChatTokens.delete(token); // One-time use
+  return true;
+}
+
+// Export for channel.js to use
+export { validateAdminChatToken };
+
 // Chat popout window
 router.get('/:id/chat', (req, res) => {
   const { id } = req.params;
@@ -492,7 +527,9 @@ router.get('/:id/chat', (req, res) => {
   if (!agent.channel_enabled) {
     return res.status(400).send('Channel not enabled for this agent');
   }
-  res.send(renderChatPopout(agent));
+  // Generate one-time admin token for auto-connect
+  const adminToken = generateAdminChatToken(agent.channel_id);
+  res.send(renderChatPopout(agent, adminToken));
 });
 
 // Render function
@@ -705,9 +742,132 @@ function renderAgentNotFound(id) {
 </html>`;
 }
 
-function renderChatPopout(agent) {
+// Shared chat script - fixes XSS, adds message limit, deduplicates code
+function getChatScript() {
+  return `
+    const MAX_MESSAGE_LENGTH = 10240; // 10KB limit
+
+    // Safe markdown renderer - validates URL schemes to prevent XSS
+    function renderMarkdown(text) {
+      if (!text) return '';
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      // Code blocks
+      html = html.replace(/\\\`\\\`\\\`([\\s\\S]*?)\\\`\\\`\\\`/g, '<pre style="background:#111827;padding:8px;border-radius:4px;overflow-x:auto;margin:8px 0;">$1</pre>');
+      // Inline code
+      html = html.replace(/\\\`([^\\\`]+)\\\`/g, '<code style="background:#374151;padding:2px 6px;border-radius:3px;">$1</code>');
+      // Bold
+      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+      // Italic
+      html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+      // Links - ONLY allow http/https schemes (XSS fix)
+      html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, function(match, text, url) {
+        // Validate URL scheme
+        const lowerUrl = url.toLowerCase().trim();
+        if (lowerUrl.startsWith('http://') || lowerUrl.startsWith('https://')) {
+          return '<a href="' + url.replace(/"/g, '&quot;') + '" target="_blank" rel="noopener" style="color:#60a5fa;">' + text + '</a>';
+        }
+        // Invalid scheme - render as plain text
+        return '[' + text + '](' + url + ')';
+      });
+      // Newlines
+      html = html.replace(/\\n/g, '<br>');
+      return html;
+    }
+
+    function createChatController(channelId, opts) {
+      opts = opts || {};
+      let ws = null;
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 3;
+
+      const controller = {
+        onStatus: opts.onStatus || function() {},
+        onMessage: opts.onMessage || function() {},
+        onConnected: opts.onConnected || function() {},
+        onDisconnected: opts.onDisconnected || function() {},
+
+        connect: function(authKey, authType) {
+          if (ws) ws.close();
+          
+          const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+          const wsUrl = protocol + '//' + location.host + '/channel/' + channelId;
+          
+          controller.onStatus('Connecting...', 'pending');
+          ws = new WebSocket(wsUrl);
+
+          ws.onopen = function() {
+            controller.onStatus('Authenticating...', 'pending');
+            const authMsg = { type: 'auth' };
+            if (authType === 'admin') {
+              authMsg.adminToken = authKey;
+            } else {
+              authMsg.key = authKey;
+            }
+            ws.send(JSON.stringify(authMsg));
+          };
+
+          ws.onmessage = function(e) {
+            try {
+              const msg = JSON.parse(e.data);
+              if (msg.type === 'auth') {
+                if (msg.success) {
+                  controller.onStatus('Connected', 'connected');
+                  reconnectAttempts = 0;
+                  controller.onConnected();
+                } else {
+                  controller.onStatus('Auth failed: ' + (msg.error || 'Invalid credentials'), 'error');
+                }
+              } else if (msg.type === 'message' || msg.type === 'response') {
+                const content = msg.content || msg.text || msg.message || JSON.stringify(msg);
+                controller.onMessage('agent', content, msg.timestamp);
+              } else if (msg.type === 'error') {
+                controller.onMessage('agent', '⚠️ ' + (msg.error || msg.message || 'Unknown error'));
+              }
+            } catch (err) {
+              console.error('Chat message parse error:', err);
+            }
+          };
+
+          ws.onclose = function() {
+            controller.onStatus('Disconnected', 'error');
+            controller.onDisconnected();
+            // Auto-reconnect for admin tokens (they're one-time, so don't reconnect)
+            // For regular keys we could reconnect, but keeping it simple
+          };
+
+          ws.onerror = function() {
+            controller.onStatus('Connection error', 'error');
+          };
+        },
+
+        send: function(text) {
+          if (!text || !ws || ws.readyState !== WebSocket.OPEN) return false;
+          if (text.length > MAX_MESSAGE_LENGTH) {
+            controller.onMessage('system', '⚠️ Message too long (max ' + Math.round(MAX_MESSAGE_LENGTH/1024) + 'KB)');
+            return false;
+          }
+          ws.send(JSON.stringify({ type: 'send', content: text }));
+          return true;
+        },
+
+        close: function() {
+          if (ws) ws.close();
+        }
+      };
+
+      return controller;
+    }
+  `;
+}
+
+function renderChatPopout(agent, adminToken) {
   const channelId = escapeHtml(agent.channel_id || '');
   const agentName = escapeHtml(agent.name);
+  const safeAdminToken = escapeHtml(adminToken || '');
+  
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -721,158 +881,95 @@ function renderChatPopout(agent) {
     .header h1 { font-size: 16px; font-weight: 600; }
     .status { font-size: 12px; color: #6b7280; }
     .status.connected { color: #34d399; }
+    .status.pending { color: #fbbf24; }
     .status.error { color: #ef4444; }
     #messages { flex: 1; overflow-y: auto; padding: 16px; font-family: monospace; font-size: 13px; }
     .message { margin-bottom: 12px; }
-    .message .role { font-weight: 600; font-size: 11px; margin-bottom: 2px; }
-    .message .role.user { color: #60a5fa; }
-    .message .role.agent { color: #34d399; }
-    .message .time { color: #6b7280; font-weight: 400; }
-    .message .content { color: #e5e7eb; }
-    .message pre { background: #111827; padding: 8px; border-radius: 4px; overflow-x: auto; margin: 8px 0; }
-    .message code { background: #374151; padding: 2px 6px; border-radius: 3px; }
-    .message a { color: #60a5fa; }
     .input-area { padding: 12px 16px; background: #1f2937; border-top: 1px solid #374151; display: flex; gap: 8px; }
     .input-area input { flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px; outline: none; }
     .input-area input:focus { border-color: #60a5fa; }
     .input-area button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
     .input-area button:hover { background: #2563eb; }
     .input-area button:disabled { background: #4b5563; cursor: not-allowed; }
-    .auth-form { padding: 20px; text-align: center; }
-    .auth-form input { width: 100%; max-width: 300px; margin: 10px 0; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; }
-    .auth-form button { margin-top: 10px; padding: 10px 24px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>💬 ${agentName}</h1>
-    <span id="status" class="status">Not connected</span>
+    <span id="status" class="status">Connecting...</span>
   </div>
-  <div id="auth-form" class="auth-form">
-    <p style="color: #9ca3af; margin-bottom: 12px;">Enter channel key to connect:</p>
-    <input type="password" id="key-input" placeholder="Channel key...">
-    <br>
-    <button id="connect-btn">Connect</button>
+  <div id="messages">
+    <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
   </div>
-  <div id="messages" style="display:none;"></div>
-  <div id="input-area" class="input-area" style="display:none;">
-    <input type="text" id="chat-input" placeholder="Type a message..." disabled>
+  <div class="input-area">
+    <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" disabled>
     <button id="send-btn" disabled>Send</button>
   </div>
   <script>
+    ${getChatScript()}
+    
     const channelId = '${channelId}';
-    const agentId = '${escapeHtml(agent.id)}';
-    let ws = null;
-
+    const adminToken = '${safeAdminToken}';
+    
     const statusEl = document.getElementById('status');
-    const authForm = document.getElementById('auth-form');
     const messagesDiv = document.getElementById('messages');
-    const inputArea = document.getElementById('input-area');
     const chatInput = document.getElementById('chat-input');
     const sendBtn = document.getElementById('send-btn');
-    const keyInput = document.getElementById('key-input');
-    const connectBtn = document.getElementById('connect-btn');
 
-    function renderMarkdown(text) {
-      if (!text) return '';
-      let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      html = html.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre>$1</pre>');
-      html = html.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
-      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-      html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
-      html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank">$1</a>');
-      html = html.replace(/\\n/g, '<br>');
-      return html;
-    }
-
-    function addMessage(role, content) {
+    function addMessage(role, content, timestamp) {
       const div = document.createElement('div');
       div.className = 'message';
-      const time = new Date().toLocaleTimeString();
-      div.innerHTML = '<div class="role ' + role + '">' + (role === 'user' ? 'You' : 'Agent') + ' <span class="time">' + time + '</span></div><div class="content">' + renderMarkdown(content) + '</div>';
+      const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+      const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
+      const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
+      div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
       messagesDiv.appendChild(div);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
-    function setStatus(text, cls) {
-      statusEl.textContent = text;
-      statusEl.className = 'status ' + (cls || '');
-    }
-
-    function connect(key) {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = protocol + '//' + location.host + '/channel/' + channelId;
-      
-      setStatus('Connecting...', '');
-      ws = new WebSocket(wsUrl);
-
-      ws.onopen = function() {
-        setStatus('Authenticating...', '');
-        ws.send(JSON.stringify({ type: 'auth', key: key }));
-      };
-
-      ws.onmessage = function(e) {
-        try {
-          const msg = JSON.parse(e.data);
-          if (msg.type === 'auth') {
-            if (msg.success) {
-              setStatus('Connected', 'connected');
-              authForm.style.display = 'none';
-              messagesDiv.style.display = '';
-              inputArea.style.display = '';
-              chatInput.disabled = false;
-              sendBtn.disabled = false;
-              chatInput.focus();
-              sessionStorage.setItem('chat-key-' + agentId, key);
-            } else {
-              setStatus('Auth failed: ' + (msg.error || 'Invalid key'), 'error');
-            }
-          } else if (msg.type === 'message' || msg.type === 'response') {
-            addMessage('agent', msg.content || msg.text || msg.message || JSON.stringify(msg));
-          } else if (msg.type === 'error') {
-            addMessage('agent', '⚠️ ' + (msg.error || msg.message || 'Error'));
-          }
-        } catch (err) { console.error(err); }
-      };
-
-      ws.onclose = function() { setStatus('Disconnected', 'error'); chatInput.disabled = true; sendBtn.disabled = true; };
-      ws.onerror = function() { setStatus('Connection error', 'error'); };
-    }
-
-    function sendMessage() {
-      const text = chatInput.value.trim();
-      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-      addMessage('user', text);
-      ws.send(JSON.stringify({ type: 'send', content: text }));
-      chatInput.value = '';
-    }
-
-    connectBtn.onclick = function() {
-      const key = keyInput.value.trim();
-      if (!key) return;
-      connect(key);
-    };
-    keyInput.onkeydown = function(e) { if (e.key === 'Enter') connectBtn.click(); };
-    sendBtn.onclick = sendMessage;
-    chatInput.onkeydown = function(e) { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); } };
-
-    // Receive key from opener window
-    window.addEventListener('message', function(e) {
-      if (e.origin === location.origin && e.data && e.data.type === 'chat-key') {
-        keyInput.value = e.data.key;
-        connectBtn.click();
+    const chat = createChatController(channelId, {
+      onStatus: function(text, cls) {
+        statusEl.textContent = text;
+        statusEl.className = 'status ' + (cls || '');
+      },
+      onMessage: addMessage,
+      onConnected: function() {
+        messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+        chatInput.disabled = false;
+        sendBtn.disabled = false;
+        chatInput.focus();
+      },
+      onDisconnected: function() {
+        chatInput.disabled = true;
+        sendBtn.disabled = true;
       }
     });
 
-    // Auto-connect if key saved
-    const savedKey = sessionStorage.getItem('chat-key-' + agentId);
-    if (savedKey) { keyInput.value = savedKey; connectBtn.click(); }
+    function sendMessage() {
+      const text = chatInput.value.trim();
+      if (!text) return;
+      if (chat.send(text)) {
+        addMessage('user', text);
+        chatInput.value = '';
+      }
+    }
+
+    sendBtn.onclick = sendMessage;
+    chatInput.onkeydown = function(e) { 
+      if (e.key === 'Enter' && !e.shiftKey) { 
+        e.preventDefault(); 
+        sendMessage(); 
+      } 
+    };
+
+    // Auto-connect with admin token
+    chat.connect(adminToken, 'admin');
   </script>
 </body>
 </html>`;
 }
 
-function renderAgentDetailPage(agent, counts, serviceAccess = []) {
+function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken = null) {
   return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true })}
 <style>
   .agent-header {
@@ -1195,30 +1292,21 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
   ${agent.channel_enabled ? `
   <div class="card" id="chat-card">
     <div class="detail-section">
-      <h3>
+      <h3 style="display: flex; align-items: center;">
         💬 Admin Chat
+        <span id="chat-status" style="margin-left: 12px; font-size: 12px; font-weight: normal; color: #fbbf24;">Connecting...</span>
         <button type="button" class="btn-secondary btn-sm" id="chat-popout-btn" style="margin-left: auto; font-size: 12px;">⧉ Popout</button>
       </h3>
-      <div id="chat-container" style="display: none;">
-        <div id="chat-messages" style="height: 300px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">
-          <p style="color: #6b7280; text-align: center;">Connecting...</p>
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <input type="text" id="chat-input" placeholder="Type a message..." style="flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px;" disabled>
-          <button type="button" class="btn-primary" id="chat-send-btn" disabled>Send</button>
-        </div>
-        <p id="chat-status" style="color: #6b7280; font-size: 12px; margin-top: 8px;">Not connected</p>
+      <div id="chat-messages" style="height: 300px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">
+        <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
       </div>
-      <div id="chat-auth-container">
-        <p style="color: #9ca3af; margin-bottom: 12px;">Enter channel key to connect:</p>
-        <div style="display: flex; gap: 8px;">
-          <input type="password" id="chat-key-input" placeholder="Channel key..." style="flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px;">
-          <button type="button" class="btn-primary" id="chat-connect-btn">Connect</button>
-        </div>
-        <p style="color: #6b7280; font-size: 12px; margin-top: 8px;">Key is stored in browser session only.</p>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" style="flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px;" disabled>
+        <button type="button" class="btn-primary" id="chat-send-btn" disabled>Send</button>
       </div>
     </div>
   </div>
+  <script>const ADMIN_CHAT_TOKEN = '${escapeHtml(adminChatToken || '')}';</script>
   ` : ''}
 
   <div class="card">
@@ -1573,134 +1661,57 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       showToast('Copied!', 'success');
     }
 
-    // Chat functionality
+    // Chat functionality (uses shared getChatScript from server)
     ${agent.channel_enabled ? `
+    ${getChatScript()}
     (function() {
       const channelId = '${escapeHtml(agent.channel_id || '')}';
-      let ws = null;
-      let chatKey = sessionStorage.getItem('chat-key-' + agentId);
+      const adminToken = ADMIN_CHAT_TOKEN;
       
       const messagesDiv = document.getElementById('chat-messages');
       const chatInput = document.getElementById('chat-input');
       const sendBtn = document.getElementById('chat-send-btn');
       const statusEl = document.getElementById('chat-status');
-      const authContainer = document.getElementById('chat-auth-container');
-      const chatContainer = document.getElementById('chat-container');
-      const keyInput = document.getElementById('chat-key-input');
-      const connectBtn = document.getElementById('chat-connect-btn');
       const popoutBtn = document.getElementById('chat-popout-btn');
-
-      // Simple markdown renderer
-      function renderMarkdown(text) {
-        if (!text) return '';
-        let html = text
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;');
-        // Code blocks
-        html = html.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre style="background:#111827;padding:8px;border-radius:4px;overflow-x:auto;margin:8px 0;">$1</pre>');
-        // Inline code
-        html = html.replace(/\`([^\`]+)\`/g, '<code style="background:#374151;padding:2px 6px;border-radius:3px;">$1</code>');
-        // Bold
-        html = html.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
-        // Italic
-        html = html.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
-        // Links
-        html = html.replace(/\\[([^\\]]+)\\]\\(([^)]+)\\)/g, '<a href="$2" target="_blank" style="color:#60a5fa;">$1</a>');
-        // Newlines
-        html = html.replace(/\\n/g, '<br>');
-        return html;
-      }
 
       function addMessage(role, content, timestamp) {
         const div = document.createElement('div');
         div.style.marginBottom = '12px';
         const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-        const roleColor = role === 'user' ? '#60a5fa' : '#34d399';
-        const roleLabel = role === 'user' ? 'You' : 'Agent';
+        const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
+        const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
         div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
 
-      function setStatus(text, color) {
-        statusEl.textContent = text;
-        statusEl.style.color = color || '#6b7280';
-      }
-
-      function connect(key) {
-        if (ws) ws.close();
-        
-        const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = protocol + '//' + location.host + '/channel/' + channelId;
-        
-        setStatus('Connecting...', '#fbbf24');
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = function() {
-          setStatus('Authenticating...', '#fbbf24');
-          ws.send(JSON.stringify({ type: 'auth', key: key }));
-        };
-
-        ws.onmessage = function(e) {
-          try {
-            const msg = JSON.parse(e.data);
-            if (msg.type === 'auth') {
-              if (msg.success) {
-                setStatus('Connected', '#34d399');
-                chatInput.disabled = false;
-                sendBtn.disabled = false;
-                sessionStorage.setItem('chat-key-' + agentId, key);
-                messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
-              } else {
-                setStatus('Auth failed: ' + (msg.error || 'Invalid key'), '#ef4444');
-                sessionStorage.removeItem('chat-key-' + agentId);
-                authContainer.style.display = '';
-                chatContainer.style.display = 'none';
-              }
-            } else if (msg.type === 'message' || msg.type === 'response') {
-              const content = msg.content || msg.text || msg.message || JSON.stringify(msg);
-              addMessage('agent', content, msg.timestamp);
-            } else if (msg.type === 'error') {
-              addMessage('agent', '⚠️ ' + (msg.error || msg.message || 'Unknown error'));
-            }
-          } catch (err) {
-            console.error('Chat message parse error:', err);
-          }
-        };
-
-        ws.onclose = function() {
-          setStatus('Disconnected', '#ef4444');
+      const chat = createChatController(channelId, {
+        onStatus: function(text, cls) {
+          statusEl.textContent = text;
+          const colors = { connected: '#34d399', pending: '#fbbf24', error: '#ef4444' };
+          statusEl.style.color = colors[cls] || '#6b7280';
+        },
+        onMessage: addMessage,
+        onConnected: function() {
+          messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+          chatInput.disabled = false;
+          sendBtn.disabled = false;
+          chatInput.focus();
+        },
+        onDisconnected: function() {
           chatInput.disabled = true;
           sendBtn.disabled = true;
-        };
-
-        ws.onerror = function() {
-          setStatus('Connection error', '#ef4444');
-        };
-      }
+        }
+      });
 
       function sendMessage() {
         const text = chatInput.value.trim();
-        if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-        
-        addMessage('user', text);
-        ws.send(JSON.stringify({ type: 'send', content: text }));
-        chatInput.value = '';
+        if (!text) return;
+        if (chat.send(text)) {
+          addMessage('user', text);
+          chatInput.value = '';
+        }
       }
-
-      // Event handlers
-      connectBtn.onclick = function() {
-        const key = keyInput.value.trim();
-        if (!key) { showToast('Enter channel key', 'error'); return; }
-        authContainer.style.display = 'none';
-        chatContainer.style.display = '';
-        connect(key);
-      };
-
-      keyInput.onkeydown = function(e) {
-        if (e.key === 'Enter') connectBtn.click();
-      };
 
       sendBtn.onclick = sendMessage;
       chatInput.onkeydown = function(e) {
@@ -1708,22 +1719,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = []) {
       };
 
       popoutBtn.onclick = function() {
-        const key = sessionStorage.getItem('chat-key-' + agentId) || keyInput.value.trim();
-        const popoutUrl = '/ui/keys/' + agentId + '/chat?popout=1';
-        const win = window.open(popoutUrl, 'chat-' + agentId, 'width=500,height=600,menubar=no,toolbar=no');
-        if (win && key) {
-          win.addEventListener('load', function() {
-            win.postMessage({ type: 'chat-key', key: key }, location.origin);
-          });
-        }
+        const popoutUrl = '/ui/keys/' + agentId + '/chat';
+        window.open(popoutUrl, 'chat-' + agentId, 'width=500,height=600,menubar=no,toolbar=no');
       };
 
-      // Auto-connect if we have a saved key
-      if (chatKey) {
-        authContainer.style.display = 'none';
-        chatContainer.style.display = '';
-        connect(chatKey);
-      }
+      // Auto-connect with admin token on page load
+      chat.connect(adminToken, 'admin');
     })();
     ` : ''}
 
