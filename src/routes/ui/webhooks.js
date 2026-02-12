@@ -412,7 +412,7 @@ function renderWebhooksPage(configs, deliveries) {
           <span class="delivery-time" data-ts="${d.received_at}">${escapeHtml(d.received_at)}</span>
         </a>`).join('');
 
-  return `${htmlHead('Webhooks')}
+  return `${htmlHead('Service Hooks')}
 ${renderStyles()}
 <body>
   ${navHeader({})}
@@ -481,7 +481,7 @@ ${renderStyles()}
   ${navHeader({})}
   
   <h2>Add Webhook</h2>
-  <p><a href="/ui/webhooks">← Back to Webhooks</a></p>
+  <p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
   
   <form method="POST" action="/ui/webhooks/add" id="webhook-form">
     <div class="card">
@@ -612,7 +612,7 @@ ${renderStyles()}
   ${navHeader({})}
   
   <h2><img src="${source.icon}" style="width: 28px; height: 28px; vertical-align: middle; margin-right: 8px;">${escapeHtml(config.name)}</h2>
-  <p><a href="/ui/webhooks">← Back to Webhooks</a></p>
+  <p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
   
   ${alertHtml.join('\n  ')}
   
@@ -748,7 +748,7 @@ ${renderStyles()}
   ${navHeader({})}
   
   <h2>Delivery Details</h2>
-  <p><a href="/ui/webhooks">← Back to Webhooks</a></p>
+  <p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
   
   <div class="card">
     <dl class="detail-grid">

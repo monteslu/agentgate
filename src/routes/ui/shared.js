@@ -136,7 +136,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
     <div class="dropdown-menu" id="dropdown-menu">
       <a href="/ui/access" class="dropdown-item">Access Control</a>
       <a href="/ui/mementos" class="dropdown-item">Mementos</a>
-      <a href="/ui/webhooks" class="dropdown-item">Webhooks</a>
+      <a href="/ui/webhooks" class="dropdown-item">Service Hooks</a>
       <a href="/ui/llm" class="dropdown-item">LLM Providers</a>
       <a href="/ui/settings" class="dropdown-item">Settings</a>
       <div class="dropdown-divider"></div>
