@@ -185,7 +185,25 @@ export async function notifyAgentQueueWarning(entry, warningAgent, warningMessag
   return await notifyAgent(agentName, payload);
 }
 
+// Derive agent endpoint URL from webhook URL
+// Replaces /hooks/wake with /hooks/agent, or appends /hooks/agent to base URL
+function getAgentEndpointUrl(webhookUrl) {
+  if (!webhookUrl) return null;
+  // If URL ends with /hooks/wake, replace with /hooks/agent
+  if (webhookUrl.endsWith('/hooks/wake')) {
+    return webhookUrl.replace(/\/hooks\/wake$/, '/hooks/agent');
+  }
+  // If URL ends with /wake, replace with /agent
+  if (webhookUrl.endsWith('/wake')) {
+    return webhookUrl.replace(/\/wake$/, '/agent');
+  }
+  // Otherwise, try to append /hooks/agent to base URL
+  const base = webhookUrl.replace(/\/hooks\/.*$/, '').replace(/\/$/, '');
+  return `${base}/hooks/agent`;
+}
+
 // Notify agent about a new message (delivered to recipient)
+// Uses /hooks/agent endpoint to trigger an agent response (Option A from #203)
 export async function notifyAgentMessage(message) {
   const agentName = message.to_agent;
 
@@ -194,21 +212,52 @@ export async function notifyAgentMessage(message) {
     return { success: false, error: 'No webhook configured' };
   }
 
+  // Use agent endpoint for inter-agent messages to trigger responses
+  const agentEndpoint = getAgentEndpointUrl(agent.webhook_url);
+
+  // Payload format for /hooks/agent - spawns an agent turn
   const payload = {
-    type: 'agent_message',
-    message: {
-      id: message.id,
-      from: message.from_agent,
-      message: message.message,
-      created_at: message.created_at,
-      delivered_at: message.delivered_at
-    },
-    // Human-readable for Clawdbot-style gateways
-    text: `💬 [agentgate] Message from ${message.from_agent}:\n${message.message.substring(0, 500)}`,
-    mode: 'now'
+    message: `💬 Message from ${message.from_agent}:\n${message.message.substring(0, 1000)}`,
+    name: 'agentgate',
+    sessionKey: `agentgate:msg:${message.id}`,
+    deliver: true
   };
 
-  return notifyAgent(agentName, payload);
+  try {
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+
+    if (agent.webhook_token) {
+      headers['Authorization'] = `Bearer ${agent.webhook_token}`;
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(agentEndpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+
+      if (response.ok) {
+        return { success: true };
+      } else {
+        const text = await response.text().catch(() => '');
+        return { success: false, error: `HTTP ${response.status}: ${text.substring(0, 200)}` };
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return { success: false, error: `Webhook timeout after ${WEBHOOK_TIMEOUT_MS}ms` };
+    }
+    return { success: false, error: err.message };
+  }
 }
 
 // Notify sender that their message was rejected
