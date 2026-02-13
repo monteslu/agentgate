@@ -253,6 +253,25 @@ db.exec(`
     received_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- Chat messages for channel conversations (#250)
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL UNIQUE,
+    from_type TEXT NOT NULL,
+    from_conn_id TEXT,
+    text TEXT NOT NULL,
+    reply_to TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_chat_messages_channel
+  ON chat_messages(channel_id, created_at DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_chat_messages_id
+  ON chat_messages(message_id);
+
+
   CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_config
   ON webhook_deliveries(config_id, received_at DESC);
 
@@ -2308,5 +2327,90 @@ export function listAllAgentLlmModels() {
     JOIN llm_providers lp ON lam.provider_id = lp.id
     ORDER BY lam.agent_name, lam.model_id
   `).all();
+}
+
+// ============================================================================
+// Chat Messages (#250)
+// ============================================================================
+
+/**
+ * Save a chat message to the database
+ */
+export function saveChatMessage({ channelId, messageId, from, fromConnId, text, timestamp, replyTo }) {
+  const stmt = db.prepare(`
+    INSERT INTO chat_messages (channel_id, message_id, from_type, from_conn_id, text, reply_to, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  
+  try {
+    stmt.run(channelId, messageId, from, fromConnId || null, text, replyTo || null, timestamp);
+    return true;
+  } catch (err) {
+    console.error('Failed to save chat message:', err.message);
+    return false;
+  }
+}
+
+/**
+ * Get chat history for a channel
+ */
+export function getChatHistory(channelId, limit = 50, before = null) {
+  limit = Math.min(limit, 100);
+  
+  let stmt;
+  let params;
+  
+  if (before) {
+    const beforeMsg = db.prepare('SELECT created_at FROM chat_messages WHERE message_id = ?').get(before);
+    if (!beforeMsg) return [];
+    
+    stmt = db.prepare(`
+      SELECT message_id, from_type, from_conn_id, text, reply_to, created_at
+      FROM chat_messages
+      WHERE channel_id = ? AND created_at < ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+    params = [channelId, beforeMsg.created_at, limit];
+  } else {
+    stmt = db.prepare(`
+      SELECT message_id, from_type, from_conn_id, text, reply_to, created_at
+      FROM chat_messages
+      WHERE channel_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+    params = [channelId, limit];
+  }
+  
+  const rows = stmt.all(...params);
+  
+  return rows.reverse().map(row => ({
+    id: row.message_id,
+    from: row.from_type,
+    text: row.text,
+    replyTo: row.reply_to,
+    timestamp: row.created_at
+  }));
+}
+
+/**
+ * Delete old chat messages (retention cleanup)
+ */
+export function cleanupOldChatMessages(olderThanDays = 30) {
+  const stmt = db.prepare(`
+    DELETE FROM chat_messages
+    WHERE created_at < datetime('now', '-' || ? || ' days')
+  `);
+  return stmt.run(olderThanDays).changes;
+}
+
+/**
+ * Get message count for a channel
+ */
+export function getChatMessageCount(channelId) {
+  const stmt = db.prepare('SELECT COUNT(*) as count FROM chat_messages WHERE channel_id = ?');
+  const row = stmt.get(channelId);
+  return row ? row.count : 0;
 }
 
