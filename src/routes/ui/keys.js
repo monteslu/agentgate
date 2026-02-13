@@ -1354,7 +1354,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
           </div>
           <div class="detail-row">
             <span class="label">WebSocket URL</span>
-            <span class="value" style="font-size: 12px; word-break: break-all;">ws[s]://&lt;host&gt;/channel/${escapeHtml(agent.channel_id || '')}</span>
+            <span class="value" id="channel-ws-url" style="font-size: 12px; word-break: break-all;"></span>
           </div>
           <div class="detail-row">
             <span class="label">Last Connected</span>
@@ -1702,6 +1702,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
 
     // Channel WebSocket
     ${agent.channel_enabled ? `
+    (function() {
+      var wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+      var wsUrl = wsProto + location.host + '/channel/${escapeHtml(agent.channel_id || '')}';
+      var el = document.getElementById('channel-ws-url');
+      if (el) el.textContent = wsUrl;
+    })();
     document.getElementById('channel-regen-btn').onclick = async function() {
       if (!confirm('Regenerate channel key? The old key will stop working immediately.')) return;
       this.disabled = true;
