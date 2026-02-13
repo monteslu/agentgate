@@ -2,6 +2,30 @@ import { getGatewayProxy } from '../lib/db.js';
 import http from 'http';
 import https from 'https';
 
+// Default timeout for proxy requests (30 seconds)
+const PROXY_TIMEOUT_MS = 30000;
+
+// Hop-by-hop headers that should not be forwarded (RFC 2616 Section 13.5.1)
+const HOP_BY_HOP_HEADERS = [
+  'connection',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade'
+];
+
+/**
+ * Filter hop-by-hop headers from a headers object
+ */
+function filterHopByHopHeaders(headers) {
+  const filtered = { ...headers };
+  HOP_BY_HOP_HEADERS.forEach(h => delete filtered[h]);
+  return filtered;
+}
+
 /**
  * Gateway proxy — transparently forwards HTTP requests to an agent's
  * internal gateway URL. Mounted at /px/:proxyId in Express.
@@ -32,20 +56,28 @@ export function createProxyRouter() {
     const isHttps = parsed.protocol === 'https:';
     const transport = isHttps ? https : http;
 
-    // Build forwarded headers — pass through most, update host
-    const forwardHeaders = { ...req.headers };
+    // Build forwarded headers — filter hop-by-hop, update host
+    const forwardHeaders = filterHopByHopHeaders(req.headers);
     forwardHeaders.host = parsed.host;
-    delete forwardHeaders['connection'];
 
     const proxyReq = transport.request({
       hostname: parsed.hostname,
       port: parsed.port || (isHttps ? 443 : 80),
       path: forwardPath,
       method: req.method,
-      headers: forwardHeaders
+      headers: forwardHeaders,
+      timeout: PROXY_TIMEOUT_MS
     }, (proxyRes) => {
       res.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(res);
+    });
+
+    // Handle timeout
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      if (!res.headersSent) {
+        res.status(504).json({ error: 'Proxy timeout' });
+      }
     });
 
     proxyReq.on('error', (err) => {
@@ -83,16 +115,27 @@ export function setupWebSocketProxy(server) {
     const isHttps = parsed.protocol === 'https:';
     const transport = isHttps ? https : http;
 
-    // Build the WebSocket upgrade request to the target
+    // Build the WebSocket upgrade request to the target — filter hop-by-hop headers
+    // Note: 'upgrade' and 'connection' are needed for WebSocket, so we handle them specially
     const forwardHeaders = { ...req.headers };
     forwardHeaders.host = parsed.host;
+    // Remove only non-WebSocket hop-by-hop headers
+    ['keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'transfer-encoding'].forEach(h => delete forwardHeaders[h]);
 
     const proxyReq = transport.request({
       hostname: parsed.hostname,
       port: parsed.port || (isHttps ? 443 : 80),
       path: forwardPath,
       method: 'GET',
-      headers: forwardHeaders
+      headers: forwardHeaders,
+      timeout: PROXY_TIMEOUT_MS
+    });
+
+    // Handle timeout
+    proxyReq.on('timeout', () => {
+      proxyReq.destroy();
+      socket.write('HTTP/1.1 504 Gateway Timeout\r\n\r\n');
+      socket.destroy();
     });
 
     proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
