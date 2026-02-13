@@ -156,6 +156,17 @@ export function createMCPPostHandler() {
         if (!session) {
           const dbSession = getMcpSession(sessionId);
           if (dbSession && dbSession.agent_name === agentName) {
+            // Check if we have stored init params to replay
+            if (!dbSession.init_params) {
+              // No init params stored - session cannot be recreated
+              // Return error telling client to re-initialize
+              return res.status(400).json({
+                jsonrpc: '2.0',
+                error: { code: -32000, message: 'Session expired - please reinitialize' },
+                id: req.body?.id || null
+              });
+            }
+
             // Use a lock to prevent concurrent recreation of the same session
             if (recreatingSessionLocks.has(sessionId)) {
               // Another request is already recreating this session — wait for it
@@ -166,7 +177,7 @@ export function createMCPPostHandler() {
                 // Recreation failed
               }
             } else {
-              // We're the first — recreate
+              // We're the first — recreate with stored init params
               const lockPromise = (async () => {
                 const transport = new StreamableHTTPServerTransport({
                   sessionIdGenerator: () => sessionId
@@ -175,6 +186,40 @@ export function createMCPPostHandler() {
                 const server = createMCPServer(agentName);
                 // Connect server to transport BEFORE adding to activeSessions (Luthien #2)
                 await server.connect(transport);
+
+                // Replay the stored initialization to put server in initialized state
+                // Create a mock request/response to handle the init internally
+                const initRequest = dbSession.init_params;
+                await new Promise((resolve, reject) => {
+                  const mockRes = {
+                    headersSent: false,
+                    statusCode: 200,
+                    headers: {},
+                    setHeader(name, value) { this.headers[name] = value; },
+                    status(code) { this.statusCode = code; return this; },
+                    json(data) {
+                      if (this.statusCode >= 400) {
+                        reject(new Error(`Init replay failed: ${JSON.stringify(data)}`));
+                      } else {
+                        resolve(data);
+                      }
+                    },
+                    end() { resolve(); },
+                    write() { return true; },
+                    on() { return this; },
+                    once() { return this; },
+                    emit() { return this; },
+                    removeListener() { return this; }
+                  };
+                  const mockReq = {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: initRequest
+                  };
+                  transport.handleRequest(mockReq, mockRes, initRequest)
+                    .then(resolve)
+                    .catch(reject);
+                });
 
                 transport.onclose = () => {
                   activeSessions.delete(sessionId);
@@ -192,6 +237,7 @@ export function createMCPPostHandler() {
                   createdAt: dbSession.created_at
                 });
                 dbTouchMcpSession(sessionId);
+                console.log(`[MCP] Recreated session ${sessionId} for agent ${agentName}`);
               })();
               recreatingSessionLocks.set(sessionId, lockPromise);
               try {
@@ -227,13 +273,17 @@ export function createMCPPostHandler() {
           return res.status(503).json({ error: 'Too many active sessions' });
         }
 
+        // Store the init request body so we can replay it on session recreation
+        const initParams = req.body;
+
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: (sid) => {
             const now = Date.now();
             const createdAt = new Date(now).toISOString();
             activeSessions.set(sid, { transport, server, agentName, lastSeen: now, lastDbWrite: now, createdAt });
-            upsertMcpSession(sid, agentName);
+            // Store init params for session recreation after restart
+            upsertMcpSession(sid, agentName, initParams);
           }
         });
 

@@ -2138,6 +2138,7 @@ try {
     CREATE TABLE IF NOT EXISTS mcp_sessions (
       session_id TEXT PRIMARY KEY,
       agent_name TEXT NOT NULL,
+      init_params TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       last_seen_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -2148,13 +2149,31 @@ try {
   console.error('Error creating mcp_sessions table:', err.message);
 }
 
-export function upsertMcpSession(sessionId, agentName) {
+// Migrate mcp_sessions to add init_params column if missing
+try {
+  const mcpSessionsInfo = db.prepare('PRAGMA table_info(mcp_sessions)').all();
+  const hasInitParams = mcpSessionsInfo.some(col => col.name === 'init_params');
+
+  if (mcpSessionsInfo.length > 0 && !hasInitParams) {
+    console.log('Migrating mcp_sessions table to add init_params column...');
+    db.exec('ALTER TABLE mcp_sessions ADD COLUMN init_params TEXT;');
+    console.log('Migration complete.');
+  }
+} catch (err) {
+  if (!err.message.includes('duplicate column')) {
+    console.error('Error migrating mcp_sessions init_params:', err.message);
+  }
+}
+
+export function upsertMcpSession(sessionId, agentName, initParams = null) {
+  const initParamsJson = initParams ? JSON.stringify(initParams) : null;
   db.prepare(`
-    INSERT INTO mcp_sessions (session_id, agent_name)
-    VALUES (?, ?)
+    INSERT INTO mcp_sessions (session_id, agent_name, init_params)
+    VALUES (?, ?, ?)
     ON CONFLICT(session_id) DO UPDATE SET
-      last_seen_at = CURRENT_TIMESTAMP
-  `).run(sessionId, agentName);
+      last_seen_at = CURRENT_TIMESTAMP,
+      init_params = COALESCE(excluded.init_params, mcp_sessions.init_params)
+  `).run(sessionId, agentName, initParamsJson);
 }
 
 export function touchMcpSession(sessionId) {
@@ -2164,7 +2183,11 @@ export function touchMcpSession(sessionId) {
 }
 
 export function getMcpSession(sessionId) {
-  return db.prepare('SELECT * FROM mcp_sessions WHERE session_id = ?').get(sessionId);
+  const row = db.prepare('SELECT * FROM mcp_sessions WHERE session_id = ?').get(sessionId);
+  if (row && row.init_params) {
+    row.init_params = JSON.parse(row.init_params);
+  }
+  return row;
 }
 
 export function listMcpSessions(agentName = null) {
