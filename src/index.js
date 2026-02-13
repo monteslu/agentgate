@@ -123,21 +123,17 @@ app.get('/', (req, res) => {
 });
 
 const server = app.listen(PORT, async () => {
-  console.log(`agentgate gateway running at http://localhost:${PORT}`);
-  console.log(`Admin UI: http://localhost:${PORT}/ui`);
+  console.log(`Server running at: http://localhost:${PORT}`);
 
   // Initialize socket.io for real-time updates
   initSocket(server);
-  console.log('Socket.io initialized for real-time updates');
 
   // Set up WebSocket proxy for agent gateways (after socket.io)
   setupWebSocketProxy(server);
-  console.log('Gateway proxy WebSocket handler initialized');
 
   // Set up channel WebSocket proxy for chat clients
   setAdminTokenValidator(validateAdminChatToken);
   setupChannelProxy(server);
-  console.log('Channel WebSocket handler initialized');
 
   // Start tunnels if configured
   try {
