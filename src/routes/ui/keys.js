@@ -4,7 +4,7 @@ import { join } from 'path';
 import { writeFileSync } from 'fs';
 import crypto from 'crypto';
 import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel, disableChannel } from '../../lib/db.js';
-import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
+import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -2022,11 +2022,6 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   ${localizeScript()}
 </body>
 </html>`;
-}
-
-function getProxyUrl(proxyId) {
-  if (!proxyId) return '';
-  return BASE_URL + '/px/' + proxyId + '/';
 }
 
 function getServiceIcon(service) {
