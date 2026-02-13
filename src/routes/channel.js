@@ -1,54 +1,46 @@
 /**
- * Channel WebSocket endpoint — filtered gateway proxy for chat clients.
+ * Channel WebSocket endpoint — AgentGate-owned human-facing chat API.
  * 
- * Provides limited, filtered access to an agent's gateway. Only allows
- * messaging operations; blocks admin ops, config, tools, etc.
+ * Provides a simple, documented chat interface for human clients.
+ * The OpenClaw channel plugin connects TO this endpoint to send/receive messages.
  * 
  * Endpoint: WS /channel/<channel-id>
- * Auth: bcrypt key in first message or x-channel-key header
+ * Auth: channel key in first message { type: "auth", key: "..." }
  * 
- * Security model: STRICT WHITELIST ONLY
- * - Only explicitly allowed message types pass through
- * - Non-JSON messages are blocked
- * - No fallback heuristics for unknown message types
+ * Protocol:
+ *   Client: { type: "auth", key: "<channel-key>" }
+ *   Server: { type: "auth", success: true }
+ *   Client: { type: "message", text: "hello" }
+ *   Server: { type: "message", from: "agent", text: "hi", id: "msg_123", timestamp: "..." }
+ *   Server: { type: "chunk", text: "partial..." }
+ *   Server: { type: "done", id: "msg_123" }
+ *   Server: { type: "typing" }
+ *   Server: { type: "error", error: "..." }
+ * 
+ * Architecture:
+ *   Human App ←WS→ AgentGate /channel/<id> ←WS→ OpenClaw (agentgate-channel plugin)
  */
 
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import http from 'http';
-import https from 'https';
-import { getChannel, markChannelConnected } from '../lib/db.js';
-
-// Admin token validation is injected at runtime to avoid circular imports
-let validateAdminChatToken = null;
-export function setAdminTokenValidator(fn) {
-  validateAdminChatToken = fn;
-}
+import { nanoid } from 'nanoid';
+import { 
+  getChannel, 
+  markChannelConnected,
+  saveChatMessage,
+  getChatHistory,
+  getChannelAgentConnection
+} from '../lib/db.js';
 
 // Configuration
 const AUTH_TIMEOUT_MS = 30000;  // 30 seconds to authenticate
 const MAX_AUTH_ATTEMPTS = 3;    // Max failed auth attempts before disconnect
+const MAX_MESSAGE_SIZE = 4096;  // 4KB message limit
+const PING_INTERVAL_MS = 30000; // Keepalive ping interval
 
-// Whitelist of allowed message types from client → gateway
-const ALLOWED_CLIENT_MESSAGES = new Set([
-  'send',           // Send a message
-  'subscribe',      // Subscribe to session events
-  'ping',           // Keepalive
-  'pong'            // Keepalive response
-]);
-
-// Message types from gateway that we forward to client
-const ALLOWED_GATEWAY_MESSAGES = new Set([
-  'message',        // Agent response
-  'response',       // Response to send
-  'chunk',          // Streaming chunk (partial response)
-  'done',           // Streaming done (final message)
-  'event',          // Session events (typing, etc.)
-  'ping',
-  'pong',
-  'subscribed',     // Confirmation of subscription
-  'error'           // Errors (filtered)
-]);
+// Store active connections per channel
+// channelId -> { humans: Map<connId, socket>, agent: socket | null }
+const channelConnections = new Map();
 
 /**
  * Log channel events with timestamp for audit trail
@@ -71,379 +63,48 @@ async function verifyChannelKey(channel, providedKey) {
 }
 
 /**
- * Filter a message from client before forwarding to gateway.
- * STRICT WHITELIST: Returns the message if type is explicitly allowed, null otherwise.
+ * Get or create channel connections structure
  */
-function filterClientMessage(message, channelId) {
-  try {
-    const parsed = JSON.parse(message);
-    const type = parsed.type || parsed.action || parsed.method;
-    
-    if (!type || !ALLOWED_CLIENT_MESSAGES.has(type)) {
-      channelLog(channelId, 'blocked_client_msg', `type=${type}`);
-      return null;
-    }
-    
-    return message;
-  } catch {
-    channelLog(channelId, 'blocked_client_msg', 'non-JSON');
-    return null;
+function getChannelConns(channelId) {
+  if (!channelConnections.has(channelId)) {
+    channelConnections.set(channelId, {
+      humans: new Map(),
+      agent: null,
+      agentConnId: null
+    });
   }
+  return channelConnections.get(channelId);
 }
 
 /**
- * Filter a message from gateway before forwarding to client.
- * STRICT WHITELIST: Only explicitly allowed types pass through.
- * Non-JSON and unknown types are BLOCKED (not forwarded).
+ * Create a WebSocket text frame
  */
-function filterGatewayMessage(message, channelId) {
-  try {
-    const parsed = JSON.parse(message);
-    const type = parsed.type || parsed.action || parsed.method;
-    
-    // STRICT: Only allow explicitly whitelisted types
-    if (type && ALLOWED_GATEWAY_MESSAGES.has(type)) {
-      return message;
-    }
-    
-    channelLog(channelId, 'blocked_gateway_msg', `type=${type}`);
-    return null;
-  } catch {
-    // Non-JSON from gateway is blocked (security: could leak binary/raw data)
-    channelLog(channelId, 'blocked_gateway_msg', 'non-JSON');
-    return null;
-  }
-}
-
-/**
- * Set up channel WebSocket handling on the HTTP server.
- * Called after setupWebSocketProxy() to handle /channel/* paths.
- */
-export function setupChannelProxy(server) {
-  server.on('upgrade', async (req, socket, _head) => {
-    const match = req.url.match(/^\/channel\/([^/?]+)(.*)/);
-    if (!match) return; // Not a channel request
-
-    const channelId = match[1];
-    const channel = getChannel(channelId);
-
-    channelLog(channelId, 'connection_attempt', `from=${req.socket.remoteAddress}`);
-
-    if (!channel || !channel.channel_enabled) {
-      channelLog(channelId, 'rejected', 'channel not found or disabled');
-      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
-      socket.destroy();
-      return;
-    }
-
-    if (!channel.gateway_proxy_url) {
-      channelLog(channelId, 'rejected', 'gateway not configured');
-      socket.write('HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\nGateway not configured');
-      socket.destroy();
-      return;
-    }
-
-    // Check for key in header (preferred)
-    const headerKey = req.headers['x-channel-key'];
-    if (headerKey) {
-      const valid = await verifyChannelKey(channel, headerKey);
-      if (!valid) {
-        channelLog(channelId, 'auth_failed', 'invalid header key');
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-      channelLog(channelId, 'auth_success', 'via header');
-      connectToGatewayFiltered(channel, req, socket);
-      return;
-    }
-
-    // No header key — expect auth in first WebSocket message
-    completeHandshakeAndWaitForAuth(channel, req, socket);
-  });
-}
-
-/**
- * Complete WebSocket handshake and wait for auth message
- */
-function completeHandshakeAndWaitForAuth(channel, req, socket) {
-  const channelId = channel.channel_id;
+function createWebSocketFrame(message) {
+  const payload = Buffer.from(message, 'utf8');
+  const length = payload.length;
   
-  // Simple WebSocket handshake
-  const key = req.headers['sec-websocket-key'];
-  if (!key) {
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-    socket.destroy();
-    return;
+  let header;
+  if (length < 126) {
+    header = Buffer.alloc(2);
+    header[0] = 0x81; // FIN + text opcode
+    header[1] = length;
+  } else if (length < 65536) {
+    header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 126;
+    header.writeUInt16BE(length, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(length), 2);
   }
 
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-    .digest('base64');
-
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
-  );
-
-  let authenticated = false;
-  let gatewaySocket = null;
-  let buffer = Buffer.alloc(0);
-  let authAttempts = 0;
-
-  // Auth timeout - disconnect if no auth within timeout period
-  const authTimeout = setTimeout(() => {
-    if (!authenticated) {
-      channelLog(channelId, 'auth_timeout', `after ${AUTH_TIMEOUT_MS}ms`);
-      socket.write(createWebSocketFrame(JSON.stringify({ 
-        type: 'error', 
-        error: 'Authentication timeout' 
-      })));
-      socket.end();
-    }
-  }, AUTH_TIMEOUT_MS);
-
-  // Cleanup function
-  const cleanup = () => {
-    clearTimeout(authTimeout);
-    if (gatewaySocket) gatewaySocket.destroy();
-  };
-
-  socket.on('data', async (data) => {
-    if (authenticated) {
-      // Already authed, forward to gateway (filtered)
-      if (gatewaySocket && gatewaySocket.writable) {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterClientMessage(msg, channelId);
-          if (filtered) {
-            gatewaySocket.write(createWebSocketFrame(filtered));
-          } else {
-            socket.write(createWebSocketFrame(JSON.stringify({
-              type: 'error',
-              error: 'Message type not allowed on channel endpoint'
-            })));
-          }
-        }
-      }
-      return;
-    }
-
-    // Waiting for auth message
-    buffer = Buffer.concat([buffer, data]);
-    const messages = parseWebSocketFrames(buffer);
-    
-    if (messages.length > 0) {
-      const firstMsg = messages[0];
-      try {
-        const parsed = JSON.parse(firstMsg);
-        if (parsed.type === 'auth') {
-          let valid = false;
-          let authMethod = '';
-          
-          // Check for admin token first (one-time tokens from admin UI)
-          if (parsed.adminToken && validateAdminChatToken) {
-            valid = validateAdminChatToken(parsed.adminToken, channelId);
-            authMethod = 'admin_token';
-          }
-          // Fall back to channel key
-          else if (parsed.key) {
-            valid = await verifyChannelKey(channel, parsed.key);
-            authMethod = 'channel_key';
-          }
-          
-          if (valid) {
-            clearTimeout(authTimeout);
-            authenticated = true;
-            channelLog(channelId, 'auth_success', `via ${authMethod}`);
-            socket.write(createWebSocketFrame(JSON.stringify({ type: 'auth', success: true })));
-            gatewaySocket = await connectToGatewayFilteredInternal(channel, socket);
-            markChannelConnected(channel.id);
-          } else {
-            authAttempts++;
-            channelLog(channelId, 'auth_failed', `attempt ${authAttempts}/${MAX_AUTH_ATTEMPTS}`);
-            
-            if (authAttempts >= MAX_AUTH_ATTEMPTS) {
-              socket.write(createWebSocketFrame(JSON.stringify({ 
-                type: 'auth', 
-                success: false, 
-                error: 'Max auth attempts exceeded' 
-              })));
-              cleanup();
-              socket.end();
-            } else {
-              socket.write(createWebSocketFrame(JSON.stringify({ 
-                type: 'auth', 
-                success: false, 
-                error: 'Invalid credentials',
-                attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts
-              })));
-              // Clear buffer to allow retry
-              buffer = Buffer.alloc(0);
-            }
-          }
-        } else {
-          socket.write(createWebSocketFrame(JSON.stringify({ 
-            type: 'error', 
-            error: 'First message must be auth' 
-          })));
-          cleanup();
-          socket.end();
-        }
-      } catch {
-        socket.write(createWebSocketFrame(JSON.stringify({ 
-          type: 'error', 
-          error: 'Invalid auth message' 
-        })));
-        cleanup();
-        socket.end();
-      }
-    }
-  });
-
-  socket.on('error', cleanup);
-  socket.on('close', cleanup);
-}
-
-/**
- * Connect to gateway with full message filtering (for header auth path)
- * Completes WS handshake to client, then connects to gateway with filtering
- */
-function connectToGatewayFiltered(channel, req, socket) {
-  const channelId = channel.channel_id;
-  
-  // Complete WS handshake with client first
-  const key = req.headers['sec-websocket-key'];
-  if (!key) {
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-    .digest('base64');
-
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
-  );
-
-  // Now connect to gateway with filtering
-  connectToGatewayFilteredInternal(channel, socket).then(gatewaySocket => {
-    channelLog(channelId, 'connected', 'gateway proxy established');
-    markChannelConnected(channel.id);
-    
-    // Set up client→gateway filtering
-    socket.on('data', (data) => {
-      if (gatewaySocket && gatewaySocket.writable) {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterClientMessage(msg, channelId);
-          if (filtered) {
-            gatewaySocket.write(createWebSocketFrame(filtered));
-          } else {
-            socket.write(createWebSocketFrame(JSON.stringify({
-              type: 'error',
-              error: 'Message type not allowed on channel endpoint'
-            })));
-          }
-        }
-      }
-    });
-
-    socket.on('error', () => gatewaySocket.destroy());
-    socket.on('close', () => gatewaySocket.destroy());
-  }).catch(err => {
-    channelLog(channelId, 'gateway_error', err.message);
-    socket.write(createWebSocketFrame(JSON.stringify({
-      type: 'error',
-      error: 'Failed to connect to gateway'
-    })));
-    socket.end();
-  });
-}
-
-/**
- * Internal: Connect to gateway and set up gateway→client filtering
- * Returns the gateway socket for bidirectional communication
- */
-function connectToGatewayFilteredInternal(channel, clientSocket) {
-  const channelId = channel.channel_id;
-  
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(channel.gateway_proxy_url);
-    const isHttps = parsed.protocol === 'https:' || parsed.protocol === 'wss:';
-    const transport = isHttps ? https : http;
-
-    const wsPath = parsed.pathname || '/';
-    const headers = {
-      'Connection': 'Upgrade',
-      'Upgrade': 'websocket',
-      'Sec-WebSocket-Version': '13',
-      'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'),
-      'Host': parsed.host
-    };
-
-    const proxyReq = transport.request({
-      hostname: parsed.hostname,
-      port: parsed.port || (isHttps ? 443 : 80),
-      path: wsPath,
-      method: 'GET',
-      headers
-    });
-
-    proxyReq.on('upgrade', (_proxyRes, gatewaySocket, _proxyHead) => {
-      // NOTE: We intentionally do NOT forward proxyHead to client
-      // as it could contain unfiltered data from the gateway handshake
-      
-      // Set up gateway→client filtering
-      gatewaySocket.on('data', (data) => {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterGatewayMessage(msg, channelId);
-          if (filtered) {
-            clientSocket.write(createWebSocketFrame(filtered));
-          }
-          // Blocked messages are silently dropped (logged in filterGatewayMessage)
-        }
-      });
-
-      gatewaySocket.on('error', () => {
-        channelLog(channelId, 'gateway_socket_error');
-        clientSocket.destroy();
-      });
-      gatewaySocket.on('close', () => {
-        channelLog(channelId, 'gateway_disconnected');
-        clientSocket.end();
-      });
-
-      resolve(gatewaySocket);
-    });
-
-    proxyReq.on('error', (err) => {
-      channelLog(channelId, 'gateway_connection_error', err.message);
-      reject(err);
-    });
-
-    proxyReq.end();
-  });
+  return Buffer.concat([header, payload]);
 }
 
 /**
  * Parse WebSocket frames from buffer.
- * NOTE: This is a simplified parser that only handles complete, non-fragmented
- * text frames (FIN=1, opcode=1). Fragmented messages (FIN=0 continuation frames)
- * are not supported and will be dropped. For production use, consider using
- * the 'ws' library which handles all frame types correctly.
  */
 function parseWebSocketFrames(buffer) {
   const messages = [];
@@ -489,42 +150,548 @@ function parseWebSocketFrames(buffer) {
       }
     }
 
-    // Only handle complete text frames (FIN=1, opcode=1)
-    // Fragmented frames (FIN=0) and continuation frames (opcode=0) are dropped
-    if (fin && opcode === 1) {
-      messages.push(payload.toString('utf8'));
+    // Handle different opcodes
+    if (opcode === 8) {
+      // Close frame
+      messages.push({ type: 'close' });
+    } else if (opcode === 9) {
+      // Ping - respond with pong
+      messages.push({ type: 'ping', payload });
+    } else if (opcode === 10) {
+      // Pong - ignore
+    } else if (fin && opcode === 1) {
+      // Text frame
+      messages.push({ type: 'text', data: payload.toString('utf8') });
     }
-    // Close frames (opcode=8) could be handled here for graceful shutdown
   }
 
   return messages;
 }
 
 /**
- * Create a WebSocket text frame
+ * Create a WebSocket pong frame
  */
-function createWebSocketFrame(message) {
-  const payload = Buffer.from(message, 'utf8');
+function createPongFrame(payload) {
   const length = payload.length;
-  
   let header;
   if (length < 126) {
     header = Buffer.alloc(2);
-    header[0] = 0x81; // FIN + text opcode
+    header[0] = 0x8A; // FIN + pong opcode
     header[1] = length;
-  } else if (length < 65536) {
+  } else {
     header = Buffer.alloc(4);
-    header[0] = 0x81;
+    header[0] = 0x8A;
     header[1] = 126;
     header.writeUInt16BE(length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(length), 2);
+  }
+  return Buffer.concat([header, payload]);
+}
+
+/**
+ * Send a message to a WebSocket client
+ */
+function sendToSocket(socket, msg) {
+  if (socket && socket.writable) {
+    socket.write(createWebSocketFrame(JSON.stringify(msg)));
+  }
+}
+
+/**
+ * Broadcast to all human clients on a channel
+ */
+function broadcastToHumans(channelId, msg) {
+  const conns = channelConnections.get(channelId);
+  if (!conns) return;
+  
+  const frame = createWebSocketFrame(JSON.stringify(msg));
+  for (const [, socket] of conns.humans) {
+    if (socket && socket.writable) {
+      socket.write(frame);
+    }
+  }
+}
+
+/**
+ * Send a message to the agent connection
+ */
+function sendToAgent(channelId, msg) {
+  const conns = channelConnections.get(channelId);
+  if (conns?.agent && conns.agent.writable) {
+    conns.agent.write(createWebSocketFrame(JSON.stringify(msg)));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Handle a message from a human client
+ */
+async function handleHumanMessage(channelId, connId, parsed) {
+  const conns = channelConnections.get(channelId);
+  
+  if (parsed.type === 'message') {
+    // Validate message size
+    if (!parsed.text || parsed.text.length > MAX_MESSAGE_SIZE) {
+      sendToSocket(conns.humans.get(connId), {
+        type: 'error',
+        error: `Message exceeds maximum size of ${MAX_MESSAGE_SIZE} bytes`
+      });
+      return;
+    }
+
+    // Generate message ID and timestamp
+    const msgId = `msg_${nanoid(12)}`;
+    const timestamp = new Date().toISOString();
+
+    // Save to database
+    saveChatMessage({
+      channelId,
+      messageId: msgId,
+      from: 'human',
+      fromConnId: connId,
+      text: parsed.text,
+      timestamp
+    });
+
+    channelLog(channelId, 'human_message', `connId=${connId} msgId=${msgId}`);
+
+    // Forward to agent if connected
+    if (conns.agent) {
+      sendToAgent(channelId, {
+        type: 'message',
+        from: 'human',
+        text: parsed.text,
+        id: msgId,
+        timestamp,
+        connId  // So agent knows which human sent it
+      });
+    } else {
+      // No agent connected - queue message or return error
+      sendToSocket(conns.humans.get(connId), {
+        type: 'error',
+        error: 'Agent not connected',
+        messageId: msgId
+      });
+    }
+  } else if (parsed.type === 'ping') {
+    sendToSocket(conns.humans.get(connId), { type: 'pong' });
+  } else if (parsed.type === 'history') {
+    // Client requesting chat history
+    const limit = Math.min(parsed.limit || 50, 100);
+    const history = getChatHistory(channelId, limit, parsed.before);
+    sendToSocket(conns.humans.get(connId), {
+      type: 'history',
+      messages: history
+    });
+  }
+}
+
+/**
+ * Handle a message from the agent (OpenClaw plugin)
+ */
+function handleAgentMessage(channelId, parsed) {
+  const conns = channelConnections.get(channelId);
+  if (!conns) return;
+
+  if (parsed.type === 'message') {
+    // Agent sending a response
+    const msgId = parsed.id || `msg_${nanoid(12)}`;
+    const timestamp = parsed.timestamp || new Date().toISOString();
+
+    // Save to database
+    saveChatMessage({
+      channelId,
+      messageId: msgId,
+      from: 'agent',
+      text: parsed.text,
+      timestamp,
+      replyTo: parsed.replyTo
+    });
+
+    channelLog(channelId, 'agent_message', `msgId=${msgId}`);
+
+    // Broadcast to all human clients (or specific one if connId provided)
+    if (parsed.connId && conns.humans.has(parsed.connId)) {
+      sendToSocket(conns.humans.get(parsed.connId), {
+        type: 'message',
+        from: 'agent',
+        text: parsed.text,
+        id: msgId,
+        timestamp
+      });
+    } else {
+      broadcastToHumans(channelId, {
+        type: 'message',
+        from: 'agent',
+        text: parsed.text,
+        id: msgId,
+        timestamp
+      });
+    }
+  } else if (parsed.type === 'chunk') {
+    // Streaming chunk
+    if (parsed.connId && conns.humans.has(parsed.connId)) {
+      sendToSocket(conns.humans.get(parsed.connId), {
+        type: 'chunk',
+        text: parsed.text,
+        id: parsed.id
+      });
+    } else {
+      broadcastToHumans(channelId, {
+        type: 'chunk',
+        text: parsed.text,
+        id: parsed.id
+      });
+    }
+  } else if (parsed.type === 'done') {
+    // Streaming complete
+    const timestamp = new Date().toISOString();
+    
+    // Save final message if text provided
+    if (parsed.text) {
+      saveChatMessage({
+        channelId,
+        messageId: parsed.id,
+        from: 'agent',
+        text: parsed.text,
+        timestamp,
+        replyTo: parsed.replyTo
+      });
+    }
+
+    if (parsed.connId && conns.humans.has(parsed.connId)) {
+      sendToSocket(conns.humans.get(parsed.connId), {
+        type: 'done',
+        id: parsed.id,
+        timestamp
+      });
+    } else {
+      broadcastToHumans(channelId, {
+        type: 'done',
+        id: parsed.id,
+        timestamp
+      });
+    }
+  } else if (parsed.type === 'typing') {
+    // Agent is typing indicator
+    broadcastToHumans(channelId, { type: 'typing' });
+  } else if (parsed.type === 'error') {
+    // Error from agent
+    if (parsed.connId && conns.humans.has(parsed.connId)) {
+      sendToSocket(conns.humans.get(parsed.connId), {
+        type: 'error',
+        error: parsed.error,
+        messageId: parsed.messageId
+      });
+    } else {
+      broadcastToHumans(channelId, {
+        type: 'error',
+        error: parsed.error
+      });
+    }
+  } else if (parsed.type === 'ping') {
+    sendToAgent(channelId, { type: 'pong' });
+  }
+}
+
+/**
+ * Complete WebSocket handshake
+ */
+function completeHandshake(req, socket) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) return false;
+
+  const acceptKey = crypto
+    .createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+    .digest('base64');
+
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
+    '\r\n'
+  );
+
+  return true;
+}
+
+/**
+ * Set up human client connection
+ */
+function setupHumanConnection(channel, socket, connId) {
+  const channelId = channel.channel_id;
+  const conns = getChannelConns(channelId);
+  
+  conns.humans.set(connId, socket);
+  channelLog(channelId, 'human_connected', `connId=${connId}`);
+
+  // Notify agent of new human connection
+  if (conns.agent) {
+    sendToAgent(channelId, {
+      type: 'human_connected',
+      connId
+    });
   }
 
-  return Buffer.concat([header, payload]);
+  // Set up keepalive
+  const pingInterval = setInterval(() => {
+    if (socket.writable) {
+      socket.write(createWebSocketFrame(JSON.stringify({ type: 'ping' })));
+    }
+  }, PING_INTERVAL_MS);
+
+  // Handle incoming data
+  let buffer = Buffer.alloc(0);
+  socket.on('data', async (data) => {
+    buffer = Buffer.concat([buffer, data]);
+    const frames = parseWebSocketFrames(buffer);
+    buffer = Buffer.alloc(0); // Clear buffer after parsing
+    
+    for (const frame of frames) {
+      if (frame.type === 'close') {
+        socket.end();
+        return;
+      }
+      if (frame.type === 'ping') {
+        socket.write(createPongFrame(frame.payload));
+        continue;
+      }
+      if (frame.type !== 'text') continue;
+
+      try {
+        const parsed = JSON.parse(frame.data);
+        await handleHumanMessage(channelId, connId, parsed);
+      } catch (err) {
+        sendToSocket(socket, { type: 'error', error: 'Invalid message format' });
+      }
+    }
+  });
+
+  // Cleanup on disconnect
+  const cleanup = () => {
+    clearInterval(pingInterval);
+    conns.humans.delete(connId);
+    channelLog(channelId, 'human_disconnected', `connId=${connId}`);
+    
+    // Notify agent
+    if (conns.agent) {
+      sendToAgent(channelId, {
+        type: 'human_disconnected',
+        connId
+      });
+    }
+
+    // Clean up empty channel
+    if (conns.humans.size === 0 && !conns.agent) {
+      channelConnections.delete(channelId);
+    }
+  };
+
+  socket.on('close', cleanup);
+  socket.on('error', cleanup);
+}
+
+/**
+ * Set up agent (OpenClaw plugin) connection
+ */
+function setupAgentConnection(channel, socket) {
+  const channelId = channel.channel_id;
+  const conns = getChannelConns(channelId);
+  const connId = `agent_${nanoid(8)}`;
+
+  // Only one agent connection per channel
+  if (conns.agent) {
+    channelLog(channelId, 'agent_rejected', 'already connected');
+    sendToSocket(socket, { type: 'error', error: 'Agent already connected' });
+    socket.end();
+    return;
+  }
+
+  conns.agent = socket;
+  conns.agentConnId = connId;
+  channelLog(channelId, 'agent_connected');
+  markChannelConnected(channel.id);
+
+  // Notify agent of currently connected humans
+  const humanConnIds = Array.from(conns.humans.keys());
+  sendToAgent(channelId, {
+    type: 'connected',
+    channelId,
+    humans: humanConnIds
+  });
+
+  // Set up keepalive
+  const pingInterval = setInterval(() => {
+    if (socket.writable) {
+      socket.write(createWebSocketFrame(JSON.stringify({ type: 'ping' })));
+    }
+  }, PING_INTERVAL_MS);
+
+  // Handle incoming data
+  let buffer = Buffer.alloc(0);
+  socket.on('data', (data) => {
+    buffer = Buffer.concat([buffer, data]);
+    const frames = parseWebSocketFrames(buffer);
+    buffer = Buffer.alloc(0);
+    
+    for (const frame of frames) {
+      if (frame.type === 'close') {
+        socket.end();
+        return;
+      }
+      if (frame.type === 'ping') {
+        socket.write(createPongFrame(frame.payload));
+        continue;
+      }
+      if (frame.type !== 'text') continue;
+
+      try {
+        const parsed = JSON.parse(frame.data);
+        handleAgentMessage(channelId, parsed);
+      } catch (err) {
+        sendToSocket(socket, { type: 'error', error: 'Invalid message format' });
+      }
+    }
+  });
+
+  // Cleanup on disconnect
+  const cleanup = () => {
+    clearInterval(pingInterval);
+    conns.agent = null;
+    conns.agentConnId = null;
+    channelLog(channelId, 'agent_disconnected');
+
+    // Notify all humans
+    broadcastToHumans(channelId, {
+      type: 'agent_disconnected'
+    });
+
+    // Clean up empty channel
+    if (conns.humans.size === 0) {
+      channelConnections.delete(channelId);
+    }
+  };
+
+  socket.on('close', cleanup);
+  socket.on('error', cleanup);
+}
+
+/**
+ * Set up channel WebSocket handling on the HTTP server.
+ */
+export function setupChannelProxy(server) {
+  server.on('upgrade', async (req, socket, _head) => {
+    const match = req.url.match(/^\/channel\/([^/?]+)(.*)/);
+    if (!match) return; // Not a channel request
+
+    const channelId = match[1];
+    const queryString = match[2];
+    const channel = getChannel(channelId);
+
+    channelLog(channelId, 'connection_attempt', `from=${req.socket.remoteAddress}`);
+
+    if (!channel || !channel.channel_enabled) {
+      channelLog(channelId, 'rejected', 'channel not found or disabled');
+      socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Determine connection type from query param: ?role=agent or default to human
+    const isAgent = queryString.includes('role=agent');
+
+    // Complete WebSocket handshake
+    if (!completeHandshake(req, socket)) {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    // Wait for auth message
+    let authenticated = false;
+    let authAttempts = 0;
+    let buffer = Buffer.alloc(0);
+    const connId = `conn_${nanoid(8)}`;
+
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) {
+        channelLog(channelId, 'auth_timeout');
+        sendToSocket(socket, { type: 'error', error: 'Authentication timeout' });
+        socket.end();
+      }
+    }, AUTH_TIMEOUT_MS);
+
+    const authHandler = async (data) => {
+      buffer = Buffer.concat([buffer, data]);
+      const frames = parseWebSocketFrames(buffer);
+      
+      for (const frame of frames) {
+        if (frame.type !== 'text') continue;
+        
+        try {
+          const parsed = JSON.parse(frame.data);
+          
+          if (parsed.type === 'auth') {
+            const valid = await verifyChannelKey(channel, parsed.key);
+            
+            if (valid) {
+              clearTimeout(authTimeout);
+              authenticated = true;
+              socket.removeListener('data', authHandler);
+              channelLog(channelId, 'auth_success', isAgent ? 'agent' : 'human');
+              
+              sendToSocket(socket, { type: 'auth', success: true });
+
+              if (isAgent) {
+                setupAgentConnection(channel, socket);
+              } else {
+                setupHumanConnection(channel, socket, connId);
+              }
+              return;
+            } else {
+              authAttempts++;
+              channelLog(channelId, 'auth_failed', `attempt ${authAttempts}/${MAX_AUTH_ATTEMPTS}`);
+              
+              if (authAttempts >= MAX_AUTH_ATTEMPTS) {
+                clearTimeout(authTimeout);
+                sendToSocket(socket, { 
+                  type: 'auth', 
+                  success: false, 
+                  error: 'Max auth attempts exceeded' 
+                });
+                socket.end();
+                return;
+              }
+              
+              sendToSocket(socket, { 
+                type: 'auth', 
+                success: false,
+                error: 'Invalid credentials',
+                attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts
+              });
+              buffer = Buffer.alloc(0);
+            }
+          } else {
+            sendToSocket(socket, { type: 'error', error: 'First message must be auth' });
+            clearTimeout(authTimeout);
+            socket.end();
+            return;
+          }
+        } catch {
+          sendToSocket(socket, { type: 'error', error: 'Invalid auth message' });
+          clearTimeout(authTimeout);
+          socket.end();
+          return;
+        }
+      }
+    };
+
+    socket.on('data', authHandler);
+    socket.on('error', () => clearTimeout(authTimeout));
+    socket.on('close', () => clearTimeout(authTimeout));
+  });
 }
 
 export default { setupChannelProxy };
