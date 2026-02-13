@@ -4,7 +4,7 @@ import { join } from 'path';
 import { writeFileSync } from 'fs';
 import crypto from 'crypto';
 import { listApiKeys, createApiKey, deleteApiKey, regenerateApiKey, updateAgentWebhook, updateAgentBio, getApiKeyById, getAvatarsDir, getAvatarFilename, deleteAgentAvatar, setAgentEnabled, setAgentRawResults, updateGatewayProxy, regenerateProxyId, getAgentDataCounts, getAgentServiceAccess, listMcpSessions, updateChannel, disableChannel } from '../../lib/db.js';
-import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar, BASE_URL } from './shared.js';
+import { escapeHtml, formatDate, htmlHead, navHeader, socketScript, localizeScript, menuScript, renderAvatar } from './shared.js';
 
 const router = Router();
 
@@ -1330,8 +1330,16 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
             <span class="label">Internal URL</span>
             <span class="value" style="font-size: 12px;">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
           </div>
+          <div class="detail-row">
+            <span class="label">HTTP Proxy URL</span>
+            <span class="value" id="proxy-http-url" style="font-size: 12px; word-break: break-all;"></span>
+          </div>
+          <div class="detail-row">
+            <span class="label">WebSocket Proxy URL</span>
+            <span class="value" id="proxy-ws-url" style="font-size: 12px; word-break: break-all;"></span>
+          </div>
           <div class="proxy-url-box">
-            <code id="proxy-url">${escapeHtml(getProxyUrl(agent.gateway_proxy_id))}</code>
+            <code id="proxy-url"></code>
             <button type="button" class="btn-copy-sm" onclick="copyProxyUrl()">Copy</button>
           </div>
         ` : '<p class="value muted">Not enabled. Proxy exposes the agent\'s gateway through AgentGate.</p>'}
@@ -1700,6 +1708,24 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
       if ((await res.json()).success) location.href = '/ui/keys';
     }
 
+    // Gateway Proxy URLs
+    ${agent.gateway_proxy_enabled ? `
+    (function() {
+      var proxyId = '${escapeHtml(agent.gateway_proxy_id || '')}';
+      if (proxyId) {
+        var httpUrl = location.protocol + '//' + location.host + '/px/' + proxyId + '/';
+        var wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        var wsUrl = wsProto + location.host + '/px/' + proxyId + '/';
+        var httpEl = document.getElementById('proxy-http-url');
+        var wsEl = document.getElementById('proxy-ws-url');
+        var codeEl = document.getElementById('proxy-url');
+        if (httpEl) httpEl.textContent = httpUrl;
+        if (wsEl) wsEl.textContent = wsUrl;
+        if (codeEl) codeEl.textContent = wsUrl;
+      }
+    })();
+    ` : ''}
+
     // Channel WebSocket
     ${agent.channel_enabled ? `
     (function() {
@@ -1998,11 +2024,6 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
 </html>`;
 }
 
-function getProxyUrl(proxyId) {
-  if (!proxyId) return '';
-  return BASE_URL + '/px/' + proxyId + '/';
-}
-
 function getServiceIcon(service) {
   const icons = {
     github: '/public/icons/github.svg',
@@ -2038,3 +2059,4 @@ function getServiceDisplayName(service) {
 }
 
 export default router;
+
