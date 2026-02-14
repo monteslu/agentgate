@@ -675,6 +675,15 @@ export function getApiKeyById(id) {
   return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at, channel_enabled, channel_id, channel_last_connected FROM api_keys WHERE id = ?').get(id);
 }
 
+/**
+ * Get API key by the key value itself (for Bearer token auth)
+ */
+export function getApiKeyByKey(key) {
+  if (!key) return null;
+  return db.prepare('SELECT * FROM api_keys WHERE api_key = ? AND enabled = 1').get(key);
+}
+
+
 // Get counts of all data associated with an agent (for delete warning)
 export function getAgentDataCounts(agentName) {
   const nameLower = agentName.toLowerCase();
