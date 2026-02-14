@@ -5,37 +5,15 @@
  * This module manages the message passing between them.
  */
 
+import { createWebSocketFrame } from '../lib/ws-utils.js';
 
 // Store channel bridges
 // channelId -> { humans: Map<connId, socket>, agent: socket | null, messageQueue: [] }
 const bridges = new Map();
 
 /**
- * Create WebSocket text frame
+ * Send JSON message to socket
  */
-function createWebSocketFrame(message) {
-  const payload = Buffer.from(message, 'utf8');
-  const length = payload.length;
-  
-  let header;
-  if (length < 126) {
-    header = Buffer.alloc(2);
-    header[0] = 0x81;
-    header[1] = length;
-  } else if (length < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(length), 2);
-  }
-  return Buffer.concat([header, payload]);
-}
-
 function sendToSocket(socket, msg) {
   if (socket && socket.writable) {
     socket.write(createWebSocketFrame(JSON.stringify(msg)));
