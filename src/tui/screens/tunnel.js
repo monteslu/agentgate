@@ -94,6 +94,8 @@ async function hsyncConfigScreen(current) {
       await testPublicUrl(publicUrl);
     }
 
+    term.yellow('  ⚠  Restart your AgentGate server to apply tunnel changes.\n\n');
+
     return config;
   } catch (err) {
     if (handleCancel(err)) return null;
@@ -143,6 +145,8 @@ async function cloudflareConfigScreen() {
       await testPublicUrl(publicUrl);
     }
 
+    term.yellow('  ⚠  Restart your AgentGate server to apply tunnel changes.\n\n');
+
     return config;
   } catch (err) {
     if (handleCancel(err)) return null;
@@ -162,7 +166,8 @@ async function disableTunnel() {
     setSetting('cloudflare_tunnel', { ...cf, enabled: false });
     stopCloudflared();
   }
-  term.green('\n  ✅ Tunnel disabled\n\n');
+  term.green('\n  ✅ Tunnel disabled\n');
+  term.yellow('  ⚠  Restart your AgentGate server to apply tunnel changes.\n\n');
 }
 
 export async function tunnelScreen() {

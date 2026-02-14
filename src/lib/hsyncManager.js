@@ -20,9 +20,35 @@ export async function connectHsync(port) {
       hsyncSecret: config.token || undefined
     };
 
-    currentConnection = await createConnection(options);
-    currentUrl = currentConnection.publicUrl || currentConnection.url || config.url || null;
-    console.log(`hsync connected: ${currentUrl || 'connected'}`);
+    const client = await createConnection(options);
+
+    // createConnection returns immediately before MQTT is established.
+    // Wait for the actual connection (or error/timeout).
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('hsync connection timed out'));
+      }, 15000);
+
+      if (client.status === 'connected') {
+        clearTimeout(timeout);
+        resolve();
+        return;
+      }
+
+      client.on('connected', () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+
+      client.on('connect_error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+    });
+
+    currentConnection = client;
+    currentUrl = config.url;
+    console.log(`hsync connected: ${currentUrl}`);
     return currentConnection;
   } catch (err) {
     console.error('hsync connection failed:', err.message);
@@ -35,10 +61,8 @@ export async function connectHsync(port) {
 export async function disconnectHsync() {
   if (currentConnection) {
     try {
-      if (typeof currentConnection.close === 'function') {
-        await currentConnection.close();
-      } else if (typeof currentConnection.disconnect === 'function') {
-        await currentConnection.disconnect();
+      if (typeof currentConnection.endClient === 'function') {
+        currentConnection.endClient(true);
       }
     } catch {
       // Disconnect errors are non-fatal
@@ -53,5 +77,5 @@ export function getHsyncUrl() {
 }
 
 export function isHsyncConnected() {
-  return currentConnection !== null;
+  return currentConnection !== null && currentConnection.status === 'connected';
 }
