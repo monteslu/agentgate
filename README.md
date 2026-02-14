@@ -34,6 +34,8 @@ npx agentgate
 
 Open http://localhost:3050, create a password, add services, create agent API keys.
 
+📺 [Video walkthrough](https://www.youtube.com/watch?v=P7pgyFEm_cg)
+
 ## Supported Services
 
 GitHub, Bluesky, Mastodon, Reddit, Google Calendar, YouTube, LinkedIn, Jira, Fitbit, Brave Search, Google Search
