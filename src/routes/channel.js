@@ -1,23 +1,37 @@
 /**
- * Channel WebSocket endpoint — filtered gateway proxy for chat clients.
- * 
- * Provides limited, filtered access to an agent's gateway. Only allows
- * messaging operations; blocks admin ops, config, tools, etc.
+ * Channel WebSocket endpoint for HUMAN clients.
  * 
  * Endpoint: WS /channel/<channel-id>
- * Auth: bcrypt key in first message or x-channel-key header
+ * Auth: Channel key in first message { type: "auth", key: "..." }
  * 
- * Security model: STRICT WHITELIST ONLY
- * - Only explicitly allowed message types pass through
- * - Non-JSON messages are blocked
- * - No fallback heuristics for unknown message types
+ * This is the human-facing chat interface. Agent connects via /api/channel/<id>.
+ * 
+ * Protocol:
+ *   Client: { type: "auth", key: "<channel-key>" }
+ *   Server: { type: "auth", success: true }
+ *   Client: { type: "message", text: "hello" }
+ *   Server: { type: "message", from: "agent", text: "hi", id: "msg_123", timestamp: "..." }
+ *   Server: { type: "chunk", text: "partial...", id: "msg_123" }
+ *   Server: { type: "done", id: "msg_123" }
+ *   Server: { type: "typing" }
+ *   Server: { type: "error", error: "..." }
  */
 
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import http from 'http';
-import https from 'https';
-import { getChannel, markChannelConnected } from '../lib/db.js';
+import { nanoid } from 'nanoid';
+import { 
+  getChannel, 
+  saveChatMessage,
+  getChatHistory
+} from '../lib/db.js';
+import { getChannelBridge } from './channel-bridge.js';
+import { 
+  createWebSocketFrame, 
+  parseWebSocketFrames, 
+  createPongFrame,
+  WS_OPCODES 
+} from '../lib/ws-utils.js';
 
 // Admin token validation is injected at runtime to avoid circular imports
 let validateAdminChatToken = null;
@@ -26,32 +40,15 @@ export function setAdminTokenValidator(fn) {
 }
 
 // Configuration
-const AUTH_TIMEOUT_MS = 30000;  // 30 seconds to authenticate
-const MAX_AUTH_ATTEMPTS = 3;    // Max failed auth attempts before disconnect
-
-// Whitelist of allowed message types from client → gateway
-const ALLOWED_CLIENT_MESSAGES = new Set([
-  'send',           // Send a message
-  'subscribe',      // Subscribe to session events
-  'ping',           // Keepalive
-  'pong'            // Keepalive response
-]);
-
-// Message types from gateway that we forward to client
-const ALLOWED_GATEWAY_MESSAGES = new Set([
-  'message',        // Agent response
-  'response',       // Response to send
-  'chunk',          // Streaming chunk (partial response)
-  'done',           // Streaming done (final message)
-  'event',          // Session events (typing, etc.)
-  'ping',
-  'pong',
-  'subscribed',     // Confirmation of subscription
-  'error'           // Errors (filtered)
-]);
+const AUTH_TIMEOUT_MS = 30000;
+const MAX_AUTH_ATTEMPTS = 3;
+const MAX_MESSAGE_SIZE = 4096;
+const PING_INTERVAL_MS = 30000;
+const RATE_LIMIT_WINDOW_MS = 1000;
+const RATE_LIMIT_MAX_MESSAGES = 10;
 
 /**
- * Log channel events with timestamp for audit trail
+ * Log channel events
  */
 function channelLog(channelId, event, details = '') {
   const ts = new Date().toISOString();
@@ -59,7 +56,7 @@ function channelLog(channelId, event, details = '') {
 }
 
 /**
- * Verify channel key against stored bcrypt hash
+ * Verify channel key
  */
 async function verifyChannelKey(channel, providedKey) {
   if (!channel.channel_key_hash || !providedKey) return false;
@@ -71,460 +68,242 @@ async function verifyChannelKey(channel, providedKey) {
 }
 
 /**
- * Filter a message from client before forwarding to gateway.
- * STRICT WHITELIST: Returns the message if type is explicitly allowed, null otherwise.
+ * Rate limiter
  */
-function filterClientMessage(message, channelId) {
-  try {
-    const parsed = JSON.parse(message);
-    const type = parsed.type || parsed.action || parsed.method;
-    
-    if (!type || !ALLOWED_CLIENT_MESSAGES.has(type)) {
-      channelLog(channelId, 'blocked_client_msg', `type=${type}`);
-      return null;
-    }
-    
-    return message;
-  } catch {
-    channelLog(channelId, 'blocked_client_msg', 'non-JSON');
-    return null;
+function checkRateLimit(state) {
+  const now = Date.now();
+  if (now - state.windowStart > RATE_LIMIT_WINDOW_MS) {
+    state.windowStart = now;
+    state.count = 0;
+  }
+  state.count++;
+  return state.count <= RATE_LIMIT_MAX_MESSAGES;
+}
+
+/**
+ * Send JSON message to socket
+ */
+function sendToSocket(socket, msg) {
+  if (socket && socket.writable) {
+    socket.write(createWebSocketFrame(JSON.stringify(msg)));
   }
 }
 
 /**
- * Filter a message from gateway before forwarding to client.
- * STRICT WHITELIST: Only explicitly allowed types pass through.
- * Non-JSON and unknown types are BLOCKED (not forwarded).
+ * Complete WebSocket handshake
  */
-function filterGatewayMessage(message, channelId) {
-  try {
-    const parsed = JSON.parse(message);
-    const type = parsed.type || parsed.action || parsed.method;
-    
-    // STRICT: Only allow explicitly whitelisted types
-    if (type && ALLOWED_GATEWAY_MESSAGES.has(type)) {
-      return message;
+function completeHandshake(req, socket) {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) return false;
+
+  const acceptKey = crypto
+    .createHash('sha1')
+    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+    .digest('base64');
+
+  socket.write(
+    'HTTP/1.1 101 Switching Protocols\r\n' +
+    'Upgrade: websocket\r\n' +
+    'Connection: Upgrade\r\n' +
+    `Sec-WebSocket-Accept: ${acceptKey}\r\n\r\n`
+  );
+  return true;
+}
+
+/**
+ * Handle human message
+ */
+async function handleHumanMessage(channelId, connId, parsed, socket, rateLimit) {
+  if (!checkRateLimit(rateLimit)) {
+    sendToSocket(socket, { type: 'error', error: 'Rate limited' });
+    return;
+  }
+
+  const bridge = getChannelBridge(channelId);
+
+  if (parsed.type === 'message') {
+    if (!parsed.text || typeof parsed.text !== 'string' || parsed.text.length > MAX_MESSAGE_SIZE) {
+      sendToSocket(socket, { type: 'error', error: 'Invalid message' });
+      return;
     }
-    
-    channelLog(channelId, 'blocked_gateway_msg', `type=${type}`);
-    return null;
-  } catch {
-    // Non-JSON from gateway is blocked (security: could leak binary/raw data)
-    channelLog(channelId, 'blocked_gateway_msg', 'non-JSON');
-    return null;
+
+    const msgId = `msg_${nanoid(12)}`;
+    const timestamp = new Date().toISOString();
+
+    saveChatMessage({ channelId, messageId: msgId, from: 'human', fromConnId: connId, text: parsed.text, timestamp });
+    channelLog(channelId, 'human_message', `connId=${connId} msgId=${msgId}`);
+
+    // Forward to agent via bridge
+    bridge.sendToAgent({
+      type: 'message',
+      from: 'human',
+      text: parsed.text,
+      id: msgId,
+      timestamp,
+      connId
+    });
+
+  } else if (parsed.type === 'ping') {
+    sendToSocket(socket, { type: 'pong' });
+  } else if (parsed.type === 'history') {
+    const limit = Math.min(parsed.limit || 50, 100);
+    const history = getChatHistory(channelId, limit, parsed.before);
+    sendToSocket(socket, { type: 'history', messages: history });
   }
 }
 
 /**
- * Set up channel WebSocket handling on the HTTP server.
- * Called after setupWebSocketProxy() to handle /channel/* paths.
+ * Set up human connection
  */
-export function setupChannelProxy(server) {
+function setupHumanConnection(channel, socket, connId) {
+  const channelId = channel.channel_id;
+  const bridge = getChannelBridge(channelId);
+  const rateLimit = { windowStart: Date.now(), count: 0 };
+
+  bridge.addHuman(connId, socket);
+  channelLog(channelId, 'human_connected', `connId=${connId}`);
+
+  const pingInterval = setInterval(() => {
+    if (socket.writable) sendToSocket(socket, { type: 'ping' });
+  }, PING_INTERVAL_MS);
+
+  let buffer = Buffer.alloc(0);
+  socket.on('data', async (data) => {
+    buffer = Buffer.concat([buffer, data]);
+    const { messages, remainder } = parseWebSocketFrames(buffer);
+    buffer = remainder;
+
+    for (const frame of messages) {
+      if (frame.opcode === WS_OPCODES.CLOSE) { 
+        socket.end(); 
+        return; 
+      }
+      if (frame.opcode === WS_OPCODES.PING) { 
+        socket.write(createPongFrame(frame.payload)); 
+        continue; 
+      }
+      if (frame.opcode !== WS_OPCODES.TEXT) continue;
+
+      try {
+        const parsed = JSON.parse(frame.payload.toString('utf8'));
+        await handleHumanMessage(channelId, connId, parsed, socket, rateLimit);
+      } catch {
+        sendToSocket(socket, { type: 'error', error: 'Invalid message format' });
+      }
+    }
+  });
+
+  const cleanup = () => {
+    clearInterval(pingInterval);
+    bridge.removeHuman(connId);
+    channelLog(channelId, 'human_disconnected', `connId=${connId}`);
+  };
+
+  socket.on('close', cleanup);
+  socket.on('error', cleanup);
+}
+
+/**
+ * Set up human channel WebSocket handling
+ */
+export function setupHumanChannelProxy(server) {
   server.on('upgrade', async (req, socket, _head) => {
-    const match = req.url.match(/^\/channel\/([^/?]+)(.*)/);
-    if (!match) return; // Not a channel request
+    // Only handle /channel/<id>, not /api/channel/<id>
+    if (req.url.startsWith('/api/')) return;
+    
+    const match = req.url.match(/^\/channel\/([^/?]+)/);
+    if (!match) return;
 
     const channelId = match[1];
     const channel = getChannel(channelId);
 
-    channelLog(channelId, 'connection_attempt', `from=${req.socket.remoteAddress}`);
+    channelLog(channelId, 'human_connection_attempt', `from=${req.socket.remoteAddress}`);
 
     if (!channel || !channel.channel_enabled) {
-      channelLog(channelId, 'rejected', 'channel not found or disabled');
       socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    if (!channel.gateway_proxy_url) {
-      channelLog(channelId, 'rejected', 'gateway not configured');
-      socket.write('HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/plain\r\n\r\nGateway not configured');
+    if (!completeHandshake(req, socket)) {
+      socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // Check for key in header (preferred)
-    const headerKey = req.headers['x-channel-key'];
-    if (headerKey) {
-      const valid = await verifyChannelKey(channel, headerKey);
-      if (!valid) {
-        channelLog(channelId, 'auth_failed', 'invalid header key');
-        socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-        socket.destroy();
-        return;
-      }
-      channelLog(channelId, 'auth_success', 'via header');
-      connectToGatewayFiltered(channel, req, socket);
-      return;
-    }
+    // Auth flow
+    let authenticated = false;
+    let authAttempts = 0;
+    let buffer = Buffer.alloc(0);
+    const connId = `human_${nanoid(8)}`;
 
-    // No header key — expect auth in first WebSocket message
-    completeHandshakeAndWaitForAuth(channel, req, socket);
-  });
-}
-
-/**
- * Complete WebSocket handshake and wait for auth message
- */
-function completeHandshakeAndWaitForAuth(channel, req, socket) {
-  const channelId = channel.channel_id;
-  
-  // Simple WebSocket handshake
-  const key = req.headers['sec-websocket-key'];
-  if (!key) {
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-    .digest('base64');
-
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
-  );
-
-  let authenticated = false;
-  let gatewaySocket = null;
-  let buffer = Buffer.alloc(0);
-  let authAttempts = 0;
-
-  // Auth timeout - disconnect if no auth within timeout period
-  const authTimeout = setTimeout(() => {
-    if (!authenticated) {
-      channelLog(channelId, 'auth_timeout', `after ${AUTH_TIMEOUT_MS}ms`);
-      socket.write(createWebSocketFrame(JSON.stringify({ 
-        type: 'error', 
-        error: 'Authentication timeout' 
-      })));
-      socket.end();
-    }
-  }, AUTH_TIMEOUT_MS);
-
-  // Cleanup function
-  const cleanup = () => {
-    clearTimeout(authTimeout);
-    if (gatewaySocket) gatewaySocket.destroy();
-  };
-
-  socket.on('data', async (data) => {
-    if (authenticated) {
-      // Already authed, forward to gateway (filtered)
-      if (gatewaySocket && gatewaySocket.writable) {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterClientMessage(msg, channelId);
-          if (filtered) {
-            gatewaySocket.write(createWebSocketFrame(filtered));
-          } else {
-            socket.write(createWebSocketFrame(JSON.stringify({
-              type: 'error',
-              error: 'Message type not allowed on channel endpoint'
-            })));
-          }
-        }
-      }
-      return;
-    }
-
-    // Waiting for auth message
-    buffer = Buffer.concat([buffer, data]);
-    const messages = parseWebSocketFrames(buffer);
-    
-    if (messages.length > 0) {
-      const firstMsg = messages[0];
-      try {
-        const parsed = JSON.parse(firstMsg);
-        if (parsed.type === 'auth') {
-          let valid = false;
-          let authMethod = '';
-          
-          // Check for admin token first (one-time tokens from admin UI)
-          if (parsed.adminToken && validateAdminChatToken) {
-            valid = validateAdminChatToken(parsed.adminToken, channelId);
-            authMethod = 'admin_token';
-          }
-          // Fall back to channel key
-          else if (parsed.key) {
-            valid = await verifyChannelKey(channel, parsed.key);
-            authMethod = 'channel_key';
-          }
-          
-          if (valid) {
-            clearTimeout(authTimeout);
-            authenticated = true;
-            channelLog(channelId, 'auth_success', `via ${authMethod}`);
-            socket.write(createWebSocketFrame(JSON.stringify({ type: 'auth', success: true })));
-            gatewaySocket = await connectToGatewayFilteredInternal(channel, socket);
-            markChannelConnected(channel.id);
-          } else {
-            authAttempts++;
-            channelLog(channelId, 'auth_failed', `attempt ${authAttempts}/${MAX_AUTH_ATTEMPTS}`);
-            
-            if (authAttempts >= MAX_AUTH_ATTEMPTS) {
-              socket.write(createWebSocketFrame(JSON.stringify({ 
-                type: 'auth', 
-                success: false, 
-                error: 'Max auth attempts exceeded' 
-              })));
-              cleanup();
-              socket.end();
-            } else {
-              socket.write(createWebSocketFrame(JSON.stringify({ 
-                type: 'auth', 
-                success: false, 
-                error: 'Invalid credentials',
-                attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts
-              })));
-              // Clear buffer to allow retry
-              buffer = Buffer.alloc(0);
-            }
-          }
-        } else {
-          socket.write(createWebSocketFrame(JSON.stringify({ 
-            type: 'error', 
-            error: 'First message must be auth' 
-          })));
-          cleanup();
-          socket.end();
-        }
-      } catch {
-        socket.write(createWebSocketFrame(JSON.stringify({ 
-          type: 'error', 
-          error: 'Invalid auth message' 
-        })));
-        cleanup();
+    const authTimeout = setTimeout(() => {
+      if (!authenticated) {
+        sendToSocket(socket, { type: 'error', error: 'Authentication timeout' });
         socket.end();
       }
-    }
-  });
+    }, AUTH_TIMEOUT_MS);
 
-  socket.on('error', cleanup);
-  socket.on('close', cleanup);
-}
+    const authHandler = async (data) => {
+      buffer = Buffer.concat([buffer, data]);
+      const { messages, remainder } = parseWebSocketFrames(buffer);
+      buffer = remainder;
 
-/**
- * Connect to gateway with full message filtering (for header auth path)
- * Completes WS handshake to client, then connects to gateway with filtering
- */
-function connectToGatewayFiltered(channel, req, socket) {
-  const channelId = channel.channel_id;
-  
-  // Complete WS handshake with client first
-  const key = req.headers['sec-websocket-key'];
-  if (!key) {
-    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
-    socket.destroy();
-    return;
-  }
+      for (const frame of messages) {
+        if (frame.opcode !== WS_OPCODES.TEXT) continue;
 
-  const acceptKey = crypto
-    .createHash('sha1')
-    .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-    .digest('base64');
+        try {
+          const parsed = JSON.parse(frame.payload.toString('utf8'));
 
-  socket.write(
-    'HTTP/1.1 101 Switching Protocols\r\n' +
-    'Upgrade: websocket\r\n' +
-    'Connection: Upgrade\r\n' +
-    `Sec-WebSocket-Accept: ${acceptKey}\r\n` +
-    '\r\n'
-  );
+          if (parsed.type === 'auth') {
+            let valid = false;
+            
+            // Check admin token first (one-time tokens from admin UI)
+            if (parsed.adminToken && validateAdminChatToken) {
+              valid = validateAdminChatToken(parsed.adminToken, channelId);
+            }
+            // Fall back to channel key
+            if (!valid && parsed.key) {
+              valid = await verifyChannelKey(channel, parsed.key);
+            }
 
-  // Now connect to gateway with filtering
-  connectToGatewayFilteredInternal(channel, socket).then(gatewaySocket => {
-    channelLog(channelId, 'connected', 'gateway proxy established');
-    markChannelConnected(channel.id);
-    
-    // Set up client→gateway filtering
-    socket.on('data', (data) => {
-      if (gatewaySocket && gatewaySocket.writable) {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterClientMessage(msg, channelId);
-          if (filtered) {
-            gatewaySocket.write(createWebSocketFrame(filtered));
+            if (valid) {
+              clearTimeout(authTimeout);
+              authenticated = true;
+              socket.removeListener('data', authHandler);
+              channelLog(channelId, 'human_auth_success');
+              sendToSocket(socket, { type: 'auth', success: true });
+              setupHumanConnection(channel, socket, connId);
+              return;
+            } else {
+              authAttempts++;
+              if (authAttempts >= MAX_AUTH_ATTEMPTS) {
+                clearTimeout(authTimeout);
+                sendToSocket(socket, { type: 'auth', success: false, error: 'Max attempts exceeded' });
+                socket.end();
+                return;
+              }
+              sendToSocket(socket, { type: 'auth', success: false, error: 'Invalid key', attemptsRemaining: MAX_AUTH_ATTEMPTS - authAttempts });
+            }
           } else {
-            socket.write(createWebSocketFrame(JSON.stringify({
-              type: 'error',
-              error: 'Message type not allowed on channel endpoint'
-            })));
+            sendToSocket(socket, { type: 'error', error: 'First message must be auth' });
+            clearTimeout(authTimeout);
+            socket.end();
+            return;
           }
+        } catch {
+          sendToSocket(socket, { type: 'error', error: 'Invalid auth message' });
+          clearTimeout(authTimeout);
+          socket.end();
+          return;
         }
       }
-    });
-
-    socket.on('error', () => gatewaySocket.destroy());
-    socket.on('close', () => gatewaySocket.destroy());
-  }).catch(err => {
-    channelLog(channelId, 'gateway_error', err.message);
-    socket.write(createWebSocketFrame(JSON.stringify({
-      type: 'error',
-      error: 'Failed to connect to gateway'
-    })));
-    socket.end();
-  });
-}
-
-/**
- * Internal: Connect to gateway and set up gateway→client filtering
- * Returns the gateway socket for bidirectional communication
- */
-function connectToGatewayFilteredInternal(channel, clientSocket) {
-  const channelId = channel.channel_id;
-  
-  return new Promise((resolve, reject) => {
-    const parsed = new URL(channel.gateway_proxy_url);
-    const isHttps = parsed.protocol === 'https:' || parsed.protocol === 'wss:';
-    const transport = isHttps ? https : http;
-
-    const wsPath = parsed.pathname || '/';
-    const headers = {
-      'Connection': 'Upgrade',
-      'Upgrade': 'websocket',
-      'Sec-WebSocket-Version': '13',
-      'Sec-WebSocket-Key': crypto.randomBytes(16).toString('base64'),
-      'Host': parsed.host
     };
 
-    const proxyReq = transport.request({
-      hostname: parsed.hostname,
-      port: parsed.port || (isHttps ? 443 : 80),
-      path: wsPath,
-      method: 'GET',
-      headers
-    });
-
-    proxyReq.on('upgrade', (_proxyRes, gatewaySocket, _proxyHead) => {
-      // NOTE: We intentionally do NOT forward proxyHead to client
-      // as it could contain unfiltered data from the gateway handshake
-      
-      // Set up gateway→client filtering
-      gatewaySocket.on('data', (data) => {
-        const messages = parseWebSocketFrames(data);
-        for (const msg of messages) {
-          const filtered = filterGatewayMessage(msg, channelId);
-          if (filtered) {
-            clientSocket.write(createWebSocketFrame(filtered));
-          }
-          // Blocked messages are silently dropped (logged in filterGatewayMessage)
-        }
-      });
-
-      gatewaySocket.on('error', () => {
-        channelLog(channelId, 'gateway_socket_error');
-        clientSocket.destroy();
-      });
-      gatewaySocket.on('close', () => {
-        channelLog(channelId, 'gateway_disconnected');
-        clientSocket.end();
-      });
-
-      resolve(gatewaySocket);
-    });
-
-    proxyReq.on('error', (err) => {
-      channelLog(channelId, 'gateway_connection_error', err.message);
-      reject(err);
-    });
-
-    proxyReq.end();
+    socket.on('data', authHandler);
+    socket.on('error', () => clearTimeout(authTimeout));
+    socket.on('close', () => clearTimeout(authTimeout));
   });
 }
 
-/**
- * Parse WebSocket frames from buffer.
- * NOTE: This is a simplified parser that only handles complete, non-fragmented
- * text frames (FIN=1, opcode=1). Fragmented messages (FIN=0 continuation frames)
- * are not supported and will be dropped. For production use, consider using
- * the 'ws' library which handles all frame types correctly.
- */
-function parseWebSocketFrames(buffer) {
-  const messages = [];
-  let offset = 0;
-
-  while (offset < buffer.length) {
-    if (buffer.length - offset < 2) break;
-
-    const firstByte = buffer[offset];
-    const secondByte = buffer[offset + 1];
-    const fin = (firstByte & 0x80) !== 0;
-    const opcode = firstByte & 0x0f;
-    const masked = (secondByte & 0x80) !== 0;
-    let payloadLength = secondByte & 0x7f;
-    
-    offset += 2;
-
-    if (payloadLength === 126) {
-      if (buffer.length - offset < 2) break;
-      payloadLength = buffer.readUInt16BE(offset);
-      offset += 2;
-    } else if (payloadLength === 127) {
-      if (buffer.length - offset < 8) break;
-      payloadLength = Number(buffer.readBigUInt64BE(offset));
-      offset += 8;
-    }
-
-    let maskKey = null;
-    if (masked) {
-      if (buffer.length - offset < 4) break;
-      maskKey = buffer.slice(offset, offset + 4);
-      offset += 4;
-    }
-
-    if (buffer.length - offset < payloadLength) break;
-
-    const payload = buffer.slice(offset, offset + payloadLength);
-    offset += payloadLength;
-
-    if (masked && maskKey) {
-      for (let i = 0; i < payload.length; i++) {
-        payload[i] ^= maskKey[i % 4];
-      }
-    }
-
-    // Only handle complete text frames (FIN=1, opcode=1)
-    // Fragmented frames (FIN=0) and continuation frames (opcode=0) are dropped
-    if (fin && opcode === 1) {
-      messages.push(payload.toString('utf8'));
-    }
-    // Close frames (opcode=8) could be handled here for graceful shutdown
-  }
-
-  return messages;
-}
-
-/**
- * Create a WebSocket text frame
- */
-function createWebSocketFrame(message) {
-  const payload = Buffer.from(message, 'utf8');
-  const length = payload.length;
-  
-  let header;
-  if (length < 126) {
-    header = Buffer.alloc(2);
-    header[0] = 0x81; // FIN + text opcode
-    header[1] = length;
-  } else if (length < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(length), 2);
-  }
-
-  return Buffer.concat([header, payload]);
-}
-
-export default { setupChannelProxy };
+export default { setupHumanChannelProxy, setAdminTokenValidator };

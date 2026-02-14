@@ -27,7 +27,8 @@ import servicesRoutes from './routes/services.js';
 import readmeRoutes from './routes/readme.js';
 import skillRoutes from './routes/skill.js';
 import { createProxyRouter, setupWebSocketProxy } from './routes/proxy.js';
-import { setupChannelProxy, setAdminTokenValidator } from './routes/channel.js';
+import { setupHumanChannelProxy, setAdminTokenValidator } from './routes/channel.js';
+import { setupAgentChannelProxy } from './routes/channel-agent.js';
 import { validateAdminChatToken } from './routes/ui/keys.js';
 import llmRoutes from './routes/llm.js';
 import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
@@ -133,7 +134,8 @@ const server = app.listen(PORT, async () => {
 
   // Set up channel WebSocket proxy for chat clients
   setAdminTokenValidator(validateAdminChatToken);
-  setupChannelProxy(server);
+  setupHumanChannelProxy(server);
+  setupAgentChannelProxy(server);
 
   // Start tunnels if configured
   try {
