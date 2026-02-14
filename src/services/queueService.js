@@ -95,7 +95,9 @@ export async function submitWriteRequest(
     try {
       markAutoApproved(entry.id);
       updateQueueStatus(entry.id, 'approved');
-      await executeQueueEntry({ ...entry, status: 'approved' });
+      // Fetch the full entry from DB (createQueueEntry only returns {id, status})
+      const fullEntry = getQueueEntry(entry.id);
+      await executeQueueEntry(fullEntry);
       const updatedEntry = getQueueEntry(entry.id);
 
       if (emitEvents) {
