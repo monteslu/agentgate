@@ -5,7 +5,6 @@
  * This module manages the message passing between them.
  */
 
-import { nanoid } from 'nanoid';
 
 // Store channel bridges
 // channelId -> { humans: Map<connId, socket>, agent: socket | null, messageQueue: [] }
