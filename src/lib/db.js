@@ -676,11 +676,37 @@ export function getApiKeyById(id) {
 }
 
 /**
- * Get API key by the key value itself (for Bearer token auth)
+ * Validate API key by token value and return agent info (for Bearer token auth).
+ * Uses key_prefix for indexed lookup, then bcrypt for verification.
+ * Returns only safe fields - never returns key_hash or raw credentials.
  */
-export function getApiKeyByKey(key) {
-  if (!key) return null;
-  return db.prepare('SELECT * FROM api_keys WHERE api_key = ? AND enabled = 1').get(key);
+export async function getApiKeyByKey(key) {
+  if (!key || key.length < 8) return null;
+  
+  const prefix = key.substring(0, 8);
+  // First narrow down by prefix (indexed), then verify with bcrypt
+  const candidates = db.prepare(`
+    SELECT id, name, key_hash, enabled, channel_enabled, channel_id, gateway_proxy_url, bio
+    FROM api_keys 
+    WHERE key_prefix = ? AND enabled = 1
+  `).all(prefix);
+  
+  for (const row of candidates) {
+    const match = await bcrypt.compare(key, row.key_hash);
+    if (match) {
+      // Return only safe fields - never expose key_hash
+      return {
+        id: row.id,
+        name: row.name,
+        enabled: row.enabled !== 0,
+        channel_enabled: row.channel_enabled !== 0,
+        channel_id: row.channel_id,
+        gateway_proxy_url: row.gateway_proxy_url,
+        bio: row.bio
+      };
+    }
+  }
+  return null;
 }
 
 
