@@ -26,6 +26,12 @@ import {
   getChatHistory
 } from '../lib/db.js';
 import { getChannelBridge } from './channel-bridge.js';
+import { 
+  createWebSocketFrame, 
+  parseWebSocketFrames, 
+  createPongFrame,
+  WS_OPCODES 
+} from '../lib/ws-utils.js';
 
 // Admin token validation is injected at runtime to avoid circular imports
 let validateAdminChatToken = null;
@@ -75,110 +81,17 @@ function checkRateLimit(state) {
 }
 
 /**
- * Create WebSocket text frame
+ * Send JSON message to socket
  */
-function createWebSocketFrame(message) {
-  const payload = Buffer.from(message, 'utf8');
-  const length = payload.length;
-  
-  let header;
-  if (length < 126) {
-    header = Buffer.alloc(2);
-    header[0] = 0x81;
-    header[1] = length;
-  } else if (length < 65536) {
-    header = Buffer.alloc(4);
-    header[0] = 0x81;
-    header[1] = 126;
-    header.writeUInt16BE(length, 2);
-  } else {
-    header = Buffer.alloc(10);
-    header[0] = 0x81;
-    header[1] = 127;
-    header.writeBigUInt64BE(BigInt(length), 2);
-  }
-  return Buffer.concat([header, payload]);
-}
-
-/**
- * Parse WebSocket frames
- */
-function parseWebSocketFrames(buffer) {
-  const messages = [];
-  let offset = 0;
-
-  while (offset < buffer.length) {
-    if (buffer.length - offset < 2) break;
-
-    const firstByte = buffer[offset];
-    const secondByte = buffer[offset + 1];
-    const fin = (firstByte & 0x80) !== 0;
-    const opcode = firstByte & 0x0f;
-    const masked = (secondByte & 0x80) !== 0;
-    let payloadLength = secondByte & 0x7f;
-    let headerLength = 2;
-
-    if (payloadLength === 126) {
-      if (buffer.length - offset < 4) break;
-      payloadLength = buffer.readUInt16BE(offset + 2);
-      headerLength = 4;
-    } else if (payloadLength === 127) {
-      if (buffer.length - offset < 10) break;
-      payloadLength = Number(buffer.readBigUInt64BE(offset + 2));
-      headerLength = 10;
-    }
-
-    const maskLength = masked ? 4 : 0;
-    const totalFrameLength = headerLength + maskLength + payloadLength;
-    if (buffer.length - offset < totalFrameLength) break;
-
-    let maskKey = null;
-    if (masked) {
-      maskKey = buffer.slice(offset + headerLength, offset + headerLength + 4);
-    }
-
-    const payloadStart = offset + headerLength + maskLength;
-    const payload = Buffer.from(buffer.slice(payloadStart, payloadStart + payloadLength));
-
-    if (masked && maskKey) {
-      for (let i = 0; i < payload.length; i++) {
-        payload[i] ^= maskKey[i % 4];
-      }
-    }
-
-    offset += totalFrameLength;
-
-    if (opcode === 8) {
-      messages.push({ type: 'close' });
-    } else if (opcode === 9) {
-      messages.push({ type: 'ping', payload });
-    } else if (fin && opcode === 1) {
-      messages.push({ type: 'text', data: payload.toString('utf8') });
-    }
-  }
-
-  return { messages, remainder: offset < buffer.length ? buffer.slice(offset) : Buffer.alloc(0) };
-}
-
-function createPongFrame(payload) {
-  const length = payload.length;
-  const header = Buffer.alloc(length < 126 ? 2 : 4);
-  header[0] = 0x8A;
-  if (length < 126) {
-    header[1] = length;
-  } else {
-    header[1] = 126;
-    header.writeUInt16BE(length, 2);
-  }
-  return Buffer.concat([header, payload]);
-}
-
 function sendToSocket(socket, msg) {
   if (socket && socket.writable) {
     socket.write(createWebSocketFrame(JSON.stringify(msg)));
   }
 }
 
+/**
+ * Complete WebSocket handshake
+ */
 function completeHandshake(req, socket) {
   const key = req.headers['sec-websocket-key'];
   if (!key) return false;
@@ -261,12 +174,18 @@ function setupHumanConnection(channel, socket, connId) {
     buffer = remainder;
 
     for (const frame of messages) {
-      if (frame.type === 'close') { socket.end(); return; }
-      if (frame.type === 'ping') { socket.write(createPongFrame(frame.payload)); continue; }
-      if (frame.type !== 'text') continue;
+      if (frame.opcode === WS_OPCODES.CLOSE) { 
+        socket.end(); 
+        return; 
+      }
+      if (frame.opcode === WS_OPCODES.PING) { 
+        socket.write(createPongFrame(frame.payload)); 
+        continue; 
+      }
+      if (frame.opcode !== WS_OPCODES.TEXT) continue;
 
       try {
-        const parsed = JSON.parse(frame.data);
+        const parsed = JSON.parse(frame.payload.toString('utf8'));
         await handleHumanMessage(channelId, connId, parsed, socket, rateLimit);
       } catch {
         sendToSocket(socket, { type: 'error', error: 'Invalid message format' });
@@ -331,10 +250,10 @@ export function setupHumanChannelProxy(server) {
       buffer = remainder;
 
       for (const frame of messages) {
-        if (frame.type !== 'text') continue;
+        if (frame.opcode !== WS_OPCODES.TEXT) continue;
 
         try {
-          const parsed = JSON.parse(frame.data);
+          const parsed = JSON.parse(frame.payload.toString('utf8'));
 
           if (parsed.type === 'auth') {
             let valid = false;
