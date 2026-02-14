@@ -31,7 +31,6 @@ import {
 import { getChannelBridge } from './channel-bridge.js';
 
 // Configuration
-const AUTH_TIMEOUT_MS = 30000;
 const PING_INTERVAL_MS = 30000;
 const RATE_LIMIT_WINDOW_MS = 1000;
 const RATE_LIMIT_MAX_MESSAGES = 50; // Higher limit for agent
