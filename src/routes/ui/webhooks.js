@@ -270,7 +270,7 @@ function renderStyles() {
     }
     .delivery-item .delivery-status.success { background: #4ade80; }
     .delivery-item .delivery-status.failed { background: #f87171; }
-    .delivery-item .delivery-event { color: #a5b4fc; font-family: monospace; min-width: 150px; }
+    .delivery-item .delivery-event { color: #6ee7b7; font-family: monospace; min-width: 150px; }
     .delivery-item .delivery-repo { color: #9ca3af; flex: 1; }
     .delivery-item .delivery-time { color: #6b7280; font-size: 0.85em; }
     
@@ -319,7 +319,7 @@ function renderStyles() {
       border-radius: 6px;
       padding: 12px 16px;
       font-family: monospace;
-      color: #a5b4fc;
+      color: #6ee7b7;
     }
     
     .alert {
