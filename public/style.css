@@ -24,10 +24,10 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--primary); }
   transform: translateX(-50%);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  border: 1px solid var(--border-default);
+  border: 1px solid var(--primary);
   border-radius: 6px;
   padding: 8px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
   white-space: normal;
@@ -44,7 +44,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--primary); }
   left: 50%;
   transform: translateX(-50%);
   border: 6px solid transparent;
-  border-top-color: var(--border-default);
+  border-top-color: var(--primary);
   z-index: 101;
   pointer-events: none;
 }
