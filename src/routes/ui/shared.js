@@ -77,6 +77,10 @@ export function localizeScript() {
   return `
   <script>
     document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('.help-hint[title]').forEach(function(el) {
+        el.setAttribute('data-tooltip', el.getAttribute('title'));
+        el.removeAttribute('title');
+      });
       document.querySelectorAll('.local-time[data-utc]').forEach(function(el) {
         const utc = el.getAttribute('data-utc');
         if (utc) {
