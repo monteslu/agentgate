@@ -40,7 +40,7 @@
                 <span class="status-disabled<%= k.enabled === 0 ? '' : ' d-none' %>">Disabled</span>
               </div>
             </td>
-            <td><%= formatDate(k.created_at) %></td>
+            <td><%- formatDate(k.created_at) %></td>
             <td class="whitespace-nowrap">
               <label class="toggle">
                 <input type="checkbox" <%= k.enabled ? 'checked' : '' %> onchange="toggleEnabled('<%= k.id %>', this)" autocomplete="off">
