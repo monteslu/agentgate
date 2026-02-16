@@ -91,7 +91,7 @@ function renderServices(accounts) {
     </div>
   </div>
 
-  <div class="card card-overflow-hidden">
+  <div class="card">
     ${accountRows}
   </div>
 
