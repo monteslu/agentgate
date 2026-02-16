@@ -82,7 +82,7 @@ ${htmlHead('Settings', { includeSocket: true })}
       <div class="flex-between flex-wrap gap-12">
         <div>
           <strong class="text-primary-color">Shared Queue Visibility <span class="help-hint" title="When enabled, agents can view all pending queue items from other agents (read-only — they cannot modify items they don't own). Enable for transparency between agents, disable for privacy.">?</span></strong>
-          <p class="help" class="mt-4">When enabled, agents can see ALL queue items, not just their own.</p>
+          <p class="help mt-4">When enabled, agents can see ALL queue items, not just their own.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/shared-visibility" class="m-0">
           <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}" autocomplete="off">
@@ -95,7 +95,7 @@ ${htmlHead('Settings', { includeSocket: true })}
       <div class="flex-between flex-wrap gap-12">
         <div>
           <strong class="text-primary-color">Agent Withdraw <span class="help-hint" title="When enabled, agents can cancel their own pending queue requests before an admin approves or rejects them. Disable to require admin review of all submissions.">?</span></strong>
-          <p class="help" class="mt-4">Allow agents to withdraw their own pending queue submissions.</p>
+          <p class="help mt-4">Allow agents to withdraw their own pending queue submissions.</p>
         </div>
         <form method="POST" action="/ui/queue/settings/agent-withdraw" class="m-0">
           <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}" autocomplete="off">
