@@ -148,15 +148,15 @@ router.get('/', (req, res) => {
   ${localizeScript()}
   <style>
     .tag {
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
       padding: 2px 6px;
       border-radius: 4px;
       font-size: 11px;
     }
     .stat-card {
-      background: rgba(99, 102, 241, 0.1);
-      border: 1px solid rgba(99, 102, 241, 0.2);
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.2);
       border-radius: 8px;
       padding: 12px 20px;
       text-align: center;
@@ -164,7 +164,7 @@ router.get('/', (req, res) => {
     .stat-value {
       font-size: 24px;
       font-weight: 700;
-      color: #818cf8;
+      color: #34d399;
     }
     .stat-label {
       font-size: 11px;
@@ -320,14 +320,14 @@ router.get('/:id', (req, res) => {
   ${localizeScript()}
   <style>
     .tag {
-      background: rgba(99, 102, 241, 0.2);
-      color: #a5b4fc;
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
       padding: 4px 10px;
       border-radius: 4px;
       font-size: 12px;
     }
     .tag:hover {
-      background: rgba(99, 102, 241, 0.3);
+      background: rgba(16, 185, 129, 0.3);
     }
     .btn-danger {
       background: rgba(239, 68, 68, 0.1);
