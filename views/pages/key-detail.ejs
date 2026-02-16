@@ -546,9 +546,8 @@
       document.getElementById('channel-enable-btn').style.display = 'none';
       const card = document.getElementById('channel-enable-btn').closest('.config-card');
       const keyDiv = document.createElement('div');
-      keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\'' + data.channel_key + '\');showToast(\'Copied!\',\'success\')">Copy</button></div><p class="help-text text-warning">⚠️ Save this key — it won\'t be shown again. Page will reload in 5s.</p>';
+      keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\'' + data.channel_key + '\');showToast(\'Copied!\',\'success\')">Copy</button></div><p class="help-text text-warning">⚠️ Save this key — it won\'t be shown again.</p><button type="button" class="btn-primary" style="margin-top:12px" onclick="location.reload()">Continue</button>';
       card.appendChild(keyDiv);
-      setTimeout(() => location.reload(), 5000);
     } else {
       showToast(data.error || 'Failed', 'error');
       this.disabled = false;
