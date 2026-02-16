@@ -626,7 +626,7 @@ function getChatScript() {
           ALLOW_DATA_ATTR: false,
           ADD_ATTR: ['target'],
           FORCE_BODY: true,
-          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\\\\-]+(?:[^a-z+.\\\\-:]|$))/i
+          ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.-]+(?:[^a-z+.:-]|$))/i
         });
       }
 
