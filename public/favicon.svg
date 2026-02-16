@@ -38,11 +38,11 @@
        y2="100%">
       <stop
          offset="0%"
-         style="stop-color:#6366f1"
+         style="stop-color:#10b981"
          id="stop1" />
       <stop
          offset="100%"
-         style="stop-color:#8b5cf6"
+         style="stop-color:#059669"
          id="stop2" />
     </linearGradient>
     <linearGradient
