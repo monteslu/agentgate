@@ -107,7 +107,7 @@ function renderAccessPage(services, agents) {
       <div class="card service-card" data-service="${escapeHtml(svc.service)}" data-account="${escapeHtml(svc.account_name)}">
         <div class="service-header">
           <h3>${escapeHtml(svc.service)} / ${escapeHtml(svc.account_name)}</h3>
-          <div style="display:flex;align-items:center;gap:6px;">
+          <div class="flex-center gap-6">
             <select class="mode-select" data-service="${escapeHtml(svc.service)}" data-account="${escapeHtml(svc.account_name)}">
               <option value="all" ${access.access_mode === 'all' ? 'selected' : ''}>All agents</option>
               <option value="allowlist" ${access.access_mode === 'allowlist' ? 'selected' : ''}>Allowlist only</option>
@@ -134,38 +134,7 @@ function renderAccessPage(services, agents) {
   };
   
   return `${htmlHead('Access Control', { includeSocket: true })}
-  <style>
-    .service-card { margin-bottom: 24px; }
-    .service-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-    .service-header h3 { margin: 0; }
-    .mode-select { padding: 8px 12px; border-radius: 6px; background: #1f2937; border: 1px solid #374151; color: #f3f4f6; cursor: pointer; }
-    .mode-select:focus { border-color: #10b981; outline: none; }
-    
-    .access-table { width: 100%; border-collapse: collapse; }
-    .access-table th, .access-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }
-    .access-table th { font-weight: 600; color: #9ca3af; font-size: 14px; }
-    
-    .agent-with-avatar { display: flex; align-items: center; gap: 10px; }
-    
-    /* Toggle switch */
-    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
-    .toggle.disabled { opacity: 0.5; pointer-events: none; }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
-    .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
-    .toggle input:checked + .toggle-slider { background-color: #10b981; }
-    .toggle input:checked + .toggle-slider.bypass { background-color: #f59e0b; }
-    .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
-    
-    .bypass-badge { font-size: 11px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
-    
-    .no-services { text-align: center; padding: 40px; color: #9ca3af; }
-    
-    .info-box { background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 16px; margin-bottom: 24px; }
-    .info-box h4 { margin: 0 0 8px 0; color: #60a5fa; }
-    .info-box p { margin: 0; color: #9ca3af; font-size: 14px; }
-    .info-box ul { margin: 8px 0 0 0; padding-left: 20px; color: #9ca3af; font-size: 14px; }
-  </style>
+  
 <body>
   ${navHeader()}
 
