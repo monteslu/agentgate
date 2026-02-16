@@ -230,7 +230,7 @@ function renderWebhooksPage(configs, deliveries) {
       const source = WEBHOOK_SOURCES[c.source] || { name: c.source, icon: '/public/favicon.svg' };
       const eventCount = (c.events || []).length;
       return `
-        <a href="/ui/webhooks/${c.id}" class="webhook-item" class="no-underline">
+        <a href="/ui/webhooks/${c.id}" class="webhook-item no-underline">
           <img src="${source.icon}" alt="${source.name}">
           <div class="webhook-info">
             <div class="webhook-name">${escapeHtml(c.name)}</div>
@@ -241,9 +241,9 @@ function renderWebhooksPage(configs, deliveries) {
     }).join('');
 
   const deliveryList = deliveries.length === 0
-    ? '<div class="empty-state" class="p-20">No deliveries yet</div>'
+    ? '<div class="empty-state p-20">No deliveries yet</div>'
     : deliveries.map(d => `
-        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item" class="no-underline">
+        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item no-underline">
           <span class="delivery-status ${d.success ? 'success' : 'failed'}"></span>
           <span class="delivery-event">${escapeHtml(d.event_type)}</span>
           <span class="delivery-repo">${escapeHtml(d.repo || '-')}</span>
@@ -262,12 +262,12 @@ ${renderStyles()}
   
   <p class="help">Receive events from external services like GitHub. Configure webhook endpoints and secrets here.</p>
   
-  <div class="webhook-list card" class="card-overflow-hidden">
+  <div class="webhook-list card card-overflow-hidden">
     ${configList}
   </div>
   
   <h3>Recent Deliveries</h3>
-  <div class="card delivery-list" class="card-overflow-hidden">
+  <div class="card delivery-list card-overflow-hidden">
     ${deliveryList}
   </div>
   
@@ -279,7 +279,7 @@ ${renderStyles()}
 
 function renderAddWebhookPage(agents = []) {
   const sourceOptions = Object.entries(WEBHOOK_SOURCES).map(([key, src]) => `
-    <div class="webhook-item" class="cursor-pointer" onclick="selectSource('${key}')">
+    <div class="webhook-item cursor-pointer" onclick="selectSource('${key}')">
       <img src="${src.icon}" alt="${src.name}">
       <div class="webhook-info">
         <div class="webhook-name">${src.name}</div>
@@ -290,7 +290,7 @@ function renderAddWebhookPage(agents = []) {
 
   // Generate event checkboxes for each source
   const eventSections = Object.entries(WEBHOOK_SOURCES).map(([key, src]) => `
-    <div id="events-${key}" class="event-section" class="d-none">
+    <div id="events-${key}" class="event-section d-none">
       <h4>Select Events to Listen For</h4>
       <div class="event-grid">
         ${src.events.map(e => `
@@ -330,7 +330,7 @@ ${renderStyles()}
     <div id="config-section" class="d-none">
       <div class="card">
         <h3>2. Webhook Name</h3>
-        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input" class="w-full" autocomplete="off">
+        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input w-full" autocomplete="off">
       </div>
       
       <div class="card">
@@ -428,9 +428,9 @@ function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
     }).join('');
 
   const deliveryList = deliveries.length === 0
-    ? '<div class="empty-state" class="p-20">No deliveries yet</div>'
+    ? '<div class="empty-state p-20">No deliveries yet</div>'
     : deliveries.map(d => `
-        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item" class="no-underline">
+        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item no-underline">
           <span class="delivery-status ${d.success ? 'success' : 'failed'}"></span>
           <span class="delivery-event">${escapeHtml(d.event_type)}</span>
           <span class="delivery-repo">${escapeHtml(d.repo || '-')}</span>
@@ -481,7 +481,7 @@ ${renderStyles()}
       <h3>Configuration</h3>
       <label class="block mb-16">
         <span class="text-muted">Name</span>
-        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input" class="w-full mt-4" autocomplete="off">
+        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input w-full mt-4" autocomplete="off">
       </label>
       <label class="flex-center gap-8">
         <input type="checkbox" name="enabled" ${config.enabled ? 'checked' : ''} autocomplete="off">
@@ -517,15 +517,15 @@ ${renderStyles()}
     <div class="flex-between">
       <h3 class="m-0">Delivery History</h3>
       <form method="POST" action="/ui/webhooks/${config.id}/clear-history" class="m-0">
-        <button type="submit" class="btn-danger" class="text-sm" onclick="return confirm('Clear all delivery history for this webhook?')">Clear History</button>
+        <button type="submit" class="btn-danger text-sm" onclick="return confirm('Clear all delivery history for this webhook?')">Clear History</button>
       </form>
     </div>
-    <div class="delivery-list" class="mt-16">
+    <div class="delivery-list mt-16">
       ${deliveryList}
     </div>
   </div>
   
-  <div class="card" class="border-danger">
+  <div class="card border-danger">
     <h3 class="text-danger">Danger Zone</h3>
     <form method="POST" action="/ui/webhooks/${config.id}/delete">
       <button type="submit" class="btn-danger" onclick="return confirm('Delete this webhook? This cannot be undone.')">Delete Webhook</button>
@@ -591,7 +591,7 @@ ${renderStyles()}
   <div class="card">
     <dl class="detail-grid">
       <dt>Status</dt>
-      <dd><span class="delivery-status ${delivery.success ? 'success' : 'failed'}" class="status-dot-sm"></span> ${delivery.success ? 'Success' : 'Failed'}</dd>
+      <dd><span class="delivery-status ${delivery.success ? 'success' : 'failed'} status-dot-sm"></span> ${delivery.success ? 'Success' : 'Failed'}</dd>
       
       <dt>Event</dt>
       <dd><code>${escapeHtml(delivery.event_type)}</code></dd>
