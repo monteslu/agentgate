@@ -376,7 +376,7 @@ function renderQueuePage(entries, filter, counts = {}) {
     .reject-input { width: 240px; padding: 10px 14px; margin: 0; font-size: 13px; background: #111111; border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
     .reject-input:focus { outline: none; border-color: #f87171; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
     .reject-input::placeholder { color: #6b7280; }
-    .agent-comment { margin: 0 0 16px 0; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%); border-radius: 10px; border-left: 4px solid #10b981; color: #e5e7eb; }
+    .agent-comment { margin: 0 0 16px 0; padding: 16px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; border-left: 4px solid #10b981; color: #e5e7eb; }
     .agent-comment strong { color: #34d399; }
     .agent-comment a { color: #34d399; }
     .rejection-reason { margin-top: 16px; padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 10px; border-left: 4px solid #f87171; color: #e5e7eb; }
