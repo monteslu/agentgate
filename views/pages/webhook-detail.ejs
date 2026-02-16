@@ -1,0 +1,149 @@
+<h2><img src="<%= source.icon %>" class="icon-28"><%- escapeHtml(config.name) %></h2>
+<p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
+
+<% if (alerts.created) { %>
+  <div class="alert alert-success">✓ Webhook created! Copy the secret below and configure it in your <%= source.name %> repository settings.</div>
+<% } %>
+<% if (alerts.updated) { %>
+  <div class="alert alert-success">✓ Webhook updated</div>
+<% } %>
+<% if (alerts.secretRegenerated) { %>
+  <div class="alert alert-warning">⚠ Secret regenerated! Update your <%= source.name %> webhook settings with the new secret.</div>
+<% } %>
+<% if (alerts.cleared) { %>
+  <div class="alert alert-success">✓ Delivery history cleared</div>
+<% } %>
+
+<div class="card">
+  <h3>Webhook Endpoint</h3>
+  <p class="help">Configure your <%= source.name %> repository to send webhooks to this URL:</p>
+  <div class="endpoint-url" id="webhook-url" data-path="<%- escapeHtml(webhookPath) %>"></div>
+</div>
+<script>
+  document.getElementById('webhook-url').textContent = window.location.origin + document.getElementById('webhook-url').dataset.path;
+</script>
+
+<div class="card">
+  <h3>Webhook Secret</h3>
+  <p class="help">Use this secret when configuring the webhook in <%= source.name %>:</p>
+  <div class="secret-box">
+    <span id="secret-value"><%- escapeHtml(secret) %></span>
+    <button type="button" class="btn-primary copy-btn" onclick="copySecret()">Copy</button>
+  </div>
+  <form method="POST" action="/ui/webhooks/<%= config.id %>/regenerate-secret" class="mt-12">
+    <button type="submit" class="btn-danger" onclick="return confirm('Regenerate secret? You will need to update the webhook in <%= source.name %>.')">Regenerate Secret</button>
+  </form>
+</div>
+
+<form method="POST" action="/ui/webhooks/<%= config.id %>">
+  <div class="card">
+    <h3>Configuration</h3>
+    <label class="block mb-16">
+      <span class="text-muted">Name</span>
+      <input type="text" name="name" value="<%- escapeHtml(config.name) %>" class="input w-full mt-4" autocomplete="off">
+    </label>
+    <label class="flex-center gap-8">
+      <input type="checkbox" name="enabled" <%= config.enabled ? 'checked' : '' %> autocomplete="off">
+      <span>Enabled</span>
+    </label>
+  </div>
+
+  <div class="card">
+    <h3>Events</h3>
+    <div class="event-grid">
+      <% source.events.forEach(function(e) { %>
+        <% var checked = (config.events || []).includes(e.id) ? 'checked' : ''; %>
+        <label class="event-checkbox">
+          <input type="checkbox" name="events" value="<%= e.id %>" <%= checked %> autocomplete="off">
+          <div>
+            <div class="event-name"><%= e.name %></div>
+            <div class="event-desc"><%= e.description %></div>
+          </div>
+        </label>
+      <% }); %>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Assigned Agents</h3>
+    <p class="help">Select which agents will receive notifications for this webhook. If none selected, no agents will be notified.</p>
+    <div class="agent-grid">
+      <% if (agents.length === 0) { %>
+        <p class="text-muted-italic">No agents configured. Add agents in API Keys first.</p>
+      <% } else { %>
+        <% agents.forEach(function(a) { %>
+          <% var isChecked = assignedAgents.includes(a.name); %>
+          <label class="agent-checkbox <%= isChecked ? 'selected' : '' %>" onclick="updateAgentStyle(this)">
+            <input type="checkbox" name="assigned_agents" value="<%- escapeHtml(a.name) %>" <%= isChecked ? 'checked' : '' %> autocomplete="off">
+            <span class="agent-name"><%- escapeHtml(a.name) %></span>
+          </label>
+        <% }); %>
+      <% } %>
+    </div>
+    <div class="no-agents-warning" id="no-agents-warning" style="<%= assignedAgents.length > 0 ? 'display:none;' : '' %>">
+      ⚠ No agents selected — webhook events will not be delivered to any agent.
+    </div>
+  </div>
+
+  <div class="flex gap-12 mb-24">
+    <button type="submit" class="btn-primary">Save Changes</button>
+    <button type="button" class="btn-primary" onclick="testWebhook()">Test Connection</button>
+  </div>
+</form>
+
+<div class="card">
+  <div class="flex-between">
+    <h3 class="m-0">Delivery History</h3>
+    <form method="POST" action="/ui/webhooks/<%= config.id %>/clear-history" class="m-0">
+      <button type="submit" class="btn-danger text-sm" onclick="return confirm('Clear all delivery history for this webhook?')">Clear History</button>
+    </form>
+  </div>
+  <div class="delivery-list mt-16">
+    <% if (deliveries.length === 0) { %>
+      <div class="empty-state p-20">No deliveries yet</div>
+    <% } else { %>
+      <% deliveries.forEach(function(d) { %>
+        <a href="/ui/webhooks/delivery/<%= d.id %>" class="delivery-item no-underline">
+          <span class="delivery-status <%= d.success ? 'success' : 'failed' %>"></span>
+          <span class="delivery-event"><%- escapeHtml(d.event_type) %></span>
+          <span class="delivery-repo"><%- escapeHtml(d.repo || '-') %></span>
+          <span class="delivery-time" data-ts="<%= d.received_at %>"><%= d.received_at %></span>
+        </a>
+      <% }); %>
+    <% } %>
+  </div>
+</div>
+
+<div class="card border-danger">
+  <h3 class="text-danger">Danger Zone</h3>
+  <form method="POST" action="/ui/webhooks/<%= config.id %>/delete">
+    <button type="submit" class="btn-danger" onclick="return confirm('Delete this webhook? This cannot be undone.')">Delete Webhook</button>
+  </form>
+</div>
+
+<script>
+  function copySecret() {
+    navigator.clipboard.writeText(document.getElementById('secret-value').textContent);
+    document.querySelector('.copy-btn').textContent = 'Copied!';
+    setTimeout(() => document.querySelector('.copy-btn').textContent = 'Copy', 2000);
+  }
+
+  async function testWebhook() {
+    const res = await fetch('/ui/webhooks/<%= config.id %>/test', { method: 'POST' });
+    const data = await res.json();
+    alert(data.success ? '✓ ' + data.message : '✗ ' + data.message);
+  }
+
+  function updateAgentStyle(label) {
+    setTimeout(() => {
+      const cb = label.querySelector('input');
+      label.classList.toggle('selected', cb.checked);
+      updateAgentWarning();
+    }, 0);
+  }
+
+  function updateAgentWarning() {
+    const anyChecked = document.querySelectorAll('input[name="assigned_agents"]:checked').length > 0;
+    document.getElementById('no-agents-warning').style.display = anyChecked ? 'none' : 'block';
+  }
+</script>
