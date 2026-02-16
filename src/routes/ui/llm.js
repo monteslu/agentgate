@@ -150,8 +150,8 @@ router.get('/', (req, res) => {
   }
   .form-group input:focus, .form-group select:focus {
     outline: none;
-    border-color: #6366f1 !important;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2) !important;
+    border-color: #10b981 !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
   }
   .form-group input::placeholder { color: #6b7280; }
 
