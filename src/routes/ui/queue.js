@@ -255,7 +255,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         emojiSection = `
           <div class="emoji-section" id="emoji-section-${entry.id}">
             <span class="reaction-emoji-display" data-id="${entry.id}" title="Click to change">${escapeHtml(entry.reaction_emoji)}</span>
-            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" style="display:none;">
+            <div class="emoji-picker-popup d-none" id="emoji-popup-${entry.id}">
               ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
               <button type="button" class="emoji-btn emoji-remove" data-id="${entry.id}" data-emoji="" title="Remove">✕</button>
             </div>
@@ -264,8 +264,8 @@ function renderQueuePage(entries, filter, counts = {}) {
       } else {
         emojiSection = `
           <div class="emoji-section" id="emoji-section-${entry.id}">
-            <button type="button" class="emoji-trigger" data-id="${entry.id}" title="Add reaction">😀</button>
-            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" style="display:none;">
+            <button type="button" class="emoji-trigger" data-id="${entry.id}" title="Add reaction"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+            <div class="emoji-picker-popup d-none" id="emoji-popup-${entry.id}">
               ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
             </div>
           </div>
@@ -276,9 +276,9 @@ function renderQueuePage(entries, filter, counts = {}) {
     let resultSection = '';
     if (entry.results) {
       resultSection = `
-        <details style="margin-top: 12px;">
+        <details class="mt-12">
           <summary>Results (${entry.results.length})</summary>
-          <pre style="margin-top: 8px; font-size: 12px;">${escapeHtml(JSON.stringify(entry.results, null, 2))}</pre>
+          <pre class="meta-line">${escapeHtml(JSON.stringify(entry.results, null, 2))}</pre>
         </details>
       `;
     }
@@ -312,29 +312,29 @@ function renderQueuePage(entries, filter, counts = {}) {
 
     return `
       <div class="card queue-entry" id="entry-${entry.id}" data-status="${entry.status}" data-notified="${entry.notified ? '1' : '0'}">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div class="flex-between mb-12" style="align-items: flex-start;">
           <div class="entry-header">
             <strong>${entry.service}</strong> / ${entry.account_name}
             <span class="status-badge">${statusBadge(entry.status)}${autoApprovedBadge(entry.auto_approved)}</span>
             ${warningBadge}
           </div>
-          <div style="display: flex; align-items: center; gap: 12px;">
-            <span class="help" style="margin: 0;">${formatDate(entry.submitted_at)}</span>
+          <div class="flex-center gap-12">
+            <span class="help m-0">${formatDate(entry.submitted_at)}</span>
             <button type="button" class="delete-btn" onclick="deleteEntry('${entry.id}')" title="Delete">&times;</button>
           </div>
         </div>
 
         ${entry.comment ? `<p class="agent-comment"><strong>Agent says:</strong> ${renderMarkdownLinks(entry.comment)}</p>` : ''}
 
-        <div class="help" style="margin-bottom: 8px;">Submitted by: <span class="agent-with-avatar">${renderAvatar(entry.submitted_by, { size: 20 })}<code>${escapeHtml(entry.submitted_by || 'unknown')}</code></span></div>
+        <div class="help mb-8">Submitted by: <span class="agent-with-avatar">${renderAvatar(entry.submitted_by, { size: 20 })}<code>${escapeHtml(entry.submitted_by || 'unknown')}</code></span></div>
 
         <div class="requests-list">
           ${requestsSummary}
         </div>
 
-        <details style="margin-top: 12px;">
+        <details class="mt-12">
           <summary>Request Details</summary>
-          <pre style="margin-top: 8px; font-size: 12px;">${escapeHtml(JSON.stringify(entry.requests, null, 2))}</pre>
+          <pre class="meta-line">${escapeHtml(JSON.stringify(entry.requests, null, 2))}</pre>
         </details>
 
         ${resultSection}
@@ -356,66 +356,10 @@ function renderQueuePage(entries, filter, counts = {}) {
   ).join('');
 
   return `${htmlHead('Write Queue', { includeSocket: true })}
-  <style>
-    .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
-    .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: var(--gray-400); font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
-    .filter-link:hover { background: rgba(255, 255, 255, 0.1); color: var(--gray-200); border-color: rgba(255, 255, 255, 0.2); }
-    .filter-link.active { background: linear-gradient(135deg, var(--primary) 0%, #10b981 100%); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
-    .queue-entry { margin-bottom: 20px; }
-    .request-item { padding: 12px 16px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 6px 0; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; align-items: center; gap: 12px; }
-    .request-item code { background: rgba(16, 185, 129, 0.2); padding: 4px 10px; border-radius: 6px; font-weight: 700; color: var(--primary-light); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 12px; }
-    .request-item span { color: var(--gray-300); }
-    .queue-actions { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .back-link { color: #34d399; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
-    .back-link:hover { color: #ffffff; }
-    .delete-btn { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; font-size: 18px; cursor: pointer; padding: 4px 10px; line-height: 1; font-weight: bold; border-radius: 6px; transition: all 0.2s ease; }
-    .delete-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
-    .clear-section { margin-left: auto; display: flex; gap: 10px; }
-    .entry-header { display: flex; align-items: center; gap: 12px; }
-    .entry-header strong { color: #f3f4f6; font-size: 16px; }
-    .reject-input { width: 240px; padding: 10px 14px; margin: 0; font-size: 13px; background: #111111; border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
-    .reject-input:focus { outline: none; border-color: #f87171; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
-    .reject-input::placeholder { color: #6b7280; }
-    .agent-comment { margin: 0 0 16px 0; padding: 16px; background: rgba(16, 185, 129, 0.1); border-radius: 10px; border-left: 4px solid #10b981; color: #e5e7eb; }
-    .agent-comment strong { color: #34d399; }
-    .agent-comment a { color: #34d399; }
-    .rejection-reason { margin-top: 16px; padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 10px; border-left: 4px solid #f87171; color: #e5e7eb; }
-    .rejection-reason strong { color: #f87171; }
-    .empty-state { text-align: center; padding: 60px 40px; }
-    .empty-state p { color: #6b7280; margin: 0; font-size: 16px; }
-    .notification-status { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 12px; font-size: 13px; }
-    .notify-status { padding: 4px 10px; border-radius: 6px; font-weight: 500; }
-    .notify-sent { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-    .notify-failed { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .notify-pending { background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3); }
-    .btn-link { background: none; border: none; color: #34d399; cursor: pointer; text-decoration: underline; padding: 4px 8px; font-size: 13px; }
-    .btn-link:hover { color: #6ee7b7; }
-    .warning-badge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.3); }
-    .warnings-section { margin-top: 16px; padding: 16px; background: rgba(245, 158, 11, 0.08); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.2); }
-    .warnings-header { color: #fbbf24; font-weight: 600; margin-bottom: 12px; font-size: 14px; }
-    .warning-item { padding: 12px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #f59e0b; }
-    .warning-item:last-child { margin-bottom: 0; }
-    .warning-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
-    .warning-header strong { color: #fbbf24; }
-    .warning-time { color: #6b7280; font-size: 12px; margin-left: auto; }
-    .warning-message { color: #e5e7eb; font-size: 14px; line-height: 1.5; }
-    .queue-entry-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: right; }
-    .entry-id { color: #6b7280; font-size: 11px; font-family: monospace; }
-    .queue-actions { flex-direction: column; align-items: flex-start; gap: 10px; }
-    .action-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .emoji-section { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; position: relative; }
-    .emoji-trigger { background: rgba(255, 255, 255, 0.05); border: 1px dashed rgba(255, 255, 255, 0.2); border-radius: 6px; padding: 4px 8px; font-size: 14px; cursor: pointer; transition: all 0.2s ease; opacity: 0.5; }
-    .emoji-trigger:hover { opacity: 1; background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.3); }
-    .reaction-emoji-display { font-size: 20px; cursor: pointer; transition: transform 0.2s ease; }
-    .reaction-emoji-display:hover { transform: scale(1.2); }
-    .emoji-picker-popup { position: absolute; bottom: 100%; left: 0; background: #1f2937; border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 6px; display: flex; gap: 4px; flex-wrap: wrap; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.4); margin-bottom: 4px; }
-    .emoji-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 4px 8px; font-size: 16px; cursor: pointer; transition: all 0.2s ease; }
-    .emoji-btn:hover { background: rgba(255, 255, 255, 0.15); border-color: rgba(255, 255, 255, 0.25); transform: scale(1.1); }
-    .emoji-remove { font-size: 12px; color: #9ca3af; }
-  </style>
+  
 <body>
   ${navHeader()}
-  <h2 style="margin-top: 0;">Write Queue</h2>
+  <h2 class="mt-0">Write Queue</h2>
   <p>Review and approve write requests from agents.</p>
 
   <div class="filter-bar" id="filter-bar">
@@ -425,8 +369,8 @@ function renderQueuePage(entries, filter, counts = {}) {
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
-      <a href="/ui/queue/export?format=json" class="btn-sm" style="text-decoration: none;">Export JSON</a>
-      <a href="/ui/queue/export?format=csv" class="btn-sm" style="text-decoration: none;">Export CSV</a>
+      <a href="/ui/queue/export?format=json" class="btn-sm no-underline">Export JSON</a>
+      <a href="/ui/queue/export?format=csv" class="btn-sm no-underline">Export CSV</a>
     </div>
   </div>
 
@@ -483,7 +427,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         const details = document.createElement('details');
         details.style.marginTop = '12px';
         details.innerHTML = '<summary>Results (' + entry.results.length + ')</summary>' +
-          '<pre style="margin-top: 8px; font-size: 12px;">' + escapeHtml(JSON.stringify(entry.results, null, 2)) + '</pre>';
+          '<pre class="meta-line">' + escapeHtml(JSON.stringify(entry.results, null, 2)) + '</pre>';
         if (insertTarget) insertTarget.parentNode.insertBefore(details, insertTarget);
         else entryEl.appendChild(details);
       }
@@ -515,9 +459,9 @@ function renderQueuePage(entries, filter, counts = {}) {
       }
 
       // Flash effect for visual feedback
-      entryEl.style.transition = 'box-shadow 0.3s ease';
-      entryEl.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.6)';
-      setTimeout(() => { entryEl.style.boxShadow = ''; }, 1500);
+      
+      entryEl.classList.add('queue-entry-flash');
+      setTimeout(() => { entryEl.classList.remove('queue-entry-flash'); }, 1500);
     }
 
     function updateFilterCounts(counts) {
@@ -668,7 +612,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         return '<button type="button" class="emoji-btn" data-id="'+id+'" data-emoji="'+e+'">'+e+'</button>';
       }).join('');
       if (includeRemove) btns += '<button type="button" class="emoji-btn emoji-remove" data-id="'+id+'" data-emoji="" title="Remove">✕</button>';
-      return '<div class="emoji-picker-popup" id="emoji-popup-'+id+'" style="display:none;">'+btns+'</div>';
+      return '<div class="emoji-picker-popup d-none" id="emoji-popup-'+id+'">'+btns+'</div>';
     }
 
     async function setReaction(id, emoji) {

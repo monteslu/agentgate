@@ -31,103 +31,7 @@ registerAllRoutes(router, BASE_URL);
  */
 function renderServicesStyles() {
   return `
-  <style>
-    /* ===== Services List Styles ===== */
-    .services-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 16px;
-    }
-    .services-header h2 { margin: 0; }
-
-    .service-row {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      margin-bottom: 8px;
-      gap: 14px;
-    }
-    .service-row:hover {
-      background: rgba(255,255,255,0.05);
-      border-color: rgba(255,255,255,0.12);
-    }
-    .service-row img {
-      width: 28px;
-      height: 28px;
-      flex-shrink: 0;
-    }
-    .service-row .service-type {
-      color: #9ca3af;
-      font-size: 0.9em;
-      min-width: 100px;
-    }
-    .service-row .account-name {
-      flex: 1;
-      color: #e5e7eb;
-      font-weight: 500;
-    }
-    .service-row .btn-sm {
-      padding: 6px 14px;
-      font-size: 0.85em;
-      background: rgba(16,185,129,0.2);
-      color: #6ee7b7;
-      border: 1px solid rgba(16,185,129,0.4);
-      border-radius: 5px;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .service-row .btn-sm:hover {
-      background: rgba(16,185,129,0.3);
-      border-color: rgba(16,185,129,0.6);
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: #6b7280;
-    }
-
-    /* Add Service Modal/Dropdown */
-    .add-service-dropdown {
-      position: relative;
-      display: inline-block;
-    }
-    .add-service-menu {
-      display: none;
-      position: absolute;
-      right: 0;
-      top: 100%;
-      margin-top: 8px;
-      background: #1f2937;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 8px;
-      padding: 8px;
-      min-width: 200px;
-      z-index: 100;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
-    .add-service-menu.show { display: block; }
-    .add-service-menu a {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      color: #e5e7eb;
-      text-decoration: none;
-      border-radius: 6px;
-    }
-    .add-service-menu a:hover {
-      background: rgba(16,185,129,0.2);
-    }
-    .add-service-menu img {
-      width: 20px;
-      height: 20px;
-    }
-  </style>`;
+  `;
 }
 
 /**
@@ -187,7 +91,7 @@ function renderServices(accounts) {
     </div>
   </div>
 
-  <div class="card" style="padding: 0; overflow: hidden;">
+  <div class="card">
     ${accountRows}
   </div>
 

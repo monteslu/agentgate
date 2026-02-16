@@ -220,169 +220,7 @@ function escapeHtml(str) {
 }
 
 function renderStyles() {
-  return `<style>
-    .webhook-list { margin-bottom: 24px; }
-    .webhook-item {
-      display: flex;
-      align-items: center;
-      padding: 16px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      margin-bottom: 8px;
-      gap: 16px;
-    }
-    .webhook-item:hover {
-      background: rgba(255,255,255,0.05);
-      border-color: rgba(255,255,255,0.12);
-    }
-    .webhook-item img { width: 32px; height: 32px; }
-    .webhook-item .webhook-info { flex: 1; }
-    .webhook-item .webhook-name { font-weight: 600; color: #e5e7eb; }
-    .webhook-item .webhook-meta { font-size: 0.85em; color: #9ca3af; margin-top: 4px; }
-    .webhook-item .webhook-status {
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 0.8em;
-      font-weight: 500;
-    }
-    .webhook-item .webhook-status.enabled { background: rgba(34,197,94,0.2); color: #4ade80; }
-    .webhook-item .webhook-status.disabled { background: rgba(239,68,68,0.2); color: #f87171; }
-    
-    .delivery-list { margin-top: 24px; }
-    .delivery-item {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 6px;
-      margin-bottom: 6px;
-      gap: 12px;
-      font-size: 0.9em;
-    }
-    .delivery-item:hover { background: rgba(255,255,255,0.04); }
-    .delivery-item .delivery-status {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .delivery-item .delivery-status.success { background: #4ade80; }
-    .delivery-item .delivery-status.failed { background: #f87171; }
-    .delivery-item .delivery-event { color: #6ee7b7; font-family: monospace; min-width: 150px; }
-    .delivery-item .delivery-repo { color: #9ca3af; flex: 1; }
-    .delivery-item .delivery-time { color: #6b7280; font-size: 0.85em; }
-    
-    .secret-box {
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 6px;
-      padding: 12px 16px;
-      font-family: monospace;
-      font-size: 0.9em;
-      word-break: break-all;
-      position: relative;
-    }
-    .secret-box .copy-btn {
-      position: absolute;
-      right: 8px;
-      top: 8px;
-      padding: 4px 8px;
-      font-size: 0.8em;
-    }
-    
-    .event-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-      gap: 12px;
-      margin: 16px 0;
-    }
-    .event-checkbox {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .event-checkbox:hover { background: rgba(255,255,255,0.05); }
-    .event-checkbox input { margin-top: 3px; }
-    .event-checkbox .event-name { font-weight: 500; color: #e5e7eb; }
-    .event-checkbox .event-desc { font-size: 0.85em; color: #9ca3af; margin-top: 2px; }
-    
-    .endpoint-url {
-      background: rgba(16,185,129,0.1);
-      border: 1px solid rgba(16,185,129,0.3);
-      border-radius: 6px;
-      padding: 12px 16px;
-      font-family: monospace;
-      color: #6ee7b7;
-    }
-    
-    .alert {
-      padding: 12px 16px;
-      border-radius: 6px;
-      margin-bottom: 16px;
-    }
-    .alert-success { background: rgba(34,197,94,0.2); border: 1px solid rgba(34,197,94,0.3); color: #4ade80; }
-    .alert-warning { background: rgba(234,179,8,0.2); border: 1px solid rgba(234,179,8,0.3); color: #facc15; }
-    
-    .btn-danger { background: rgba(239,68,68,0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
-    .btn-danger:hover { background: rgba(239,68,68,0.3); }
-    
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: #6b7280;
-    }
-    
-    .detail-grid {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 12px 16px;
-      margin: 16px 0;
-    }
-    .detail-grid dt { color: #9ca3af; }
-    .detail-grid dd { color: #e5e7eb; margin: 0; }
-    
-    .agent-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 8px;
-      margin: 12px 0;
-    }
-    .agent-checkbox {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .agent-checkbox:hover { background: rgba(255,255,255,0.05); }
-    .agent-checkbox.selected { 
-      background: rgba(16,185,129,0.15); 
-      border-color: rgba(16,185,129,0.4); 
-    }
-    .agent-checkbox input { margin: 0; }
-    .agent-checkbox .agent-name { font-weight: 500; color: #e5e7eb; }
-    
-    .no-agents-warning {
-      background: rgba(234,179,8,0.15);
-      border: 1px solid rgba(234,179,8,0.3);
-      color: #facc15;
-      padding: 10px 14px;
-      border-radius: 6px;
-      font-size: 0.9em;
-      margin-top: 12px;
-    }
-  </style>`;
+  return '';
 }
 
 function renderWebhooksPage(configs, deliveries) {
@@ -392,7 +230,7 @@ function renderWebhooksPage(configs, deliveries) {
       const source = WEBHOOK_SOURCES[c.source] || { name: c.source, icon: '/public/favicon.svg' };
       const eventCount = (c.events || []).length;
       return `
-        <a href="/ui/webhooks/${c.id}" class="webhook-item" style="text-decoration: none;">
+        <a href="/ui/webhooks/${c.id}" class="webhook-item no-underline">
           <img src="${source.icon}" alt="${source.name}">
           <div class="webhook-info">
             <div class="webhook-name">${escapeHtml(c.name)}</div>
@@ -403,9 +241,9 @@ function renderWebhooksPage(configs, deliveries) {
     }).join('');
 
   const deliveryList = deliveries.length === 0
-    ? '<div class="empty-state" style="padding: 20px;">No deliveries yet</div>'
+    ? '<div class="empty-state p-20">No deliveries yet</div>'
     : deliveries.map(d => `
-        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item" style="text-decoration: none;">
+        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item no-underline">
           <span class="delivery-status ${d.success ? 'success' : 'failed'}"></span>
           <span class="delivery-event">${escapeHtml(d.event_type)}</span>
           <span class="delivery-repo">${escapeHtml(d.repo || '-')}</span>
@@ -417,19 +255,19 @@ ${renderStyles()}
 <body>
   ${navHeader({})}
   
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-    <h2 style="margin: 0;">Inbound Webhooks</h2>
+  <div class="flex-between mb-16">
+    <h2 class="m-0">Inbound Webhooks</h2>
     <a href="/ui/webhooks/add" class="btn-primary">+ Add Webhook</a>
   </div>
   
   <p class="help">Receive events from external services like GitHub. Configure webhook endpoints and secrets here.</p>
   
-  <div class="webhook-list card" style="padding: 0; overflow: hidden;">
+  <div class="webhook-list card card-overflow-hidden">
     ${configList}
   </div>
   
   <h3>Recent Deliveries</h3>
-  <div class="card delivery-list" style="padding: 0; overflow: hidden;">
+  <div class="card delivery-list card-overflow-hidden">
     ${deliveryList}
   </div>
   
@@ -441,18 +279,18 @@ ${renderStyles()}
 
 function renderAddWebhookPage(agents = []) {
   const sourceOptions = Object.entries(WEBHOOK_SOURCES).map(([key, src]) => `
-    <div class="webhook-item" style="cursor: pointer;" onclick="selectSource('${key}')">
+    <div class="webhook-item cursor-pointer" onclick="selectSource('${key}')">
       <img src="${src.icon}" alt="${src.name}">
       <div class="webhook-info">
         <div class="webhook-name">${src.name}</div>
         <div class="webhook-meta">${src.events.length} event types available</div>
       </div>
-      <input type="radio" name="source" value="${key}" id="source-${key}" style="display: none;" autocomplete="off">
+      <input type="radio" name="source" value="${key}" id="source-${key}" class="d-none" autocomplete="off">
     </div>`).join('');
 
   // Generate event checkboxes for each source
   const eventSections = Object.entries(WEBHOOK_SOURCES).map(([key, src]) => `
-    <div id="events-${key}" class="event-section" style="display: none;">
+    <div id="events-${key}" class="event-section d-none">
       <h4>Select Events to Listen For</h4>
       <div class="event-grid">
         ${src.events.map(e => `
@@ -468,7 +306,7 @@ function renderAddWebhookPage(agents = []) {
 
   // Agent selection (default: none selected = no agents receive)
   const agentCheckboxes = agents.length === 0
-    ? '<p style="color: #9ca3af; font-style: italic;">No agents configured. Add agents in API Keys first.</p>'
+    ? '<p class="text-muted-italic">No agents configured. Add agents in API Keys first.</p>'
     : agents.map(a => `
         <label class="agent-checkbox" onclick="updateAgentStyle(this)">
           <input type="checkbox" name="assigned_agents" value="${escapeHtml(a.name)}" autocomplete="off">
@@ -489,10 +327,10 @@ ${renderStyles()}
       ${sourceOptions}
     </div>
     
-    <div id="config-section" style="display: none;">
+    <div id="config-section" class="d-none">
       <div class="card">
         <h3>2. Webhook Name</h3>
-        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input" style="width: 100%;" autocomplete="off">
+        <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input w-full" autocomplete="off">
       </div>
       
       <div class="card">
@@ -529,11 +367,11 @@ ${renderStyles()}
       
       // Highlight selected source
       document.querySelectorAll('.webhook-item').forEach(el => {
-        el.style.borderColor = 'rgba(255,255,255,0.08)';
-        el.style.background = 'rgba(255,255,255,0.03)';
+        el.classList.remove('selected');
+        
       });
-      event.currentTarget.style.borderColor = 'rgba(16,185,129,0.5)';
-      event.currentTarget.style.background = 'rgba(16,185,129,0.1)';
+      event.currentTarget.classList.add('selected');
+      
     }
     
     function updateAgentStyle(label) {
@@ -578,7 +416,7 @@ function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
   
   // Agent selection for edit form
   const agentCheckboxes = agents.length === 0
-    ? '<p style="color: #9ca3af; font-style: italic;">No agents configured. Add agents in API Keys first.</p>'
+    ? '<p class="text-muted-italic">No agents configured. Add agents in API Keys first.</p>'
     : agents.map(a => {
       const checked = assignedAgents.includes(a.name) ? 'checked' : '';
       const selectedClass = checked ? 'selected' : '';
@@ -590,9 +428,9 @@ function renderWebhookDetailPage(config, deliveries, agents = [], alerts = {}) {
     }).join('');
 
   const deliveryList = deliveries.length === 0
-    ? '<div class="empty-state" style="padding: 20px;">No deliveries yet</div>'
+    ? '<div class="empty-state p-20">No deliveries yet</div>'
     : deliveries.map(d => `
-        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item" style="text-decoration: none;">
+        <a href="/ui/webhooks/delivery/${d.id}" class="delivery-item no-underline">
           <span class="delivery-status ${d.success ? 'success' : 'failed'}"></span>
           <span class="delivery-event">${escapeHtml(d.event_type)}</span>
           <span class="delivery-repo">${escapeHtml(d.repo || '-')}</span>
@@ -611,7 +449,7 @@ ${renderStyles()}
 <body>
   ${navHeader({})}
   
-  <h2><img src="${source.icon}" style="width: 28px; height: 28px; vertical-align: middle; margin-right: 8px;">${escapeHtml(config.name)}</h2>
+  <h2><img src="${source.icon}" class="icon-28">${escapeHtml(config.name)}</h2>
   <p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
   
   ${alertHtml.join('\n  ')}
@@ -633,7 +471,7 @@ ${renderStyles()}
       <span id="secret-value">${escapeHtml(secret)}</span>
       <button type="button" class="btn-primary copy-btn" onclick="copySecret()">Copy</button>
     </div>
-    <form method="POST" action="/ui/webhooks/${config.id}/regenerate-secret" style="margin-top: 12px;">
+    <form method="POST" action="/ui/webhooks/${config.id}/regenerate-secret" class="mt-12">
       <button type="submit" class="btn-danger" onclick="return confirm('Regenerate secret? You will need to update the webhook in ${source.name}.')">Regenerate Secret</button>
     </form>
   </div>
@@ -641,11 +479,11 @@ ${renderStyles()}
   <form method="POST" action="/ui/webhooks/${config.id}">
     <div class="card">
       <h3>Configuration</h3>
-      <label style="display: block; margin-bottom: 16px;">
-        <span style="color: #9ca3af;">Name</span>
-        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input" style="width: 100%; margin-top: 4px;" autocomplete="off">
+      <label class="block mb-16">
+        <span class="text-muted">Name</span>
+        <input type="text" name="name" value="${escapeHtml(config.name)}" class="input w-full mt-4" autocomplete="off">
       </label>
-      <label style="display: flex; align-items: center; gap: 8px;">
+      <label class="flex-center gap-8">
         <input type="checkbox" name="enabled" ${config.enabled ? 'checked' : ''} autocomplete="off">
         <span>Enabled</span>
       </label>
@@ -669,26 +507,26 @@ ${renderStyles()}
       </div>
     </div>
     
-    <div style="display: flex; gap: 12px; margin-bottom: 24px;">
+    <div class="flex gap-12 mb-24">
       <button type="submit" class="btn-primary">Save Changes</button>
       <button type="button" class="btn-primary" onclick="testWebhook()">Test Connection</button>
     </div>
   </form>
   
   <div class="card">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <h3 style="margin: 0;">Delivery History</h3>
-      <form method="POST" action="/ui/webhooks/${config.id}/clear-history" style="margin: 0;">
-        <button type="submit" class="btn-danger" style="font-size: 0.85em;" onclick="return confirm('Clear all delivery history for this webhook?')">Clear History</button>
+    <div class="flex-between">
+      <h3 class="m-0">Delivery History</h3>
+      <form method="POST" action="/ui/webhooks/${config.id}/clear-history" class="m-0">
+        <button type="submit" class="btn-danger text-sm" onclick="return confirm('Clear all delivery history for this webhook?')">Clear History</button>
       </form>
     </div>
-    <div class="delivery-list" style="margin-top: 16px;">
+    <div class="delivery-list mt-16">
       ${deliveryList}
     </div>
   </div>
   
-  <div class="card" style="border-color: rgba(239,68,68,0.3);">
-    <h3 style="color: #f87171;">Danger Zone</h3>
+  <div class="card border-danger">
+    <h3 class="text-danger">Danger Zone</h3>
     <form method="POST" action="/ui/webhooks/${config.id}/delete">
       <button type="submit" class="btn-danger" onclick="return confirm('Delete this webhook? This cannot be undone.')">Delete Webhook</button>
     </form>
@@ -753,7 +591,7 @@ ${renderStyles()}
   <div class="card">
     <dl class="detail-grid">
       <dt>Status</dt>
-      <dd><span class="delivery-status ${delivery.success ? 'success' : 'failed'}" style="display: inline-block; width: 10px; height: 10px; border-radius: 50%;"></span> ${delivery.success ? 'Success' : 'Failed'}</dd>
+      <dd><span class="delivery-status ${delivery.success ? 'success' : 'failed'} status-dot-sm"></span> ${delivery.success ? 'Success' : 'Failed'}</dd>
       
       <dt>Event</dt>
       <dd><code>${escapeHtml(delivery.event_type)}</code></dd>
@@ -774,12 +612,12 @@ ${renderStyles()}
   
   <div class="card">
     <h3>Broadcast Result</h3>
-    <pre style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85em;">${escapeHtml(broadcastResult || 'No broadcast result')}</pre>
+    <pre class="code-block-dark">${escapeHtml(broadcastResult || 'No broadcast result')}</pre>
   </div>
   
   <div class="card">
     <h3>Payload</h3>
-    <pre style="background: rgba(0,0,0,0.3); padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 0.85em; max-height: 400px;">${escapeHtml(payload || 'No payload')}</pre>
+    <pre class="code-block-dark-scroll">${escapeHtml(payload || 'No payload')}</pre>
   </div>
   
   ${menuScript()}

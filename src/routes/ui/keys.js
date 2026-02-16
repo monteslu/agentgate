@@ -540,11 +540,11 @@ function renderKeysPage(keys, error = null, newKey = null) {
         <div class="agent-with-avatar">
           ${renderAvatar(k.name, { size: 32 })}
           <strong>${escapeHtml(k.name)}</strong>
-          <span class="status-disabled" ${k.enabled === 0 ? '' : 'style="display:none"'}>Disabled</span>
+          <span class="status-disabled${k.enabled === 0 ? '' : ' d-none'}">Disabled</span>
         </div>
       </td>
       <td>${formatDate(k.created_at)}</td>
-      <td style="white-space: nowrap;">
+      <td class="whitespace-nowrap">
         <label class="toggle">
           <input type="checkbox" ${k.enabled ? 'checked' : ''} onchange="toggleEnabled('${k.id}', this)" autocomplete="off">
           <span class="toggle-slider"></span>
@@ -557,80 +557,8 @@ function renderKeysPage(keys, error = null, newKey = null) {
   `;
 
   return `${htmlHead('Agents', { includeSocket: true })}
-  <style>
-    .add-agent-box {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
-    .add-agent-box label {
-      color: #9ca3af;
-      font-size: 14px;
-      white-space: nowrap;
-      margin: 0;
-    }
-    .add-agent-box input {
-      flex: 1;
-      max-width: 280px;
-      padding: 8px 12px;
-      border: 1px solid #374151;
-      border-radius: 6px;
-      background: #111827;
-      color: #f3f4f6;
-      height: 38px;
-      box-sizing: border-box;
-    }
-    .add-agent-box input:focus {
-      border-color: #10b981;
-      outline: none;
-    }
-    .add-agent-box .btn-primary {
-      height: 38px;
-      padding: 0 16px;
-      display: flex;
-      align-items: center;
-    }
-  </style>
-  <style>
-    .agents-table { width: 100%; border-collapse: collapse; }
-    .agents-table th, .agents-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.08); }
-    .agents-table th { font-weight: 600; color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .agent-with-avatar { display: flex; align-items: center; gap: 12px; }
-    .agent-disabled { opacity: 0.5; }
-    .status-disabled { background: #7f1d1d; color: #fca5a5; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
-    .new-key-banner { background: #065f46; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; color: #d1fae5; }
-    .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
-    .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
-    .btn-sm { font-size: 12px; padding: 6px 12px; background: rgba(16,185,129,0.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.4); border-radius: 4px; cursor: pointer; text-decoration: none; }
-    .btn-sm:hover { background: rgba(16,185,129,0.3); }
-
-    /* Toggle switch */
-    .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
-    .toggle input { opacity: 0; width: 0; height: 0; }
-    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
-    .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
-    .toggle input:checked + .toggle-slider { background-color: #10b981; }
-    .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
-    .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
-
-    /* Toast notifications */
-    .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-size: 14px; z-index: 1000; opacity: 0; transform: translateY(20px); transition: opacity 0.3s, transform 0.3s; }
-    .toast.show { opacity: 1; transform: translateY(0); }
-    .toast.error { background: #dc2626; }
-    .toast.success { background: #059669; }
-
-    /* Session table styling */
-    .sessions-table .session-id { font-family: monospace; font-size: 12px; background: rgba(16,185,129,0.15); padding: 2px 6px; border-radius: 3px; }
-    .sessions-table .timestamp { font-size: 13px; color: #9ca3af; white-space: nowrap; }
-    .status-badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
-    .status-active { background: rgba(16,185,129,0.15); color: #10b981; }
-    .status-db { background: rgba(107,114,128,0.15); color: #9ca3af; }
-  </style>
+  
+  
 </head>
 <body>
   ${navHeader()}
@@ -641,7 +569,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
     <div class="new-key-banner">
       <strong>New API key created!</strong> Copy it now - you won't be able to see it again.
       <code>${newKey.key}</code>
-      <button type="button" class="btn-sm btn-primary" onclick="copyKey('${newKey.key}', this)" style="margin-top: 8px;">Copy to Clipboard</button>
+      <button type="button" class="btn-sm btn-primary" onclick="copyKey('${newKey.key}', this)" class="mt-8">Copy to Clipboard</button>
     </div>
   ` : ''}
 
@@ -654,7 +582,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
   <div class="card">
     <h3>Agents (${keys.length})</h3>
     ${keys.length === 0 ? `
-      <p style="color: #6b7280; text-align: center; padding: 20px;">No agents yet. Create one above.</p>
+      <p class="text-dim-center p-20">No agents yet. Create one above.</p>
     ` : `
       <table class="agents-table">
         <thead>
@@ -730,10 +658,10 @@ function renderAgentNotFound(id) {
   return `${htmlHead('Agent Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" style="text-align: center; padding: 40px;">
+  <div class="card text-center p-40">
     <h2>Agent Not Found</h2>
-    <p style="color: #9ca3af;">The agent with ID "${escapeHtml(String(id))}" does not exist.</p>
-    <a href="/ui/keys" class="btn-primary" style="display: inline-block; margin-top: 16px;">Back to Agents</a>
+    <p class="text-muted">The agent with ID "${escapeHtml(String(id))}" does not exist.</p>
+    <a href="/ui/keys" class="btn-primary inline-block mt-16">Back to Agents</a>
   </div>
   ${socketScript()}
   ${menuScript()}
@@ -904,17 +832,17 @@ function renderChatPopout(agent, adminToken) {
   <title>Chat - ${agentName}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #111827; color: #f3f4f6; height: 100vh; display: flex; flex-direction: column; }
-    .header { padding: 12px 16px; background: #1f2937; border-bottom: 1px solid #374151; display: flex; align-items: center; gap: 12px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg, #0a0a0a); color: var(--text-primary, #e5e5e5); height: 100vh; display: flex; flex-direction: column; }
+    .header { padding: 12px 16px; background: var(--bg-surface, #1a1a1a); border-bottom: 1px solid var(--border-default, #333333); display: flex; align-items: center; gap: 12px; }
     .header h1 { font-size: 16px; font-weight: 600; }
-    .status { font-size: 12px; color: #6b7280; }
-    .status.connected { color: #34d399; }
-    .status.pending { color: #fbbf24; }
-    .status.error { color: #ef4444; }
+    .status { font-size: 12px; color: var(--text-dim, #6b7280); }
+    .status.connected { color: var(--primary-light, #34d399); }
+    .status.pending { color: var(--warning-light, #fbbf24); }
+    .status.error { color: var(--danger, #ef4444); }
     #messages { flex: 1; overflow-y: auto; padding: 16px; font-family: monospace; font-size: 13px; }
     .message { margin-bottom: 12px; }
-    .input-area { padding: 12px 16px; background: #1f2937; border-top: 1px solid #374151; display: flex; gap: 8px; }
-    .input-area input { flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px; outline: none; }
+    .input-area { padding: 12px 16px; background: var(--bg-surface, #1a1a1a); border-top: 1px solid var(--border-default, #333333); display: flex; gap: 8px; }
+    .input-area input { flex: 1; padding: 10px 14px; background: var(--bg-input, #252525); border: 1px solid var(--border-input, #333333); border-radius: 6px; color: var(--text-primary, #e5e5e5); font-size: 14px; outline: none; }
     .input-area input:focus { border-color: #60a5fa; }
     .input-area button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
     .input-area button:hover { background: #2563eb; }
@@ -923,12 +851,12 @@ function renderChatPopout(agent, adminToken) {
     .streaming::after { content: '▊'; animation: blink 1s infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     /* Markdown styles */
-    #messages pre { background: #1f2937; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #messages pre { background: var(--bg-surface, #1a1a1a); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
     #messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
     #messages pre code { background: none; padding: 0; }
     #messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
     #messages th, #messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
-    #messages th { background: #1f2937; }
+    #messages th { background: var(--bg-surface, #1a1a1a); }
     #messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
     #messages a { color: #60a5fa; }
     #messages ul, #messages ol { margin: 8px 0; padding-left: 24px; }
@@ -942,7 +870,7 @@ function renderChatPopout(agent, adminToken) {
     <span id="status" class="status">Connecting...</span>
   </div>
   <div id="messages">
-    <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
+    <p class="text-dim-center">Connecting to agent...</p>
   </div>
   <div class="input-area">
     <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" disabled>
@@ -963,9 +891,9 @@ function renderChatPopout(agent, adminToken) {
       const div = document.createElement('div');
       div.className = 'message';
       const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-      const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
+      const roleClass = role === 'user' ? 'role-user' : (role === 'system' ? 'role-system' : 'role-agent');
       const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
-      div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
+      div.innerHTML = '<div class="' + roleClass + ' role-label">' + roleLabel + ' <span class="subheading-dim">' + time + '</span></div><div class="text-primary-color">' + renderMarkdown(content) + '</div>';
       messagesDiv.appendChild(div);
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
@@ -978,7 +906,7 @@ function renderChatPopout(agent, adminToken) {
         div.id = messageId;
         div.className = 'message streaming';
         const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-        div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="content" style="color:#e5e7eb;"></div>';
+        div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="content text-primary-color"></div>';
         messagesDiv.appendChild(div);
       }
       // Update content with partial markdown (basic escaping during stream)
@@ -1014,7 +942,7 @@ function renderChatPopout(agent, adminToken) {
       onChunk: handleChunk,
       onStreamEnd: handleStreamEnd,
       onConnected: function() {
-        messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+        messagesDiv.innerHTML = '<p class="text-success-center">✓ Connected to agent</p>';
         chatInput.disabled = false;
         sendBtn.disabled = false;
         chatInput.focus();
@@ -1051,186 +979,7 @@ function renderChatPopout(agent, adminToken) {
 
 function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken = null) {
   return `${htmlHead(agent.name + ' - Agent Details', { includeSocket: true, includeMarkdown: agent.channel_enabled })}
-<style>
-  .agent-header {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 24px;
-  }
-  .agent-header .avatar-large {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: #374151;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    font-weight: 600;
-    color: #9ca3af;
-    cursor: pointer;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-    overflow: hidden;
-  }
-  .agent-header .avatar-large:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.4);
-  }
-  .agent-header .avatar-large img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-  .agent-header h2 {
-    margin: 0;
-    flex: 1;
-  }
-  .agent-header .toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .agent-header .toggle-label {
-    font-size: 13px;
-    color: #9ca3af;
-  }
-  /* Toggle switch */
-  .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
-  .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
-  .toggle input:checked + .toggle-slider { background-color: #10b981; }
-  .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
-  .toggle input:disabled + .toggle-slider { opacity: 0.5; cursor: not-allowed; }
 
-  .detail-section { margin-bottom: 24px; }
-  .detail-section h3 { margin: 0 0 12px 0; color: #e5e7eb; font-size: 1em; }
-
-  .detail-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
-  }
-  .detail-row:last-child { border-bottom: none; }
-  .detail-row .label { color: #9ca3af; font-size: 14px; }
-  .detail-row .value { color: #e5e7eb; font-family: monospace; }
-  .detail-row .value.muted { color: #6b7280; font-style: italic; font-family: inherit; }
-
-  .bio-text {
-    background: rgba(0,0,0,0.2);
-    padding: 12px;
-    border-radius: 6px;
-    color: #d1d5db;
-    white-space: pre-wrap;
-    font-size: 14px;
-  }
-
-  /* Chat markdown styles */
-  #chat-messages pre { background: #111827; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
-  #chat-messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
-  #chat-messages pre code { background: none; padding: 0; }
-  #chat-messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
-  #chat-messages th, #chat-messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
-  #chat-messages th { background: #111827; }
-  #chat-messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
-  #chat-messages a { color: #60a5fa; }
-  #chat-messages ul, #chat-messages ol { margin: 8px 0; padding-left: 24px; }
-  #chat-messages h1, #chat-messages h2, #chat-messages h3, #chat-messages h4 { margin: 12px 0 8px 0; }
-
-  .config-card {
-    background: rgba(0,0,0,0.15);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 12px;
-  }
-  .config-card h4 {
-    margin: 0 0 12px 0;
-    color: #e5e7eb;
-    font-size: 0.95em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .config-card .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-  .config-card .status-dot.active { background: #10b981; }
-  .config-card .status-dot.inactive { background: #6b7280; }
-
-  .btn-row {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-  }
-
-  .danger-zone {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 8px;
-    padding: 20px;
-    margin-top: 24px;
-  }
-  .danger-zone h3 { color: #f87171; margin: 0 0 8px 0; }
-  .danger-zone p { color: #9ca3af; margin: 0 0 16px 0; font-size: 14px; }
-
-  .stats-row {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    margin-bottom: 16px;
-  }
-  .stat-box {
-    background: rgba(0,0,0,0.2);
-    padding: 12px 16px;
-    border-radius: 6px;
-    text-align: center;
-    min-width: 80px;
-  }
-  .stat-box .stat-value { font-size: 20px; font-weight: 600; color: #e5e7eb; }
-  .stat-box .stat-label { font-size: 11px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
-  a.stat-link { text-decoration: none; transition: background 0.2s, border-color 0.2s; border: 1px solid transparent; }
-  a.stat-link:hover { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); }
-
-  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
-  .modal-overlay.active { display: flex; }
-  .modal { background: #1f2937; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; }
-  .modal h3 { margin: 0 0 16px 0; color: #f3f4f6; }
-  .modal label { display: block; margin-bottom: 4px; color: #d1d5db; font-size: 14px; }
-  .modal input, .modal textarea { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; }
-  .modal input:focus, .modal textarea:focus { border-color: #10b981; outline: none; }
-  .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
-  .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
-
-  .proxy-url-box { background: #111827; padding: 10px 12px; border-radius: 6px; word-break: break-all; font-size: 13px; color: #67e8f9; display: flex; align-items: center; gap: 8px; margin: 8px 0; }
-  .proxy-url-box code { flex: 1; }
-  .btn-copy-sm { background: #374151; border: 1px solid #4b5563; color: #d1d5db; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
-
-  /* Toast */
-  .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-size: 14px; z-index: 1001; opacity: 0; transform: translateY(20px); transition: opacity 0.3s, transform 0.3s; }
-  .toast.show { opacity: 1; transform: translateY(0); }
-  .toast.error { background: #dc2626; }
-  .toast.success { background: #059669; }
-
-  /* Inline error */
-  .inline-error { color: #f87171; font-size: 13px; margin-top: 4px; }
-
-  /* Delete confirmation input */
-  .delete-confirm-input { border-color: #ef4444 !important; }
-  .delete-confirm-input:focus { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
-
-  /* Service access list */
-  .service-access-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .service-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 13px; color: #c7d2fe; text-decoration: none; transition: background 0.2s, border-color 0.2s; }
-  .service-chip:hover { background: rgba(16,185,129,0.25); border-color: rgba(16,185,129,0.5); }
-  .service-chip img { width: 16px; height: 16px; }
-  .service-chip .bypass-badge { font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 6px; border-radius: 8px; margin-left: 4px; }
-  .no-access { color: #9ca3af; font-style: italic; font-size: 14px; padding: 12px 0; }
-</style>
 <body>
   ${navHeader()}
 
@@ -1305,7 +1054,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.webhook_url ? `
           <div class="detail-row">
             <span class="label">URL</span>
-            <span class="value" style="font-size: 12px; word-break: break-all;">${escapeHtml(agent.webhook_url)}</span>
+            <span class="value text-xs break-all">${escapeHtml(agent.webhook_url)}</span>
           </div>
           <div class="detail-row">
             <span class="label">Token</span>
@@ -1328,15 +1077,15 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.gateway_proxy_enabled ? `
           <div class="detail-row">
             <span class="label">Internal URL</span>
-            <span class="value" style="font-size: 12px;">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
+            <span class="value text-xs">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
           </div>
           <div class="detail-row">
             <span class="label">HTTP Proxy URL</span>
-            <span class="value" id="proxy-http-url" style="font-size: 12px; word-break: break-all;"></span>
+            <span class="value" id="proxy-http-url" class="text-xs break-all"></span>
           </div>
           <div class="detail-row">
             <span class="label">WebSocket Proxy URL</span>
-            <span class="value" id="proxy-ws-url" style="font-size: 12px; word-break: break-all;"></span>
+            <span class="value" id="proxy-ws-url" class="text-xs break-all"></span>
           </div>
           <div class="proxy-url-box">
             <code id="proxy-url"></code>
@@ -1358,22 +1107,22 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.channel_enabled ? `
           <div class="detail-row">
             <span class="label">Channel ID</span>
-            <span class="value" style="font-size: 12px; word-break: break-all;">${escapeHtml(agent.channel_id || '')}</span>
+            <span class="value text-xs break-all">${escapeHtml(agent.channel_id || '')}</span>
           </div>
           <div class="detail-row">
             <span class="label">WebSocket URL</span>
-            <span class="value" id="channel-ws-url" style="font-size: 12px; word-break: break-all;"></span>
+            <span class="value" id="channel-ws-url" class="text-xs break-all"></span>
           </div>
           <div class="detail-row">
             <span class="label">Last Connected</span>
             <span class="value ${agent.channel_last_connected ? '' : 'muted'}">${agent.channel_last_connected ? formatDate(agent.channel_last_connected) : 'Never'}</span>
           </div>
-          <div id="channel-key-display" style="display: none;">
+          <div id="channel-key-display" class="d-none">
             <div class="proxy-url-box">
               <code id="channel-key-value"></code>
               <button type="button" class="btn-copy-sm" onclick="copyChannelKey()">Copy</button>
             </div>
-            <p class="help-text" style="color: #fbbf24;">⚠️ Save this key — it won't be shown again.</p>
+            <p class="help-text text-warning">⚠️ Save this key — it won't be shown again.</p>
           </div>
           <div class="btn-row">
             <button type="button" class="btn-secondary" id="channel-regen-btn">🔑 Regenerate Key</button>
@@ -1392,16 +1141,16 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   ${agent.channel_enabled ? `
   <div class="card" id="chat-card">
     <div class="detail-section">
-      <h3 style="display: flex; align-items: center;">
+      <h3 class="flex-center">
         💬 Admin Chat
-        <span id="chat-status" style="margin-left: 12px; font-size: 12px; font-weight: normal; color: #fbbf24;">Connecting...</span>
-        <button type="button" class="btn-secondary btn-sm" id="chat-popout-btn" style="margin-left: auto; font-size: 12px;">⧉ Popout</button>
+        <span id="chat-status" class="ml-12 text-xs font-normal text-warning">Connecting...</span>
+        <button type="button" class="btn-secondary btn-sm" id="chat-popout-btn" class="ml-auto text-xs">⧉ Popout</button>
       </h3>
-      <div id="chat-messages" style="height: 300px; overflow-y: auto; background: #1f2937; border-radius: 8px; padding: 12px; margin-bottom: 12px; font-family: monospace; font-size: 13px;">
-        <p style="color: #6b7280; text-align: center;">Connecting to agent...</p>
+      <div id="chat-messages" class="log-viewer">
+        <p class="text-dim-center">Connecting to agent...</p>
       </div>
-      <div style="display: flex; gap: 8px;">
-        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" style="flex: 1; padding: 10px 14px; background: #374151; border: 1px solid #4b5563; border-radius: 6px; color: #f3f4f6; font-size: 14px;" disabled>
+      <div class="flex gap-8">
+        <input type="text" id="chat-input" placeholder="Type a message..." maxlength="10240" class="chat-input" disabled>
         <button type="button" class="btn-primary" id="chat-send-btn" disabled>Send</button>
       </div>
     </div>
@@ -1413,11 +1162,11 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
     <div class="detail-section">
       <h3>MCP Sessions</h3>
       <div id="sessions-container">
-        <p style="color: #9ca3af;">Loading sessions...</p>
+        <p class="text-muted">Loading sessions...</p>
       </div>
       <div class="btn-row">
         <button type="button" class="btn-secondary" id="refresh-sessions-btn">🔄 Refresh</button>
-        <button type="button" class="btn-danger" id="kill-all-sessions-btn" style="display:none;">Kill All Sessions</button>
+        <button type="button" class="btn-danger" id="kill-all-sessions-btn" class="d-none">Kill All Sessions</button>
       </div>
     </div>
   </div>
@@ -1432,7 +1181,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   <div id="bio-modal" class="modal-overlay">
     <div class="modal">
       <h3>Edit Bio</h3>
-      <p style="color: #9ca3af; font-size: 14px; margin-bottom: 16px;">Describe this agent's role. Shown via <code>whoami</code>.</p>
+      <p class="description-muted">Describe this agent's role. Shown via <code>whoami</code>.</p>
       <textarea id="bio-text" rows="4" placeholder="e.g., You are a cybersecurity expert..." autocomplete="off">${escapeHtml(agent.bio || '')}</textarea>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('bio-modal')">Cancel</button>
@@ -1462,8 +1211,8 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   <div id="proxy-modal" class="modal-overlay">
     <div class="modal">
       <h3>Configure Gateway Proxy</h3>
-      <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px; cursor: pointer;">
-        <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} style="width: auto; margin: 0;" autocomplete="off">
+      <label class="flex-center gap-8 mb-16 cursor-pointer">
+        <input type="checkbox" id="proxy-enabled" ${agent.gateway_proxy_enabled ? 'checked' : ''} class="w-auto m-0" autocomplete="off">
         <span>Enable gateway proxy <span class="help-hint" title="When enabled, this agent's own gateway becomes accessible through AgentGate via a proxy URL. Other agents can call this agent's gateway without direct network access.">?</span></span>
       </label>
       <div id="proxy-fields" style="${agent.gateway_proxy_enabled ? '' : 'display: none;'}">
@@ -1483,7 +1232,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
     <div class="modal">
       <h3>🔄 Regenerate API Key</h3>
       <div id="regen-confirm">
-        <p style="color: #fbbf24; background: rgba(245,158,11,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(245,158,11,0.3); margin-bottom: 16px;">
+        <p class="warning-banner">
           ⚠️ This will immediately invalidate the current key. The agent will lose access until updated.
         </p>
         <div class="modal-buttons">
@@ -1491,12 +1240,12 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
           <button type="button" class="btn-danger" onclick="confirmRegen()">Regenerate</button>
         </div>
       </div>
-      <div id="regen-success" style="display: none;">
-        <p style="color: #34d399; background: rgba(16,185,129,0.1); padding: 12px; border-radius: 8px; border: 1px solid rgba(16,185,129,0.3); margin-bottom: 16px;">
+      <div id="regen-success" class="d-none">
+        <p class="info-banner">
           ✅ Key regenerated! Copy it now - you won't see it again.
         </p>
-        <div style="background: #111827; padding: 12px; border-radius: 8px; margin-bottom: 16px; word-break: break-all;">
-          <code id="new-key" style="color: #34d399;"></code>
+        <div class="hash-display">
+          <code id="new-key" class="text-success"></code>
         </div>
         <div class="modal-buttons">
           <button type="button" class="btn-primary" onclick="copyNewKey()">Copy</button>
@@ -1510,8 +1259,8 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   <div id="avatar-modal" class="modal-overlay">
     <div class="modal">
       <h3>Change Avatar</h3>
-      <div style="text-align: center; margin-bottom: 16px;">
-        <div id="avatar-preview" style="width: 80px; height: 80px; border-radius: 50%; margin: 0 auto; background: #374151; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+      <div class="text-center mb-16">
+        <div id="avatar-preview" class="avatar-circle-lg">
           ${renderAvatar(agent.name, { size: 80 })}
         </div>
       </div>
@@ -1528,11 +1277,11 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   <!-- Delete Confirmation Modal -->
   <div id="delete-modal" class="modal-overlay">
     <div class="modal">
-      <h3 style="color: #f87171;">Delete Agent</h3>
-      <p style="color: #d1d5db; margin-bottom: 16px;">This will permanently delete <strong>${escapeHtml(agent.name)}</strong> and all associated data.</p>
+      <h3 class="text-danger">Delete Agent</h3>
+      <p class="description-dim">This will permanently delete <strong>${escapeHtml(agent.name)}</strong> and all associated data.</p>
       <label>Type "<strong>${escapeHtml(agent.name)}</strong>" to confirm:</label>
       <input type="text" id="delete-confirm-input" class="delete-confirm-input" placeholder="Enter agent name" autocomplete="off">
-      <div id="delete-error" class="inline-error" style="display: none;"></div>
+      <div id="delete-error" class="inline-error d-none"></div>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('delete-modal')">Cancel</button>
         <button type="button" class="btn-danger" id="delete-confirm-btn" onclick="confirmDelete()">Delete</button>
@@ -1544,7 +1293,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   <div id="delete-avatar-modal" class="modal-overlay">
     <div class="modal">
       <h3>Remove Avatar</h3>
-      <p style="color: #d1d5db; margin-bottom: 16px;">Remove the custom avatar and use the default?</p>
+      <p class="description-dim">Remove the custom avatar and use the default?</p>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('delete-avatar-modal')">Cancel</button>
         <button type="button" class="btn-danger" onclick="confirmDeleteAvatar()">Remove</button>
@@ -1771,7 +1520,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         // Show key in a display+copy pattern inline
         const card = document.getElementById('channel-enable-btn').closest('.config-card');
         const keyDiv = document.createElement('div');
-        keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\\'' + data.channel_key + '\\');showToast(\\'Copied!\\',\\'success\\')">Copy</button></div><p class="help-text" style="color: #fbbf24;">⚠️ Save this key — it won\\'t be shown again. Page will reload in 5s.</p>';
+        keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\\'' + data.channel_key + '\\');showToast(\\'Copied!\\',\\'success\\')">Copy</button></div><p class="help-text text-warning">⚠️ Save this key — it won\\'t be shown again. Page will reload in 5s.</p>';
         card.appendChild(keyDiv);
         setTimeout(() => location.reload(), 5000);
       } else {
@@ -1804,7 +1553,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
         const roleColor = role === 'user' ? '#60a5fa' : (role === 'system' ? '#fbbf24' : '#34d399');
         const roleLabel = role === 'user' ? 'You' : (role === 'system' ? 'System' : 'Agent');
-        div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div style="color:#e5e7eb;">' + renderMarkdown(content) + '</div>';
+        div.innerHTML = '<div style="color:' + roleColor + ';font-weight:600;font-size:11px;margin-bottom:2px;">' + roleLabel + ' <span class="subheading-dim">' + time + '</span></div><div class="text-primary-color">' + renderMarkdown(content) + '</div>';
         messagesDiv.appendChild(div);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
@@ -1817,7 +1566,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
           div.id = messageId;
           div.style.marginBottom = '12px';
           const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-          div.innerHTML = '<div style="color:#34d399;font-weight:600;font-size:11px;margin-bottom:2px;">Agent <span style="color:#6b7280;font-weight:400;">' + time + '</span></div><div class="stream-content" style="color:#e5e7eb;"></div><span style="opacity:0.5;">▊</span>';
+          div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="stream-content text-primary-color"></div><span class="opacity-50">▊</span>';
           messagesDiv.appendChild(div);
         }
         const contentDiv = div.querySelector('.stream-content');
@@ -1844,14 +1593,14 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
       const chat = createChatController(channelId, {
         onStatus: function(text, cls) {
           statusEl.textContent = text;
-          const colors = { connected: '#34d399', pending: '#fbbf24', error: '#ef4444' };
-          statusEl.style.color = colors[cls] || '#6b7280';
+          const classes = { connected: 'status-success', pending: 'status-warning', error: 'status-error' };
+          statusEl.className = 'status ' + (classes[cls] || 'status-default');
         },
         onMessage: addMessage,
         onChunk: handleChunk,
         onStreamEnd: handleStreamEnd,
         onConnected: function() {
-          messagesDiv.innerHTML = '<p style="color: #34d399; text-align: center;">✓ Connected to agent</p>';
+          messagesDiv.innerHTML = '<p class="text-success-center">✓ Connected to agent</p>';
           chatInput.disabled = false;
           sendBtn.disabled = false;
           chatInput.focus();
@@ -1895,7 +1644,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         const killAllBtn = document.getElementById('kill-all-sessions-btn');
 
         if (!data.sessions || data.sessions.length === 0) {
-          container.innerHTML = '<p style="color: #6b7280; font-style: italic;">No active sessions.</p>';
+          container.innerHTML = '<p class="text-dim italic">No active sessions.</p>';
           killAllBtn.style.display = 'none';
           return;
         }
@@ -1943,7 +1692,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         html += '</tbody></table>';
         container.innerHTML = html;
       } catch (err) {
-        document.getElementById('sessions-container').innerHTML = '<p style="color: #f87171;">Failed to load sessions.</p>';
+        document.getElementById('sessions-container').innerHTML = '<p class="text-danger">Failed to load sessions.</p>';
       }
     }
 
@@ -1995,7 +1744,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
       const reader = new FileReader();
       reader.onload = function(ev) {
         avatarData = ev.target.result;
-        document.getElementById('avatar-preview').innerHTML = '<img src="' + avatarData + '" style="width:100%;height:100%;object-fit:cover;">';
+        document.getElementById('avatar-preview').innerHTML = '<img src="' + avatarData + '" class="avatar-img-cover">';
         document.getElementById('avatar-upload-btn').disabled = false;
       };
       reader.readAsDataURL(file);
