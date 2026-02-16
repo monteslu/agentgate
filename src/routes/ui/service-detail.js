@@ -522,7 +522,7 @@ function renderAddService(serviceModule) {
   </div>
 
   <div class="card">
-    <form method="POST" action="/ui/${serviceRoutePrefix(serviceName)}/setup">
+    <form method="POST" action="/ui/${serviceRoutePrefix(serviceName)}/${getServiceSetupAction(serviceName)}">
       <div class="form-group">
         <label>Account Name</label>
         <input type="text" name="accountName" placeholder="personal, work, etc." required autocomplete="off">
@@ -550,6 +550,11 @@ function serviceRoutePrefix(serviceName) {
   return prefixes[serviceName] || serviceName;
 }
 
+function getServiceSetupAction(serviceName) {
+  const actions = { mastodon: 'token-setup' };
+  return actions[serviceName] || 'setup';
+}
+
 function getServiceFormFields(serviceName) {
   const fields = {
     github: `
@@ -572,13 +577,14 @@ function getServiceFormFields(serviceName) {
 
     mastodon: `
       <div class="form-group">
-        <label>Instance URL</label>
-        <input type="text" name="instanceUrl" placeholder="https://mastodon.social" required autocomplete="off">
+        <label>Instance</label>
+        <input type="text" name="instance" placeholder="mastodon.social" required autocomplete="off">
+        <p class="help">Just the domain, no https://</p>
       </div>
       <div class="form-group">
         <label>Access Token</label>
         <input type="password" name="accessToken" placeholder="Your access token" required autocomplete="off">
-        <p class="help">Get a token from your instance's Development settings</p>
+        <p class="help">Go to your instance → Preferences → Development → New Application, create an app with <code>read</code> + <code>write:statuses</code> scopes, then copy the access token</p>
       </div>`,
 
     reddit: `
