@@ -586,7 +586,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
       box-sizing: border-box;
     }
     .add-agent-box input:focus {
-      border-color: #6366f1;
+      border-color: #10b981;
       outline: none;
     }
     .add-agent-box .btn-primary {
@@ -606,7 +606,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
     .new-key-banner { background: #065f46; border: 1px solid #10b981; padding: 16px; border-radius: 8px; margin-bottom: 20px; color: #d1fae5; }
     .new-key-banner code { background: #1f2937; color: #10b981; padding: 8px 12px; border-radius: 4px; display: block; margin-top: 8px; font-size: 14px; word-break: break-all; }
     .error-message { background: #7f1d1d; color: #fecaca; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
-    .btn-sm { font-size: 12px; padding: 6px 12px; background: rgba(99,102,241,0.2); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.4); border-radius: 4px; cursor: pointer; text-decoration: none; }
+    .btn-sm { font-size: 12px; padding: 6px 12px; background: rgba(99,102,241,0.2); color: #6ee7b7; border: 1px solid rgba(99,102,241,0.4); border-radius: 4px; cursor: pointer; text-decoration: none; }
     .btn-sm:hover { background: rgba(99,102,241,0.3); }
 
     /* Toggle switch */
@@ -1075,7 +1075,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   }
   .agent-header .avatar-large:hover {
     transform: scale(1.05);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.4);
   }
   .agent-header .avatar-large img {
     width: 100%;
@@ -1202,7 +1202,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
   .modal h3 { margin: 0 0 16px 0; color: #f3f4f6; }
   .modal label { display: block; margin-bottom: 4px; color: #d1d5db; font-size: 14px; }
   .modal input, .modal textarea { width: 100%; padding: 10px; border: 1px solid #374151; border-radius: 6px; background: #111827; color: #f3f4f6; margin-bottom: 12px; box-sizing: border-box; }
-  .modal input:focus, .modal textarea:focus { border-color: #6366f1; outline: none; }
+  .modal input:focus, .modal textarea:focus { border-color: #10b981; outline: none; }
   .modal-buttons { display: flex; gap: 12px; justify-content: flex-end; margin-top: 16px; }
   .help-text { font-size: 12px; color: #9ca3af; margin-top: -8px; margin-bottom: 12px; }
 
