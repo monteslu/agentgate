@@ -8,7 +8,8 @@ import {
   getPendingQueueCount, listPendingMessages
 } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../../lib/hsyncManager.js';
-import { PORT, htmlHead, navHeader, menuScript, socketScript, localizeScript, copyScript, escapeHtml } from './shared.js';
+import { PORT } from './shared.js';
+import { renderPage } from '../../lib/render.js';
 
 const router = Router();
 
@@ -23,116 +24,19 @@ router.get('/settings', (req, res) => {
   const sharedQueueVisibility = getSharedQueueVisibility();
   const agentWithdrawEnabled = getAgentWithdrawEnabled();
 
-  res.send(renderSettingsPage({
-    messagingMode,
-    pendingMessagesCount,
+  renderPage(res, 'pages/settings', {
+    title: 'Settings',
+    includeSocket: true,
     pendingQueueCount,
+    pendingMessagesCount,
+    messagingMode,
     hsyncConfig,
     hsyncUrl,
     hsyncConnected,
     sharedQueueVisibility,
     agentWithdrawEnabled
-  }));
+  });
 });
-
-function renderSettingsPage(options) {
-  const {
-    messagingMode, pendingMessagesCount, pendingQueueCount,
-    hsyncConfig, hsyncUrl, hsyncConnected,
-    sharedQueueVisibility, agentWithdrawEnabled
-  } = options;
-
-  return `
-${htmlHead('Settings', { includeSocket: true })}
-<body>
-  ${navHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
-
-  <h2>Settings</h2>
-
-  <!-- Agent Messaging -->
-  <div class="card">
-    <h3>Agent Messaging</h3>
-    <p class="help">Allow agents to send messages to each other. Messages can require human approval (supervised) or be delivered immediately (open).</p>
-    <form method="POST" action="/ui/messaging/mode" class="flex-center gap-12 flex-wrap">
-      <label class="flex-center gap-6 m-0 cursor-pointer">
-        <input type="radio" name="mode" value="off" ${messagingMode === 'off' ? 'checked' : ''} autocomplete="off">
-        <span>Off</span>
-      </label>
-      <label class="flex-center gap-6 m-0 cursor-pointer">
-        <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''} autocomplete="off">
-        <span>Supervised <span class="help-hint" title="Agent messages are held for admin approval before delivery. Safer but slower — you review every message.">?</span></span>
-      </label>
-      <label class="flex-center gap-6 m-0 cursor-pointer">
-        <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''} autocomplete="off">
-        <span>Open <span class="help-hint" title="Agent messages are delivered immediately without approval. Faster but agents can communicate freely without oversight.">?</span></span>
-      </label>
-      <button type="submit" class="btn-primary btn-sm">Save</button>
-    </form>
-    ${messagingMode === 'supervised' && pendingMessagesCount > 0 ? `
-      <p class="mt-12"><a href="/ui/messages" class="text-success">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
-    ` : ''}
-  </div>
-
-  <!-- Queue Settings -->
-  <div class="card">
-    <h3>Queue Settings</h3>
-    <p class="help">Configure how agents interact with the write queue.</p>
-
-    <div class="subsection-mb">
-      <div class="flex-between flex-wrap gap-12">
-        <div>
-          <strong class="text-primary-color">Shared Queue Visibility <span class="help-hint" title="When enabled, agents can view all pending queue items from other agents (read-only — they cannot modify items they don't own). Enable for transparency between agents, disable for privacy.">?</span></strong>
-          <p class="help mt-4">When enabled, agents can see ALL queue items, not just their own.</p>
-        </div>
-        <form method="POST" action="/ui/queue/settings/shared-visibility" class="m-0">
-          <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}" autocomplete="off">
-          <button type="submit" class="btn-sm ${sharedQueueVisibility ? 'btn-danger' : 'btn-primary'}">${sharedQueueVisibility ? 'Disable' : 'Enable'}</button>
-        </form>
-      </div>
-    </div>
-
-    <div class="subsection">
-      <div class="flex-between flex-wrap gap-12">
-        <div>
-          <strong class="text-primary-color">Agent Withdraw <span class="help-hint" title="When enabled, agents can cancel their own pending queue requests before an admin approves or rejects them. Disable to require admin review of all submissions.">?</span></strong>
-          <p class="help mt-4">Allow agents to withdraw their own pending queue submissions.</p>
-        </div>
-        <form method="POST" action="/ui/queue/settings/agent-withdraw" class="m-0">
-          <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}" autocomplete="off">
-          <button type="submit" class="btn-sm ${agentWithdrawEnabled ? 'btn-danger' : 'btn-primary'}">${agentWithdrawEnabled ? 'Disable' : 'Enable'}</button>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- hsync Remote Access -->
-  <div class="card">
-    <h3>hsync (Remote Access) <span class="help-hint" title="hsync creates a secure tunnel so remote agents can reach this gateway without opening firewall ports. Think of it like ngrok for your agent gateway.">?</span> ${hsyncConnected ? '<span class="status configured">Connected</span>' : hsyncConfig?.enabled ? '<span class="status not-configured">Disconnected</span>' : ''}</h3>
-    ${hsyncConfig?.enabled ? `
-      <p>URL: <strong>${escapeHtml(hsyncConfig?.url || '')}</strong></p>
-      ${hsyncUrl ? `<p>Public URL: <span class="copyable">${escapeHtml(hsyncUrl)} <button type="button" class="copy-btn" data-copy="${escapeHtml(hsyncUrl)}">Copy</button></span></p>` : '<p class="help">Connecting... (refresh page to see URL)</p>'}
-      <form method="POST" action="/ui/hsync/delete">
-        <button type="submit" class="btn-danger">Disable</button>
-      </form>
-    ` : `
-      <p class="help">Use <a href="https://hsync.tech" target="_blank">hsync</a> to expose this gateway to remote agents without opening ports.</p>
-      <form method="POST" action="/ui/hsync/setup">
-        <label>URL</label>
-        <input type="text" name="url" placeholder="https://yourname.hsync.tech" required autocomplete="off">
-        <label>Token (optional)</label>
-        <input type="password" name="token" placeholder="Token if required" autocomplete="off">
-        <button type="submit" class="btn-primary">Enable hsync</button>
-      </form>
-    `}
-  </div>
-
-  ${socketScript()}
-  ${menuScript()}
-  ${localizeScript()}
-  ${copyScript()}
-</body>
-</html>`;
-}
 
 // hsync setup
 router.post('/hsync/setup', async (req, res) => {
