@@ -248,15 +248,15 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
   );
 
   const renderBroadcast = (b) => `
-    <div class="card message-entry broadcast-entry" class="accent-border-left">
+    <div class="card message-entry broadcast-entry accent-border-left">
       <div class="flex-between mb-12" style="align-items: flex-start;">
         <div class="entry-header">
           <span class="primary-badge">📢 BROADCAST</span>
           <span class="agent-with-avatar">${renderAvatar(b.from_agent, { size: 24 })}<strong>${escapeHtml(b.from_agent)}</strong></span>
-          <span class="help" class="ml-8">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
+          <span class="help ml-8">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
         </div>
         <div class="flex-center gap-12">
-          <span class="help" class="m-0">${formatDate(b.created_at)}</span>
+          <span class="help m-0">${formatDate(b.created_at)}</span>
           <button type="button" class="delete-btn" onclick="deleteBroadcast('${b.id}')" title="Delete">×</button>
         </div>
       </div>
@@ -279,7 +279,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       actions = `
         <div class="message-actions">
           <button type="button" class="btn-primary btn-sm" onclick="approveMessage('${msg.id}')">Approve</button>
-          <input type="text" id="reason-${msg.id}" placeholder="Rejection reason (optional)" class="reject-input" class="w-200" autocomplete="off">
+          <input type="text" id="reason-${msg.id}" placeholder="Rejection reason (optional)" class="reject-input w-200" autocomplete="off">
           <button type="button" class="btn-danger btn-sm" onclick="rejectMessage('${msg.id}')">Reject</button>
         </div>
       `;
@@ -304,7 +304,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
             <span class="status-badge">${statusBadge(msg.status)}</span>
           </div>
           <div class="flex-center gap-12">
-            <span class="help" class="m-0">${formatDate(msg.created_at)}</span>
+            <span class="help m-0">${formatDate(msg.created_at)}</span>
             <button type="button" class="delete-btn" onclick="deleteMessage('${msg.id}')" title="Delete">&times;</button>
           </div>
         </div>
@@ -334,16 +334,16 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
   </div>
   <p>Review and approve messages between agents${mode === 'supervised' ? ' (supervised mode)' : ''}.</p>
 
-  <div class="card" class="mb-24">
+  <div class="card mb-24">
     <h3 class="mt-0 flex-center gap-8">
       <span>📢</span> Broadcast Message
     </h3>
-    <p class="help" class="mb-16">Send a message to all agents with webhooks configured.</p>
+    <p class="help mb-16">Send a message to all agents with webhooks configured.</p>
     <form method="POST" action="/ui/messages/broadcast" id="broadcast-form">
       <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" class="textarea-input" required autocomplete="off"></textarea>
       <div class="flex-center gap-12">
         <button type="submit" class="btn-primary" id="broadcast-btn">Send Broadcast</button>
-        <span id="broadcast-status" class="help" class="m-0"></span>
+        <span id="broadcast-status" class="help m-0"></span>
       </div>
     </form>
   </div>
@@ -357,8 +357,8 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.delivered > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
       ${broadcasts.length > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearBroadcasts()">Clear Broadcasts</button>' : ''}
-      <a href="/ui/messages/export?format=json" class="btn-sm" class="no-underline">Export JSON</a>
-      <a href="/ui/messages/export?format=csv" class="btn-sm" class="no-underline">Export CSV</a>
+      <a href="/ui/messages/export?format=json" class="btn-sm no-underline">Export JSON</a>
+      <a href="/ui/messages/export?format=csv" class="btn-sm no-underline">Export CSV</a>
     </div>
   </div>
 
