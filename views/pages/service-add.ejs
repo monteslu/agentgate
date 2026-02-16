@@ -1,0 +1,21 @@
+<div class="add-service-header">
+  <img src="<%= icon %>" alt="<%- escapeHtml(displayName) %>">
+  <h2>Add <%- escapeHtml(displayName) %> Account</h2>
+</div>
+
+<div class="card">
+  <form method="POST" action="/ui/<%= serviceRoutePrefix %>/<%= setupAction %>">
+    <div class="form-group">
+      <label>Account Name</label>
+      <input type="text" name="accountName" placeholder="personal, work, etc." required autocomplete="off">
+      <p class="help">A friendly name to identify this account</p>
+    </div>
+
+    <%- formFields %>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary">Add Account</button>
+      <a href="/ui" class="btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
