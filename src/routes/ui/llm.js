@@ -45,7 +45,7 @@ router.get('/', (req, res) => {
           </div>
         </div>
         <div id="provider-test-${p.id}" class="provider-test-result"></div>
-        <div id="provider-edit-${p.id}" class="provider-edit-form" style="display: none;">
+        <div id="provider-edit-${p.id}" class="provider-edit-form" class="d-none">
           <div class="form-grid">
             <div class="form-group">
               <label for="edit-name-${p.id}">Name</label>
@@ -98,106 +98,7 @@ router.get('/', (req, res) => {
     .join('');
 
   const html = `${htmlHead('LLM Providers', { includeSocket: true })}
-<style>
-  /* LLM Page Styles */
-  .llm-section { margin-bottom: 32px; }
-  .llm-section > h2 { margin: 0 0 16px 0; }
 
-  /* Provider Cards */
-  .provider-card { margin-bottom: 16px; }
-  .provider-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
-  .provider-info { display: flex; align-items: center; gap: 12px; }
-  .provider-icon { font-size: 2em; }
-  .provider-name { font-size: 1.1em; color: #f3f4f6; }
-  .provider-type { margin-left: 8px; font-size: 0.85em; color: #9ca3af; background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; }
-  .provider-url { font-size: 0.8em; color: #6b7280; margin-top: 4px; font-family: monospace; }
-  .provider-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .provider-test-result { margin-top: 12px; }
-  .provider-edit-form { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
-
-  /* Form Grid - 4 columns on desktop, stacks on mobile */
-  .form-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 16px;
-  }
-  @media (max-width: 800px) {
-    .form-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-  @media (max-width: 500px) {
-    .form-grid { grid-template-columns: 1fr; }
-  }
-
-  .form-group { display: flex; flex-direction: column; }
-  .form-group label {
-    font-size: 13px;
-    color: #9ca3af;
-    font-weight: 500;
-    margin: 0 0 6px 0 !important;
-  }
-  .form-group input, .form-group select {
-    padding: 10px 12px !important;
-    margin: 0 !important;
-    background: rgba(0,0,0,0.3) !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
-    border-radius: 6px !important;
-    color: #f3f4f6;
-    font-size: 14px;
-    width: 100%;
-    box-sizing: border-box;
-    height: 42px;
-  }
-  .form-group input:focus, .form-group select:focus {
-    outline: none;
-    border-color: #10b981 !important;
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2) !important;
-  }
-  .form-group input::placeholder { color: #6b7280; }
-
-  .form-footer {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  .form-footer .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #9ca3af;
-    font-size: 14px;
-    cursor: pointer;
-  }
-  .form-footer .checkbox-label input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-  }
-
-  .form-actions { display: flex; gap: 12px; margin-top: 16px; }
-
-  /* Models Table */
-  .models-table { width: 100%; border-collapse: collapse; }
-  .models-table th {
-    text-align: left;
-    padding: 12px;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #9ca3af;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-  .models-table td { padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #e5e7eb; }
-  .models-table tr:hover { background: rgba(255,255,255,0.02); }
-  .models-table .empty-row td { color: #6b7280; font-style: italic; }
-
-  /* Empty State */
-  .empty-state-box { text-align: center; padding: 32px 20px; color: #6b7280; background: rgba(0,0,0,0.2); border-radius: 8px; margin-top: 16px; }
-
-  .form-result { margin-top: 12px; }
-  .form-result:empty { display: none; }
-</style>
 <body>
   ${navHeader({ pendingQueueCount, pendingMessagesCount, messagingMode })}
 
@@ -259,9 +160,9 @@ router.get('/', (req, res) => {
           <input type="text" id="assign-model" placeholder="gpt-4o" autocomplete="off">
         </div>
       </div>
-      <div style="display: flex; align-items: center; gap: 16px;">
-        <label style="display: flex; align-items: center; gap: 8px; margin: 0; cursor: pointer; color: #9ca3af;">
-          <input type="checkbox" id="assign-default" style="width: 18px; height: 18px; margin: 0;" autocomplete="off">
+      <div class="flex-center gap-16">
+        <label class="flex-center gap-8 m-0 cursor-pointer text-muted">
+          <input type="checkbox" id="assign-default" class="icon-18 m-0" autocomplete="off">
           Set as default <span class="help-hint" title="When checked, this becomes the agent's default model. If another model was previously the default for this agent, it will be replaced.">?</span>
         </label>
         <button class="btn-primary" onclick="assignModel()">Assign Model</button>
@@ -352,17 +253,17 @@ router.get('/', (req, res) => {
 
     async function testProvider(id) {
       const el = document.getElementById('provider-test-' + id);
-      el.innerHTML = '<span style="opacity: 0.6;">Testing...</span>';
+      el.innerHTML = '<span class="opacity-60">Testing...</span>';
       try {
         const res = await fetch('/ui/llm/providers/' + id + '/test', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          el.innerHTML = '<span style="color: #34d399;">✅ Connected — ' + data.latency + 'ms</span>';
+          el.innerHTML = '<span class="text-success">✅ Connected — ' + data.latency + 'ms</span>';
         } else {
-          el.innerHTML = '<span style="color: #f87171;">❌ ' + (data.error || 'Failed') + (data.latency ? ' (' + data.latency + 'ms)' : '') + '</span>';
+          el.innerHTML = '<span class="text-danger">❌ ' + (data.error || 'Failed') + (data.latency ? ' (' + data.latency + 'ms)' : '') + '</span>';
         }
       } catch (e) {
-        el.innerHTML = '<span style="color: #f87171;">❌ Network error</span>';
+        el.innerHTML = '<span class="text-danger">❌ Network error</span>';
       }
     }
 
