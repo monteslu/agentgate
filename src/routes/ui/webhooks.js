@@ -270,7 +270,7 @@ function renderStyles() {
     }
     .delivery-item .delivery-status.success { background: #4ade80; }
     .delivery-item .delivery-status.failed { background: #f87171; }
-    .delivery-item .delivery-event { color: #a5b4fc; font-family: monospace; min-width: 150px; }
+    .delivery-item .delivery-event { color: #6ee7b7; font-family: monospace; min-width: 150px; }
     .delivery-item .delivery-repo { color: #9ca3af; flex: 1; }
     .delivery-item .delivery-time { color: #6b7280; font-size: 0.85em; }
     
@@ -314,12 +314,12 @@ function renderStyles() {
     .event-checkbox .event-desc { font-size: 0.85em; color: #9ca3af; margin-top: 2px; }
     
     .endpoint-url {
-      background: rgba(99,102,241,0.1);
-      border: 1px solid rgba(99,102,241,0.3);
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3);
       border-radius: 6px;
       padding: 12px 16px;
       font-family: monospace;
-      color: #a5b4fc;
+      color: #6ee7b7;
     }
     
     .alert {
@@ -367,8 +367,8 @@ function renderStyles() {
     }
     .agent-checkbox:hover { background: rgba(255,255,255,0.05); }
     .agent-checkbox.selected { 
-      background: rgba(99,102,241,0.15); 
-      border-color: rgba(99,102,241,0.4); 
+      background: rgba(16,185,129,0.15); 
+      border-color: rgba(16,185,129,0.4); 
     }
     .agent-checkbox input { margin: 0; }
     .agent-checkbox .agent-name { font-weight: 500; color: #e5e7eb; }
@@ -532,8 +532,8 @@ ${renderStyles()}
         el.style.borderColor = 'rgba(255,255,255,0.08)';
         el.style.background = 'rgba(255,255,255,0.03)';
       });
-      event.currentTarget.style.borderColor = 'rgba(99,102,241,0.5)';
-      event.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+      event.currentTarget.style.borderColor = 'rgba(16,185,129,0.5)';
+      event.currentTarget.style.background = 'rgba(16,185,129,0.1)';
     }
     
     function updateAgentStyle(label) {

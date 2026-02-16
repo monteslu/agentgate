@@ -139,7 +139,7 @@ function renderAccessPage(services, agents) {
     .service-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
     .service-header h3 { margin: 0; }
     .mode-select { padding: 8px 12px; border-radius: 6px; background: #1f2937; border: 1px solid #374151; color: #f3f4f6; cursor: pointer; }
-    .mode-select:focus { border-color: #6366f1; outline: none; }
+    .mode-select:focus { border-color: #10b981; outline: none; }
     
     .access-table { width: 100%; border-collapse: collapse; }
     .access-table th, .access-table td { padding: 12px; text-align: left; border-bottom: 1px solid #374151; }

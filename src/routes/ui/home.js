@@ -73,16 +73,16 @@ function renderServicesStyles() {
     .service-row .btn-sm {
       padding: 6px 14px;
       font-size: 0.85em;
-      background: rgba(99,102,241,0.2);
-      color: #a5b4fc;
-      border: 1px solid rgba(99,102,241,0.4);
+      background: rgba(16,185,129,0.2);
+      color: #6ee7b7;
+      border: 1px solid rgba(16,185,129,0.4);
       border-radius: 5px;
       text-decoration: none;
       cursor: pointer;
     }
     .service-row .btn-sm:hover {
-      background: rgba(99,102,241,0.3);
-      border-color: rgba(99,102,241,0.6);
+      background: rgba(16,185,129,0.3);
+      border-color: rgba(16,185,129,0.6);
     }
 
     .empty-state {
@@ -121,7 +121,7 @@ function renderServicesStyles() {
       border-radius: 6px;
     }
     .add-service-menu a:hover {
-      background: rgba(99,102,241,0.2);
+      background: rgba(16,185,129,0.2);
     }
     .add-service-menu img {
       width: 20px;
