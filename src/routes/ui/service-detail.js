@@ -245,7 +245,7 @@ function renderServiceDetail({ account, serviceInfo, serviceModule, agents, acce
     color: #f3f4f6;
     cursor: pointer;
   }
-  .mode-select:focus { border-color: #6366f1; outline: none; }
+  .mode-select:focus { border-color: #10b981; outline: none; }
 
   .access-table { width: 100%; border-collapse: collapse; }
   .access-table th, .access-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -499,7 +499,7 @@ function renderAddService(serviceModule) {
     box-sizing: border-box;
   }
   .form-group input:focus {
-    border-color: #6366f1;
+    border-color: #10b981;
     outline: none;
   }
   .form-group .help {
