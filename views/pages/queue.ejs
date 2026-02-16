@@ -50,7 +50,7 @@
           <%- warningBadge %>
         </div>
         <div class="flex-center gap-12">
-          <span class="help m-0"><%= formatDate(entry.submitted_at) %></span>
+          <span class="help m-0"><%- formatDate(entry.submitted_at) %></span>
           <button type="button" class="delete-btn" onclick="deleteEntry('<%= entry.id %>')" title="Delete">&times;</button>
         </div>
       </div>
@@ -91,7 +91,7 @@
               <div class="warning-header">
                 <%- renderAvatar(w.agent_id, { size: 18 }) %>
                 <strong><%= w.agent_id %></strong>
-                <span class="warning-time"><%= formatDate(w.created_at) %></span>
+                <span class="warning-time"><%- formatDate(w.created_at) %></span>
               </div>
               <div class="warning-message"><%= w.message %></div>
             </div>
