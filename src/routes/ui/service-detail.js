@@ -132,10 +132,10 @@ function renderNotFound(id) {
   return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" style="text-align: center; padding: 40px;">
+  <div class="card" class="text-center p-40">
     <h2>Service Not Found</h2>
-    <p style="color: #9ca3af;">The service with ID "${escapeHtml(String(id))}" does not exist.</p>
-    <a href="/ui" class="btn-primary" style="display: inline-block; margin-top: 16px;">Back to Services</a>
+    <p class="text-muted">The service with ID "${escapeHtml(String(id))}" does not exist.</p>
+    <a href="/ui" class="btn-primary" class="inline-block mt-16">Back to Services</a>
   </div>
   ${socketScript()}
   ${menuScript()}
@@ -195,86 +195,7 @@ function renderServiceDetail({ account, serviceInfo, serviceModule, agents, acce
   }).join('');
 
   return `${htmlHead(`${displayName} - ${account.name}`, { includeSocket: true })}
-<style>
-  .service-detail-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .service-detail-header img {
-    width: 48px;
-    height: 48px;
-  }
-  .service-detail-header h2 {
-    margin: 0;
-    flex: 1;
-  }
-  .service-detail-header .account-name {
-    color: #9ca3af;
-    font-weight: normal;
-  }
 
-  .section { margin-bottom: 32px; }
-  .section h3 { margin: 0 0 16px 0; color: #e5e7eb; }
-
-  .cred-field {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-  .cred-field:last-child { border-bottom: none; }
-  .cred-label { color: #9ca3af; font-size: 13px; text-transform: capitalize; }
-  .cred-value { font-family: monospace; color: #6b7280; }
-
-  .access-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-  .access-header h3 { margin: 0; }
-
-  .mode-select {
-    padding: 8px 12px;
-    border-radius: 6px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.15);
-    color: #f3f4f6;
-    cursor: pointer;
-  }
-  .mode-select:focus { border-color: #10b981; outline: none; }
-
-  .access-table { width: 100%; border-collapse: collapse; }
-  .access-table th, .access-table td { padding: 12px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); }
-  .access-table th { font-weight: 600; color: #9ca3af; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; }
-
-  .agent-with-avatar { display: flex; align-items: center; gap: 10px; }
-
-  .toggle { position: relative; display: inline-block; width: 44px; height: 24px; }
-  .toggle.disabled { opacity: 0.5; pointer-events: none; }
-  .toggle input { opacity: 0; width: 0; height: 0; }
-  .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: 0.3s; border-radius: 24px; }
-  .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
-  .toggle input:checked + .toggle-slider { background-color: #10b981; }
-  .toggle input:checked + .toggle-slider.bypass { background-color: #f59e0b; }
-  .toggle input:checked + .toggle-slider:before { transform: translateX(20px); }
-
-  .bypass-badge { font-size: 11px; background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 2px 8px; border-radius: 10px; margin-left: 8px; }
-
-  .danger-zone {
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 8px;
-    padding: 20px;
-  }
-  .danger-zone h3 { color: #f87171; margin: 0 0 8px 0; }
-  .danger-zone p { color: #9ca3af; margin: 0 0 16px 0; font-size: 14px; }
-
-  .no-agents { text-align: center; padding: 24px; color: #6b7280; }
-</style>
 <body>
   ${navHeader()}
 
@@ -296,7 +217,7 @@ function renderServiceDetail({ account, serviceInfo, serviceModule, agents, acce
     <div class="card">
       <div class="access-header">
         <h3>Access Control</h3>
-        <div style="display:flex;align-items:center;gap:6px;">
+        <div class="flex-center gap-6">
           <select class="mode-select" id="access-mode">
             <option value="all" ${access.access_mode === 'all' ? 'selected' : ''}>All agents</option>
             <option value="allowlist" ${access.access_mode === 'allowlist' ? 'selected' : ''}>Allowlist only</option>
@@ -444,10 +365,10 @@ function renderServiceTypeNotFound(serviceType) {
   return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" style="text-align: center; padding: 40px;">
+  <div class="card" class="text-center p-40">
     <h2>Service Not Found</h2>
-    <p style="color: #9ca3af;">The service type "${escapeHtml(serviceType)}" is not available.</p>
-    <a href="/ui" class="btn-primary" style="display: inline-block; margin-top: 16px;">Back to Services</a>
+    <p class="text-muted">The service type "${escapeHtml(serviceType)}" is not available.</p>
+    <a href="/ui" class="btn-primary" class="inline-block mt-16">Back to Services</a>
   </div>
   ${socketScript()}
   ${menuScript()}
@@ -464,55 +385,7 @@ function renderAddService(serviceModule) {
   const formFields = getServiceFormFields(serviceName);
 
   return `${htmlHead(`Add ${displayName}`, { includeSocket: true })}
-<style>
-  .add-service-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .add-service-header img {
-    width: 48px;
-    height: 48px;
-  }
-  .add-service-header h2 {
-    margin: 0;
-    flex: 1;
-  }
-  .form-group {
-    margin-bottom: 16px;
-  }
-  .form-group label {
-    display: block;
-    margin-bottom: 6px;
-    color: #d1d5db;
-    font-weight: 500;
-  }
-  .form-group input {
-    width: 100%;
-    padding: 10px 12px;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 6px;
-    color: #f3f4f6;
-    font-size: 14px;
-    box-sizing: border-box;
-  }
-  .form-group input:focus {
-    border-color: #10b981;
-    outline: none;
-  }
-  .form-group .help {
-    margin-top: 6px;
-    font-size: 0.85em;
-    color: #6b7280;
-  }
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    margin-top: 24px;
-  }
-</style>
+
 <body>
   ${navHeader()}
 
