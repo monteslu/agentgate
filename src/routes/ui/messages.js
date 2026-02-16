@@ -248,10 +248,10 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
   );
 
   const renderBroadcast = (b) => `
-    <div class="card message-entry broadcast-entry" style="margin-bottom: 20px; border-left: 4px solid #6366f1;">
+    <div class="card message-entry broadcast-entry" style="margin-bottom: 20px; border-left: 4px solid #10b981;">
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
         <div class="entry-header">
-          <span style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">📢 BROADCAST</span>
+          <span style="background: linear-gradient(135deg, #10b981 0%, #10b981 100%); color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; margin-right: 8px;">📢 BROADCAST</span>
           <span class="agent-with-avatar">${renderAvatar(b.from_agent, { size: 24 })}<strong>${escapeHtml(b.from_agent)}</strong></span>
           <span class="help" style="margin-left: 8px;">→ ${b.total_recipients} recipient${b.total_recipients !== 1 ? 's' : ''}</span>
         </div>
@@ -329,10 +329,10 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: #9ca3af; font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
     .filter-link:hover { background: rgba(255, 255, 255, 0.1); color: #e5e7eb; border-color: rgba(255, 255, 255, 0.2); }
-    .filter-link.active { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+    .filter-link.active { background: linear-gradient(135deg, #10b981 0%, #10b981 100%); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .message-entry { margin-bottom: 20px; }
     .message-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .back-link { color: #818cf8; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
+    .back-link { color: #34d399; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
     .back-link:hover { color: #ffffff; }
     .delete-btn { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; font-size: 18px; cursor: pointer; padding: 4px 10px; line-height: 1; font-weight: bold; border-radius: 6px; transition: all 0.2s ease; }
     .delete-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
@@ -343,10 +343,10 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     .rejection-reason strong { color: #f87171; }
     .empty-state { text-align: center; padding: 60px 40px; }
     .empty-state p { color: #6b7280; margin: 0; font-size: 16px; }
-    .reject-input { padding: 10px 14px; margin: 0; font-size: 13px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
+    .reject-input { padding: 10px 14px; margin: 0; font-size: 13px; background: #111111; border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
     .reject-input:focus { outline: none; border-color: #f87171; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
     .reject-input::placeholder { color: #6b7280; }
-    .mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
+    .mode-badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
   </style>
 <body>
   ${navHeader()}
@@ -362,7 +362,7 @@ function renderMessagesPage(messages, filter, counts, mode, broadcasts = []) {
     </h3>
     <p class="help" style="margin-bottom: 16px;">Send a message to all agents with webhooks configured.</p>
     <form method="POST" action="/ui/messages/broadcast" id="broadcast-form">
-      <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" style="width: 100%; margin-bottom: 12px; padding: 12px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(99, 102, 241, 0.2); border-radius: 8px; color: #f3f4f6; font-family: inherit; resize: vertical;" required autocomplete="off"></textarea>
+      <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" style="width: 100%; margin-bottom: 12px; padding: 12px; background: #111111; border: 2px solid rgba(16, 185, 129, 0.2); border-radius: 8px; color: #f3f4f6; font-family: inherit; resize: vertical;" required autocomplete="off"></textarea>
       <div style="display: flex; gap: 12px; align-items: center;">
         <button type="submit" class="btn-primary" id="broadcast-btn">Send Broadcast</button>
         <span id="broadcast-status" class="help" style="margin: 0;"></span>
