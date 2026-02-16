@@ -53,23 +53,23 @@ ${htmlHead('Settings', { includeSocket: true })}
   <div class="card">
     <h3>Agent Messaging</h3>
     <p class="help">Allow agents to send messages to each other. Messages can require human approval (supervised) or be delivered immediately (open).</p>
-    <form method="POST" action="/ui/messaging/mode" style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
-      <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+    <form method="POST" action="/ui/messaging/mode" class="flex-center gap-12 flex-wrap">
+      <label class="flex-center gap-6 m-0 cursor-pointer">
         <input type="radio" name="mode" value="off" ${messagingMode === 'off' ? 'checked' : ''} autocomplete="off">
         <span>Off</span>
       </label>
-      <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+      <label class="flex-center gap-6 m-0 cursor-pointer">
         <input type="radio" name="mode" value="supervised" ${messagingMode === 'supervised' ? 'checked' : ''} autocomplete="off">
         <span>Supervised <span class="help-hint" title="Agent messages are held for admin approval before delivery. Safer but slower — you review every message.">?</span></span>
       </label>
-      <label style="display: flex; align-items: center; gap: 6px; margin: 0; cursor: pointer;">
+      <label class="flex-center gap-6 m-0 cursor-pointer">
         <input type="radio" name="mode" value="open" ${messagingMode === 'open' ? 'checked' : ''} autocomplete="off">
         <span>Open <span class="help-hint" title="Agent messages are delivered immediately without approval. Faster but agents can communicate freely without oversight.">?</span></span>
       </label>
       <button type="submit" class="btn-primary btn-sm">Save</button>
     </form>
     ${messagingMode === 'supervised' && pendingMessagesCount > 0 ? `
-      <p style="margin-top: 12px;"><a href="/ui/messages" style="color: #34d399;">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
+      <p class="mt-12"><a href="/ui/messages" class="text-success">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
     ` : ''}
   </div>
 
@@ -78,26 +78,26 @@ ${htmlHead('Settings', { includeSocket: true })}
     <h3>Queue Settings</h3>
     <p class="help">Configure how agents interact with the write queue.</p>
 
-    <div style="margin-bottom: 16px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+    <div class="subsection-mb">
+      <div class="flex-between flex-wrap gap-12">
         <div>
-          <strong style="color: #f3f4f6;">Shared Queue Visibility <span class="help-hint" title="When enabled, agents can view all pending queue items from other agents (read-only — they cannot modify items they don't own). Enable for transparency between agents, disable for privacy.">?</span></strong>
-          <p class="help" style="margin: 4px 0 0 0;">When enabled, agents can see ALL queue items, not just their own.</p>
+          <strong class="text-primary-color">Shared Queue Visibility <span class="help-hint" title="When enabled, agents can view all pending queue items from other agents (read-only — they cannot modify items they don't own). Enable for transparency between agents, disable for privacy.">?</span></strong>
+          <p class="help" class="mt-4">When enabled, agents can see ALL queue items, not just their own.</p>
         </div>
-        <form method="POST" action="/ui/queue/settings/shared-visibility" style="margin: 0;">
+        <form method="POST" action="/ui/queue/settings/shared-visibility" class="m-0">
           <input type="hidden" name="enabled" value="${sharedQueueVisibility ? 'false' : 'true'}" autocomplete="off">
           <button type="submit" class="btn-sm ${sharedQueueVisibility ? 'btn-danger' : 'btn-primary'}">${sharedQueueVisibility ? 'Disable' : 'Enable'}</button>
         </form>
       </div>
     </div>
 
-    <div style="padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+    <div class="subsection">
+      <div class="flex-between flex-wrap gap-12">
         <div>
-          <strong style="color: #f3f4f6;">Agent Withdraw <span class="help-hint" title="When enabled, agents can cancel their own pending queue requests before an admin approves or rejects them. Disable to require admin review of all submissions.">?</span></strong>
-          <p class="help" style="margin: 4px 0 0 0;">Allow agents to withdraw their own pending queue submissions.</p>
+          <strong class="text-primary-color">Agent Withdraw <span class="help-hint" title="When enabled, agents can cancel their own pending queue requests before an admin approves or rejects them. Disable to require admin review of all submissions.">?</span></strong>
+          <p class="help" class="mt-4">Allow agents to withdraw their own pending queue submissions.</p>
         </div>
-        <form method="POST" action="/ui/queue/settings/agent-withdraw" style="margin: 0;">
+        <form method="POST" action="/ui/queue/settings/agent-withdraw" class="m-0">
           <input type="hidden" name="enabled" value="${agentWithdrawEnabled ? 'false' : 'true'}" autocomplete="off">
           <button type="submit" class="btn-sm ${agentWithdrawEnabled ? 'btn-danger' : 'btn-primary'}">${agentWithdrawEnabled ? 'Disable' : 'Enable'}</button>
         </form>
