@@ -467,6 +467,8 @@ code {
 
 .logo {
   height: 48px;
+  border-radius: 8px;
+  border: 1px solid #10b981;
 }
 
 .main-nav {
