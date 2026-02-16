@@ -1,4 +1,5 @@
 * { box-sizing: border-box; }
+input[type="radio"], input[type="checkbox"] { accent-color: var(--primary); }
 
 .help-hint {
   display: inline-flex; align-items: center; justify-content: center;
