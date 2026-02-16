@@ -1938,3 +1938,53 @@ body > p:first-of-type {
 .p-20 { padding: 20px; }
 .mb-12 { margin-bottom: 12px; }
 .flex-start { align-items: flex-start; }
+
+/* Dynamic state classes — replaces inline style color assignments */
+.status-success { color: var(--primary-light); }
+.status-error { color: var(--danger-light, #f87171); }
+.status-warning { color: var(--warning-light, #fbbf24); }
+.status-default { color: var(--text-dim); }
+
+.recipient-badge {
+  padding: 4px 10px;
+  border-radius: 16px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recipient-delivered {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--primary-light);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.recipient-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger-light, #f87171);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Webhook item selection */
+.webhook-item.selected {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.1);
+}
+
+/* Queue entry flash highlight */
+.queue-entry-flash {
+  transition: box-shadow 0.3s ease;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.6);
+}
+
+/* Chat role label colors */
+.role-label {
+  font-weight: 600;
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.role-user { color: var(--info, #60a5fa); }
+.role-system { color: var(--warning-light, #fbbf24); }
+.role-agent { color: var(--primary-light); }
