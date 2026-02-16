@@ -132,10 +132,10 @@ function renderNotFound(id) {
   return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" class="text-center p-40">
+  <div class="card text-center p-40">
     <h2>Service Not Found</h2>
     <p class="text-muted">The service with ID "${escapeHtml(String(id))}" does not exist.</p>
-    <a href="/ui" class="btn-primary" class="inline-block mt-16">Back to Services</a>
+    <a href="/ui" class="btn-primary inline-block mt-16">Back to Services</a>
   </div>
   ${socketScript()}
   ${menuScript()}
@@ -365,10 +365,10 @@ function renderServiceTypeNotFound(serviceType) {
   return `${htmlHead('Service Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" class="text-center p-40">
+  <div class="card text-center p-40">
     <h2>Service Not Found</h2>
     <p class="text-muted">The service type "${escapeHtml(serviceType)}" is not available.</p>
-    <a href="/ui" class="btn-primary" class="inline-block mt-16">Back to Services</a>
+    <a href="/ui" class="btn-primary inline-block mt-16">Back to Services</a>
   </div>
   ${socketScript()}
   ${menuScript()}
