@@ -1,0 +1,506 @@
+<h2 class="mt-0">Write Queue</h2>
+<p>Review and approve write requests from agents.</p>
+
+<div class="filter-bar" id="filter-bar">
+  <% var filters = ['pending', 'auto-approved', 'completed', 'failed', 'rejected', 'withdrawn', 'all']; %>
+  <% filters.forEach(function(f) { %>
+    <a href="/ui/queue?filter=<%= f %>" class="filter-link <%= filter === f ? 'active' : '' %>"><%= f %><%= counts[f] > 0 ? ' (' + counts[f] + ')' : '' %></a>
+  <% }); %>
+  <div class="clear-section">
+    <% if (filter === 'completed' && counts.completed > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('completed')">Clear Completed</button>
+    <% } %>
+    <% if (filter === 'failed' && counts.failed > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('failed')">Clear Failed</button>
+    <% } %>
+    <% if (filter === 'rejected' && counts.rejected > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('rejected')">Clear Rejected</button>
+    <% } %>
+    <% if (filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0)) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('all')">Clear All Non-Pending</button>
+    <% } %>
+    <a href="/ui/queue/export?format=json" class="btn-sm no-underline">Export JSON</a>
+    <a href="/ui/queue/export?format=csv" class="btn-sm no-underline">Export CSV</a>
+  </div>
+</div>
+
+<div id="entries-container">
+<% if (entries.length === 0) { %>
+  <div class="card empty-state">
+    <p>No <%= filter === 'all' ? '' : filter + ' ' %>requests in queue</p>
+  </div>
+<% } else { %>
+  <% entries.forEach(function(entry) { %>
+    <%
+      var requestsSummary = entry.requests.map(function(r) {
+        return '<div class="request-item"><code>' + r.method + '</code> <span>' + escapeHtml(r.path) + '</span></div>';
+      }).join('');
+
+      var warnings = getQueueWarnings(entry.id);
+      var warningCount = warnings.length;
+      var warningBadge = warningCount > 0
+        ? '<span class="warning-badge" title="' + warningCount + ' warning' + (warningCount > 1 ? 's' : '') + '">⚠️ ' + warningCount + '</span>'
+        : '';
+    %>
+    <div class="card queue-entry" id="entry-<%= entry.id %>" data-status="<%= entry.status %>" data-notified="<%= entry.notified ? '1' : '0' %>">
+      <div class="flex-between mb-12" style="align-items: flex-start;">
+        <div class="entry-header">
+          <strong><%= entry.service %></strong> / <%= entry.account_name %>
+          <span class="status-badge"><%- statusBadge(entry.status) %><%- autoApprovedBadge(entry.auto_approved) %></span>
+          <%- warningBadge %>
+        </div>
+        <div class="flex-center gap-12">
+          <span class="help m-0"><%= formatDate(entry.submitted_at) %></span>
+          <button type="button" class="delete-btn" onclick="deleteEntry('<%= entry.id %>')" title="Delete">&times;</button>
+        </div>
+      </div>
+
+      <% if (entry.comment) { %>
+        <p class="agent-comment"><strong>Agent says:</strong> <%- renderMarkdownLinks(entry.comment) %></p>
+      <% } %>
+
+      <div class="help mb-8">Submitted by: <span class="agent-with-avatar"><%- renderAvatar(entry.submitted_by, { size: 20 }) %><code><%= entry.submitted_by || 'unknown' %></code></span></div>
+
+      <div class="requests-list">
+        <%- requestsSummary %>
+      </div>
+
+      <details class="mt-12">
+        <summary>Request Details</summary>
+        <pre class="meta-line"><%- escapeHtml(JSON.stringify(entry.requests, null, 2)) %></pre>
+      </details>
+
+      <% if (entry.results) { %>
+        <details class="mt-12">
+          <summary>Results (<%= entry.results.length %>)</summary>
+          <pre class="meta-line"><%- escapeHtml(JSON.stringify(entry.results, null, 2)) %></pre>
+        </details>
+      <% } %>
+
+      <% if (entry.rejection_reason) { %>
+        <div class="rejection-reason">
+          <strong>Rejection reason:</strong> <%- escapeHtml(entry.rejection_reason) %>
+        </div>
+      <% } %>
+
+      <% if (warningCount > 0) { %>
+        <div class="warnings-section">
+          <div class="warnings-header">⚠️ Warnings (<%= warningCount %>)</div>
+          <% warnings.forEach(function(w) { %>
+            <div class="warning-item">
+              <div class="warning-header">
+                <%- renderAvatar(w.agent_id, { size: 18 }) %>
+                <strong><%= w.agent_id %></strong>
+                <span class="warning-time"><%= formatDate(w.created_at) %></span>
+              </div>
+              <div class="warning-message"><%= w.message %></div>
+            </div>
+          <% }); %>
+        </div>
+      <% } %>
+
+      <% if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) { %>
+        <div class="notification-status" id="notify-status-<%= entry.id %>">
+          <% if (entry.notified) { %>
+            <span class="notify-status notify-sent" title="Notified at <%= entry.notified_at || '' %>">✓ Notified</span>
+          <% } else if (entry.notify_error) { %>
+            <span class="notify-status notify-failed" title="<%- escapeHtml(entry.notify_error) %>">⚠ Notify failed</span>
+            <button type="button" class="btn-sm btn-link" onclick="retryNotify('<%= entry.id %>')" id="retry-<%= entry.id %>">Retry</button>
+          <% } else { %>
+            <span class="notify-status notify-pending">— Not notified</span>
+            <button type="button" class="btn-sm btn-link" onclick="retryNotify('<%= entry.id %>')" id="retry-<%= entry.id %>">Retry</button>
+          <% } %>
+        </div>
+      <% } %>
+
+      <% if (entry.status === 'pending') { %>
+        <div class="queue-actions" id="actions-<%= entry.id %>">
+          <div class="action-row">
+            <button type="button" class="btn-primary btn-sm" onclick="approveEntry('<%= entry.id %>')">Approve</button>
+          </div>
+          <div class="action-row">
+            <input type="text" id="reason-<%= entry.id %>" placeholder="Rejection reason (optional)" class="reject-input" autocomplete="off">
+            <button type="button" class="btn-danger btn-sm" onclick="rejectEntry('<%= entry.id %>')">Reject</button>
+          </div>
+        </div>
+      <% } %>
+
+      <% if (entry.status !== 'pending') { %>
+        <div class="emoji-section" id="emoji-section-<%= entry.id %>">
+          <% if (entry.reaction_emoji) { %>
+            <span class="reaction-emoji-display" data-id="<%= entry.id %>" title="Click to change"><%- escapeHtml(entry.reaction_emoji) %></span>
+            <div class="emoji-picker-popup d-none" id="emoji-popup-<%= entry.id %>">
+              <% allEmojis.forEach(function(e) { %>
+                <button type="button" class="emoji-btn" data-id="<%= entry.id %>" data-emoji="<%= e %>"><%= e %></button>
+              <% }); %>
+              <button type="button" class="emoji-btn emoji-remove" data-id="<%= entry.id %>" data-emoji="" title="Remove">✕</button>
+            </div>
+          <% } else { %>
+            <button type="button" class="emoji-trigger" data-id="<%= entry.id %>" title="Add reaction"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+            <div class="emoji-picker-popup d-none" id="emoji-popup-<%= entry.id %>">
+              <% allEmojis.forEach(function(e) { %>
+                <button type="button" class="emoji-btn" data-id="<%= entry.id %>" data-emoji="<%= e %>"><%= e %></button>
+              <% }); %>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+
+      <div class="queue-entry-footer">
+        <span class="entry-id">ID: <%= entry.id %></span>
+      </div>
+    </div>
+  <% }); %>
+<% } %>
+</div>
+
+<script>
+  function escapeHtml(str) {
+    if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function updateEntryStatus(id, entry) {
+    const entryEl = document.getElementById('entry-' + id);
+    if (!entryEl) return;
+
+    const statusBadgeEl = entryEl.querySelector('.status-badge .status');
+    if (statusBadgeEl) {
+      statusBadgeEl.textContent = entry.status;
+      statusBadgeEl.className = 'status ' + entry.status;
+    }
+    entryEl.dataset.status = entry.status;
+
+    if (entry.status !== 'pending') {
+      const actionsEl = entryEl.querySelector('.queue-actions');
+      if (actionsEl) actionsEl.remove();
+
+      if (!entryEl.querySelector('.emoji-section')) {
+        const emojiDiv = document.createElement('div');
+        emojiDiv.className = 'emoji-section';
+        emojiDiv.id = 'emoji-section-' + entry.id;
+        if (entry.reaction_emoji) {
+          emojiDiv.innerHTML = '<span class="reaction-emoji-display" data-id="'+entry.id+'" title="Click to change">'+entry.reaction_emoji+'</span>' + emojiPickerHtml(entry.id, true);
+        } else {
+          emojiDiv.innerHTML = '<button type="button" class="emoji-trigger" data-id="'+entry.id+'" title="Add reaction">😀</button>' + emojiPickerHtml(entry.id, false);
+        }
+        const footer = entryEl.querySelector('.queue-entry-footer');
+        if (footer) footer.parentNode.insertBefore(emojiDiv, footer);
+        else entryEl.appendChild(emojiDiv);
+      }
+    }
+
+    let insertTarget = entryEl.querySelector('.notification-status') || entryEl.querySelector('.queue-entry-footer');
+    if (entry.results && entry.results.length) {
+      const details = document.createElement('details');
+      details.style.marginTop = '12px';
+      details.innerHTML = '<summary>Results (' + entry.results.length + ')</summary>' +
+        '<pre class="meta-line">' + escapeHtml(JSON.stringify(entry.results, null, 2)) + '</pre>';
+      if (insertTarget) insertTarget.parentNode.insertBefore(details, insertTarget);
+      else entryEl.appendChild(details);
+    }
+
+    if (entry.rejection_reason) {
+      const div = document.createElement('div');
+      div.className = 'rejection-reason';
+      div.innerHTML = '<strong>Rejection reason:</strong> ' + escapeHtml(entry.rejection_reason);
+      if (insertTarget) insertTarget.parentNode.insertBefore(div, insertTarget);
+      else entryEl.appendChild(div);
+    }
+
+    if (['completed', 'failed', 'rejected', 'withdrawn'].includes(entry.status)) {
+      let notifyEl = document.getElementById('notify-status-' + id);
+      if (!notifyEl) {
+        notifyEl = document.createElement('div');
+        notifyEl.className = 'notification-status';
+        notifyEl.id = 'notify-status-' + id;
+        const notifyStatus = entry.notified
+          ? '<span class="notify-status notify-sent">✓ Notified</span>'
+          : '<span class="notify-status notify-pending">— Not notified</span> <button type="button" class="btn-sm btn-link" onclick="retryNotify(' + "'" + id + "'" + ')" id="retry-' + id + '">Retry</button>';
+        notifyEl.innerHTML = notifyStatus;
+        const footer = entryEl.querySelector('.queue-entry-footer');
+        if (footer) footer.parentNode.insertBefore(notifyEl, footer);
+        else entryEl.appendChild(notifyEl);
+      }
+    }
+
+    entryEl.classList.add('queue-entry-flash');
+    setTimeout(() => { entryEl.classList.remove('queue-entry-flash'); }, 1500);
+  }
+
+  function updateFilterCounts(counts) {
+    if (!counts) return;
+    const filterBar = document.getElementById('filter-bar');
+    if (!filterBar) return;
+    filterBar.querySelectorAll('.filter-link').forEach(a => {
+      const href = a.getAttribute('href') || '';
+      const match = href.match(/filter=([^&]*)/);
+      const f = match ? match[1] : 'pending';
+      if (counts[f] !== undefined) {
+        const text = f + (counts[f] > 0 ? ' (' + counts[f] + ')' : '');
+        a.textContent = text;
+      }
+    });
+  }
+
+  async function approveEntry(id, emoji) {
+    const btn = event.target;
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Approving...';
+    try {
+      const res = await fetch('/ui/queue/' + id + '/approve', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji: emoji || null })
+      });
+      const data = await res.json();
+      if (data.success) {
+        updateEntryStatus(id, data.entry);
+        updateFilterCounts(data.counts);
+      } else {
+        alert(data.error || 'Failed to approve');
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+
+  async function rejectEntry(id, emoji) {
+    const btn = event.target;
+    const reasonInput = document.getElementById('reason-' + id);
+    const reason = reasonInput ? reasonInput.value : '';
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Rejecting...';
+    try {
+      const res = await fetch('/ui/queue/' + id + '/reject', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, emoji: emoji || null })
+      });
+      const data = await res.json();
+      if (data.success) {
+        updateEntryStatus(id, data.entry);
+        updateFilterCounts(data.counts);
+      } else {
+        alert(data.error || 'Failed to reject');
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+
+  async function clearByStatus(status) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Clearing...';
+    try {
+      const res = await fetch('/ui/queue/clear', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (data.success) {
+        const entries = document.querySelectorAll('.queue-entry');
+        const targetStatuses = status === 'all'
+          ? ['completed', 'failed', 'rejected', 'withdrawn']
+          : [status];
+        entries.forEach(el => {
+          if (targetStatuses.includes(el.dataset.status)) {
+            el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            el.style.opacity = '0';
+            el.style.transform = 'translateX(20px)';
+            setTimeout(() => el.remove(), 300);
+          }
+        });
+        setTimeout(() => {
+          const container = document.getElementById('entries-container');
+          if (container && container.querySelectorAll('.queue-entry').length === 0) {
+            container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
+          }
+        }, 350);
+        updateFilterCounts(data.counts);
+        btn.remove();
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+
+  async function deleteEntry(id) {
+    if (!confirm('Delete this queue entry?')) return;
+    try {
+      const res = await fetch('/ui/queue/' + id, { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('entry-' + id)?.remove();
+        const container = document.getElementById('entries-container');
+        if (container.querySelectorAll('.queue-entry').length === 0) {
+          container.innerHTML = '<div class="card empty-state"><p>No requests in queue</p></div>';
+        }
+      } else {
+        alert(data.error || 'Failed to delete');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  function toggleEmojiPicker(id) {
+    document.querySelectorAll('.emoji-picker-popup').forEach(p => {
+      if (p.id !== 'emoji-popup-' + id) p.style.display = 'none';
+    });
+    const popup = document.getElementById('emoji-popup-' + id);
+    if (popup) popup.style.display = popup.style.display === 'none' ? 'flex' : 'none';
+  }
+
+  var EMOJI_LIST = <%- JSON.stringify(allEmojis) %>;
+
+  function emojiPickerHtml(id, includeRemove) {
+    var btns = EMOJI_LIST.map(function(e) {
+      return '<button type="button" class="emoji-btn" data-id="'+id+'" data-emoji="'+e+'">'+e+'</button>';
+    }).join('');
+    if (includeRemove) btns += '<button type="button" class="emoji-btn emoji-remove" data-id="'+id+'" data-emoji="" title="Remove">✕</button>';
+    return '<div class="emoji-picker-popup d-none" id="emoji-popup-'+id+'">'+btns+'</div>';
+  }
+
+  async function setReaction(id, emoji) {
+    var popup = document.getElementById('emoji-popup-' + id);
+    if (popup) popup.style.display = 'none';
+    try {
+      var res = await fetch('/ui/queue/' + id + '/react', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emoji: emoji || null })
+      });
+      var data = await res.json();
+      if (data.success) {
+        var section = document.getElementById('emoji-section-' + id);
+        if (!section) return;
+        if (data.emoji) {
+          section.innerHTML = '<span class="reaction-emoji-display" data-id="'+id+'">'+data.emoji+'</span>' + emojiPickerHtml(id, true);
+        } else {
+          section.innerHTML = '<button type="button" class="emoji-trigger" data-id="'+id+'">😀</button>' + emojiPickerHtml(id, false);
+        }
+      }
+    } catch (err) {
+      console.error('Error setting reaction:', err);
+    }
+  }
+
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (target.closest('.emoji-picker-popup .emoji-btn')) {
+      var btn = target.closest('.emoji-btn');
+      setReaction(btn.dataset.id, btn.dataset.emoji);
+      return;
+    }
+    if (target.closest('.emoji-trigger, .reaction-emoji-display')) {
+      var el = target.closest('.emoji-trigger, .reaction-emoji-display');
+      toggleEmojiPicker(el.dataset.id);
+      return;
+    }
+    if (!target.closest('.emoji-section')) {
+      document.querySelectorAll('.emoji-picker-popup').forEach(function(p) { p.style.display = 'none'; });
+    }
+  });
+
+  async function retryNotify(id) {
+    const btn = document.getElementById('retry-' + id);
+    const statusContainer = document.getElementById('notify-status-' + id);
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
+    try {
+      const res = await fetch('/ui/queue/' + id + '/notify', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        if (statusContainer) {
+          statusContainer.innerHTML = '<span class="notify-status notify-sent">✓ Notified</span>';
+        }
+      } else {
+        if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+        const errorMsg = data.error || 'Unknown error';
+        alert('Notification failed: ' + errorMsg);
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      if (btn) { btn.disabled = false; btn.textContent = 'Retry'; }
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const socket = io();
+
+    socket.on('queueItemUpdate', function(data) {
+      const entryEl = document.getElementById('entry-' + data.id);
+      if (!entryEl) return;
+
+      if (data.type === 'warning_added') {
+        const headerEl = entryEl.querySelector('.entry-header');
+        if (headerEl) {
+          let badgeEl = headerEl.querySelector('.warning-badge');
+          if (badgeEl) {
+            badgeEl.textContent = '⚠️ ' + data.warningCount;
+            badgeEl.title = data.warningCount + ' warning' + (data.warningCount > 1 ? 's' : '');
+          } else {
+            const badge = document.createElement('span');
+            badge.className = 'warning-badge';
+            badge.textContent = '⚠️ ' + data.warningCount;
+            badge.title = data.warningCount + ' warning' + (data.warningCount > 1 ? 's' : '');
+            headerEl.appendChild(badge);
+          }
+        }
+
+        let warningsSection = entryEl.querySelector('.warnings-section');
+        if (!warningsSection) {
+          warningsSection = document.createElement('div');
+          warningsSection.className = 'warnings-section';
+          const actionsEl = entryEl.querySelector('.queue-actions');
+          if (actionsEl) {
+            actionsEl.parentNode.insertBefore(warningsSection, actionsEl);
+          } else {
+            entryEl.appendChild(warningsSection);
+          }
+        }
+
+        const warningItems = data.warnings.map(w =>
+          '<div class="warning-item">' +
+            '<div class="warning-header">' +
+              '<strong>' + escapeHtml(w.agent_id) + '</strong>' +
+              '<span class="warning-time">' + new Date(w.created_at).toLocaleString() + '</span>' +
+            '</div>' +
+            '<div class="warning-message">' + escapeHtml(w.message) + '</div>' +
+          '</div>'
+        ).join('');
+
+        warningsSection.innerHTML =
+          '<div class="warnings-header">⚠️ Warnings (' + data.warningCount + ')</div>' +
+          warningItems;
+      }
+
+      if (data.type === 'status_changed') {
+        const statusBadge = entryEl.querySelector('.status-badge .status');
+        if (statusBadge) {
+          statusBadge.textContent = data.status;
+          statusBadge.className = 'status ' + data.status;
+        }
+        entryEl.dataset.status = data.status;
+
+        if (data.status !== 'pending') {
+          const actionsEl = entryEl.querySelector('.queue-actions');
+          if (actionsEl) actionsEl.remove();
+        }
+      }
+    });
+  });
+</script>
