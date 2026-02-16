@@ -17,11 +17,11 @@ html {
   --bg: #0a0a0a;
   --bg-surface: #141414;
   --bg-input: #111111;
-  --bg-deep: #111827;
+  --bg-deep: #0a0a0a;
   --bg-darker: #0d0d0d;
-  --bg-elevated: #1f2937;
+  --bg-elevated: #1a1a1a;
   --border-default: #252525;
-  --border-strong: #374151;
+  --border-strong: #333333;
   --border-muted: #4b5563;
   --text-primary: #e5e7eb;
   --text-secondary: #d1d5db;
@@ -57,7 +57,7 @@ html {
   --info-light: #60a5fa;
   --cyan: #22d3ee;
   --cyan-light: #67e8f9;
-  --indigo-light: #c7d2fe;
+  --primary-light-text: #a7f3d0;
   
   /* Spacing / shapes */
   --radius: 16px;
@@ -1352,7 +1352,7 @@ body > p:first-of-type {
 
   /* Service access list */
   .service-access-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .service-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 13px; color: var(--indigo-light); text-decoration: none; transition: background 0.2s, border-color 0.2s; }
+  .service-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 20px; font-size: 13px; color: var(--primary-light-text); text-decoration: none; transition: background 0.2s, border-color 0.2s; }
   .service-chip:hover { background: rgba(16,185,129,0.25); border-color: rgba(16,185,129,0.5); }
   .service-chip img { width: 16px; height: 16px; }
   .service-chip .bypass-badge { font-size: 10px; background: var(--primary-darkest); color: var(--primary-lighter); padding: 2px 6px; border-radius: 8px; margin-left: 4px; }
