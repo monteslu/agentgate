@@ -74,12 +74,20 @@ router.post('/messaging/mode', (req, res) => {
 router.post('/queue/settings/shared-visibility', (req, res) => {
   const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
   setSharedQueueVisibility(enabled);
+  const wantsJson = req.headers.accept?.includes('application/json');
+  if (wantsJson) {
+    return res.json({ ok: true, enabled });
+  }
   res.redirect('/ui');
 });
 
 router.post('/queue/settings/agent-withdraw', (req, res) => {
   const enabled = req.body.enabled === 'true' || req.body.enabled === '1';
   setAgentWithdrawEnabled(enabled);
+  const wantsJson = req.headers.accept?.includes('application/json');
+  if (wantsJson) {
+    return res.json({ ok: true, enabled });
+  }
   res.redirect('/ui');
 });
 
