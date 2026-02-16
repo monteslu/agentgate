@@ -1,0 +1,32 @@
+<div class="card message-entry" id="message-<%= msg.id %>" data-status="<%= msg.status %>">
+  <div class="flex-between mb-12" style="align-items: flex-start;">
+    <div class="entry-header">
+      <span class="agent-with-avatar"><%- renderAvatar(msg.from_agent, { size: 24 }) %><strong><%= msg.from_agent %></strong></span>
+      →
+      <span class="agent-with-avatar"><%- renderAvatar(msg.to_agent, { size: 24 }) %><strong><%= msg.to_agent %></strong></span>
+      <span class="status-badge"><%- statusBadge(msg.status) %></span>
+    </div>
+    <div class="flex-center gap-12">
+      <span class="help m-0"><%- formatDate(msg.created_at) %></span>
+      <button type="button" class="delete-btn" onclick="deleteMessage('<%= msg.id %>')" title="Delete">&times;</button>
+    </div>
+  </div>
+
+  <div class="message-content">
+    <pre class="bubble-content"><%= msg.message %></pre>
+  </div>
+
+  <% if (msg.rejection_reason) { %>
+    <div class="rejection-reason">
+      <strong>Rejection reason:</strong> <%= msg.rejection_reason %>
+    </div>
+  <% } %>
+
+  <% if (msg.status === 'pending') { %>
+    <div class="message-actions">
+      <button type="button" class="btn-primary btn-sm" onclick="approveMessage('<%= msg.id %>')">Approve</button>
+      <input type="text" id="reason-<%= msg.id %>" placeholder="Rejection reason (optional)" class="reject-input w-200" autocomplete="off">
+      <button type="button" class="btn-danger btn-sm" onclick="rejectMessage('<%= msg.id %>')">Reject</button>
+    </div>
+  <% } %>
+</div>
