@@ -495,35 +495,40 @@ router.get('/:id/sessions', async (req, res) => {
     return res.status(404).json({ error: 'Agent not found' });
   }
 
-  const { getActiveSessionsInfo } = await import('../mcp.js');
-  const activeSessionsList = getActiveSessionsInfo().filter(
-    s => s.agentName.toLowerCase() === agent.name.toLowerCase()
-  );
-  const dbSessions = listMcpSessions(agent.name);
+  try {
+    const { getActiveSessionsInfo } = await import('../mcp.js');
+    const activeSessionsList = getActiveSessionsInfo().filter(
+      s => s.agentName.toLowerCase() === agent.name.toLowerCase()
+    );
+    const dbSessions = listMcpSessions(agent.name);
 
-  // Merge: use active session info where available, fall back to DB
-  const sessionMap = new Map();
-  for (const dbS of dbSessions) {
-    sessionMap.set(dbS.session_id, {
-      sessionId: dbS.session_id,
-      agentName: dbS.agent_name,
-      createdAt: dbS.created_at,
-      lastSeen: dbS.last_seen_at,
-      active: false
-    });
-  }
-  for (const activeS of activeSessionsList) {
-    const existing = sessionMap.get(activeS.sessionId) || {};
-    sessionMap.set(activeS.sessionId, {
-      sessionId: activeS.sessionId,
-      agentName: activeS.agentName,
-      createdAt: activeS.createdAt || existing.createdAt || null,
-      lastSeen: activeS.lastSeen,
-      active: true
-    });
-  }
+    // Merge: use active session info where available, fall back to DB
+    const sessionMap = new Map();
+    for (const dbS of dbSessions) {
+      sessionMap.set(dbS.session_id, {
+        sessionId: dbS.session_id,
+        agentName: dbS.agent_name,
+        createdAt: dbS.created_at,
+        lastSeen: dbS.last_seen_at,
+        active: false
+      });
+    }
+    for (const activeS of activeSessionsList) {
+      const existing = sessionMap.get(activeS.sessionId) || {};
+      sessionMap.set(activeS.sessionId, {
+        sessionId: activeS.sessionId,
+        agentName: activeS.agentName,
+        createdAt: activeS.createdAt || existing.createdAt || null,
+        lastSeen: activeS.lastSeen,
+        active: true
+      });
+    }
 
-  res.json({ sessions: Array.from(sessionMap.values()) });
+    res.json({ sessions: Array.from(sessionMap.values()) });
+  } catch (err) {
+    console.error('Error loading sessions for agent', agent.name, err);
+    res.status(500).json({ error: 'Failed to load sessions', sessions: [] });
+  }
 });
 
 router.post('/:id/sessions/:sessionId/kill', async (req, res) => {
