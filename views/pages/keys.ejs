@@ -1,0 +1,106 @@
+<% if (error) { %>
+  <div class="error-message"><%- escapeHtml(error) %></div>
+<% } %>
+
+<% if (newKey) { %>
+  <div class="new-key-banner">
+    <strong>New API key created!</strong> Copy it now - you won't be able to see it again.
+    <code><%= newKey.key %></code>
+    <button type="button" class="btn-sm btn-primary" onclick="copyKey('<%= newKey.key %>', this)">Copy to Clipboard</button>
+  </div>
+<% } %>
+
+<form method="POST" action="/ui/keys/create" class="add-agent-box">
+  <label>New Agent</label>
+  <input type="text" name="name" placeholder="e.g., johnny-5, clawdbot, Her, Hal" required autocomplete="off">
+  <button type="submit" class="btn-primary">Create</button>
+</form>
+
+<div class="card">
+  <h3>Agents (<%= keys.length %>)</h3>
+  <% if (keys.length === 0) { %>
+    <p class="text-dim-center p-20">No agents yet. Create one above.</p>
+  <% } else { %>
+    <table class="agents-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Created</th>
+          <th>Enabled</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% keys.forEach(function(k) { %>
+          <tr id="key-<%= k.id %>" class="<%= k.enabled === 0 ? 'agent-disabled' : '' %>">
+            <td>
+              <div class="agent-with-avatar">
+                <%- renderAvatar(k.name, { size: 32 }) %>
+                <strong><%= k.name %></strong>
+                <span class="status-disabled<%= k.enabled === 0 ? '' : ' d-none' %>">Disabled</span>
+              </div>
+            </td>
+            <td><%= formatDate(k.created_at) %></td>
+            <td class="whitespace-nowrap">
+              <label class="toggle">
+                <input type="checkbox" <%= k.enabled ? 'checked' : '' %> onchange="toggleEnabled('<%= k.id %>', this)" autocomplete="off">
+                <span class="toggle-slider"></span>
+              </label>
+            </td>
+            <td>
+              <a href="/ui/keys/<%= k.id %>" class="btn-sm">Details</a>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+  function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast ' + type + ' show';
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function copyKey(key, btn) {
+    navigator.clipboard.writeText(key).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    });
+  }
+
+  async function toggleEnabled(id, checkbox) {
+    checkbox.disabled = true;
+    try {
+      const res = await fetch('/ui/keys/' + id + '/toggle-enabled', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        const row = document.getElementById('key-' + id);
+        const badge = row.querySelector('.status-disabled');
+        if (data.enabled) {
+          row.classList.remove('agent-disabled');
+          badge.style.display = 'none';
+        } else {
+          row.classList.add('agent-disabled');
+          badge.style.display = '';
+        }
+      } else {
+        checkbox.checked = !checkbox.checked;
+        showToast(data.error || 'Failed to toggle', 'error');
+      }
+    } catch (err) {
+      checkbox.checked = !checkbox.checked;
+      showToast('Network error', 'error');
+    }
+    checkbox.disabled = false;
+  }
+</script>
