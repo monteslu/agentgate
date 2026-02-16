@@ -59,7 +59,7 @@ router.get('/', (req, res) => {
         <div class="stat-label">Last 24h</div>
       </div>
       <div class="ml-auto">
-        <a href="/ui/mementos/export${agent || keyword ? `?agent=${encodeURIComponent(agent || '')}&keyword=${encodeURIComponent(keyword || '')}` : ''}" class="btn btn-secondary" class="inline-flex-center">
+        <a href="/ui/mementos/export${agent || keyword ? `?agent=${encodeURIComponent(agent || '')}&keyword=${encodeURIComponent(keyword || '')}` : ''}" class="btn btn-secondary inline-flex-center">
           📥 Export JSON
         </a>
       </div>
@@ -110,7 +110,7 @@ router.get('/', (req, res) => {
                 <td>
                   <div class="flex flex-wrap gap-4">
                     ${m.keywords.slice(0, 5).map(k => `<span class="tag">${escapeHtml(k)}</span>`).join('')}
-                    ${m.keywords.length > 5 ? `<span class="tag" class="opacity-60">+${m.keywords.length - 5}</span>` : ''}
+                    ${m.keywords.length > 5 ? `<span class="tag opacity-60">+${m.keywords.length - 5}</span>` : ''}
                   </div>
                 </td>
                 <td class="detail-mono">
@@ -118,8 +118,8 @@ router.get('/', (req, res) => {
                 </td>
                 <td class="text-xs">${formatDate(m.created_at)}</td>
                 <td class="whitespace-nowrap">
-                  <a href="/ui/mementos/${m.id}" class="btn btn-secondary" class="btn-xs">View</a>
-                  <button onclick="deleteMemento(${m.id})" class="btn btn-danger" class="btn-xs ml-4">×</button>
+                  <a href="/ui/mementos/${m.id}" class="btn btn-secondary btn-xs">View</a>
+                  <button onclick="deleteMemento(${m.id})" class="btn btn-danger btn-xs ml-4">×</button>
                 </td>
               </tr>
             `).join('')}
@@ -239,7 +239,7 @@ router.get('/:id', (req, res) => {
       <button onclick="deleteMemento(${memento.id})" class="btn btn-danger">Delete</button>
     </div>
 
-    <div class="card" class="mb-16">
+    <div class="card mb-16">
       <div class="stats-grid">
         <div>
           <div class="label-dim">Agent</div>
@@ -270,7 +270,7 @@ router.get('/:id', (req, res) => {
         <div class="label-dim-8">Keywords</div>
         <div class="flex flex-wrap gap-6">
           ${memento.keywords.map(k => `
-            <a href="/ui/mementos?keyword=${encodeURIComponent(k)}" class="tag" class="no-underline">${escapeHtml(k)}</a>
+            <a href="/ui/mementos?keyword=${encodeURIComponent(k)}" class="tag no-underline">${escapeHtml(k)}</a>
           `).join('')}
         </div>
       </div>
