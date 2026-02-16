@@ -74,7 +74,7 @@ function renderServicesStyles() {
       padding: 6px 14px;
       font-size: 0.85em;
       background: rgba(99,102,241,0.2);
-      color: #a5b4fc;
+      color: #6ee7b7;
       border: 1px solid rgba(99,102,241,0.4);
       border-radius: 5px;
       text-decoration: none;
