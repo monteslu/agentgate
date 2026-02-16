@@ -668,7 +668,7 @@ export function listApiKeys() {
 
 export function getApiKeyByName(name) {
   // Case-insensitive lookup
-  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
+  return db.prepare('SELECT id, name, key_prefix, webhook_url, webhook_token, enabled, gateway_proxy_enabled, gateway_proxy_id, gateway_proxy_url, bio, raw_results, created_at, channel_enabled, channel_id FROM api_keys WHERE LOWER(name) = LOWER(?)').get(name);
 }
 
 export function getApiKeyById(id) {
