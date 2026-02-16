@@ -832,8 +832,8 @@ function renderChatPopout(agent, adminToken) {
   <title>Chat - ${agentName}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg, #111827); color: var(--text-primary, #f3f4f6); height: 100vh; display: flex; flex-direction: column; }
-    .header { padding: 12px 16px; background: var(--bg-surface, #1f2937); border-bottom: 1px solid var(--border-default, #374151); display: flex; align-items: center; gap: 12px; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg, #0a0a0a); color: var(--text-primary, #e5e5e5); height: 100vh; display: flex; flex-direction: column; }
+    .header { padding: 12px 16px; background: var(--bg-surface, #1a1a1a); border-bottom: 1px solid var(--border-default, #333333); display: flex; align-items: center; gap: 12px; }
     .header h1 { font-size: 16px; font-weight: 600; }
     .status { font-size: 12px; color: var(--text-dim, #6b7280); }
     .status.connected { color: var(--primary-light, #34d399); }
@@ -841,8 +841,8 @@ function renderChatPopout(agent, adminToken) {
     .status.error { color: var(--danger, #ef4444); }
     #messages { flex: 1; overflow-y: auto; padding: 16px; font-family: monospace; font-size: 13px; }
     .message { margin-bottom: 12px; }
-    .input-area { padding: 12px 16px; background: var(--bg-surface, #1f2937); border-top: 1px solid var(--border-default, #374151); display: flex; gap: 8px; }
-    .input-area input { flex: 1; padding: 10px 14px; background: var(--bg-input, #374151); border: 1px solid var(--border-input, #4b5563); border-radius: 6px; color: var(--text-primary, #f3f4f6); font-size: 14px; outline: none; }
+    .input-area { padding: 12px 16px; background: var(--bg-surface, #1a1a1a); border-top: 1px solid var(--border-default, #333333); display: flex; gap: 8px; }
+    .input-area input { flex: 1; padding: 10px 14px; background: var(--bg-input, #252525); border: 1px solid var(--border-input, #333333); border-radius: 6px; color: var(--text-primary, #e5e5e5); font-size: 14px; outline: none; }
     .input-area input:focus { border-color: #60a5fa; }
     .input-area button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; font-weight: 500; cursor: pointer; }
     .input-area button:hover { background: #2563eb; }
@@ -851,12 +851,12 @@ function renderChatPopout(agent, adminToken) {
     .streaming::after { content: '▊'; animation: blink 1s infinite; }
     @keyframes blink { 50% { opacity: 0; } }
     /* Markdown styles */
-    #messages pre { background: var(--bg-surface, #1f2937); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+    #messages pre { background: var(--bg-surface, #1a1a1a); padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
     #messages code { background: #374151; padding: 2px 6px; border-radius: 3px; font-size: 12px; }
     #messages pre code { background: none; padding: 0; }
     #messages table { border-collapse: collapse; margin: 8px 0; width: 100%; }
     #messages th, #messages td { border: 1px solid #4b5563; padding: 8px; text-align: left; }
-    #messages th { background: var(--bg-surface, #1f2937); }
+    #messages th { background: var(--bg-surface, #1a1a1a); }
     #messages blockquote { border-left: 3px solid #4b5563; margin: 8px 0; padding-left: 12px; color: #9ca3af; }
     #messages a { color: #60a5fa; }
     #messages ul, #messages ol { margin: 8px 0; padding-left: 24px; }
