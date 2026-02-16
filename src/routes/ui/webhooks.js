@@ -220,7 +220,7 @@ function escapeHtml(str) {
 }
 
 function renderStyles() {
-  return ``;
+  return '';
 }
 
 function renderWebhooksPage(configs, deliveries) {
