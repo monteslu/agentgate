@@ -360,25 +360,25 @@ function renderQueuePage(entries, filter, counts = {}) {
     .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
     .filter-link { padding: 10px 20px; border-radius: 25px; text-decoration: none; background: rgba(255, 255, 255, 0.05); color: var(--gray-400); font-weight: 600; font-size: 13px; border: 1px solid rgba(255, 255, 255, 0.1); transition: all 0.3s ease; }
     .filter-link:hover { background: rgba(255, 255, 255, 0.1); color: var(--gray-200); border-color: rgba(255, 255, 255, 0.2); }
-    .filter-link.active { background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4); }
+    .filter-link.active { background: linear-gradient(135deg, var(--primary) 0%, #10b981 100%); color: white; border-color: transparent; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4); }
     .queue-entry { margin-bottom: 20px; }
     .request-item { padding: 12px 16px; background: rgba(0, 0, 0, 0.2); border-radius: 8px; margin: 6px 0; font-size: 14px; border: 1px solid rgba(255, 255, 255, 0.05); display: flex; align-items: center; gap: 12px; }
-    .request-item code { background: rgba(99, 102, 241, 0.2); padding: 4px 10px; border-radius: 6px; font-weight: 700; color: var(--primary-light); border: 1px solid rgba(99, 102, 241, 0.3); font-size: 12px; }
+    .request-item code { background: rgba(16, 185, 129, 0.2); padding: 4px 10px; border-radius: 6px; font-weight: 700; color: var(--primary-light); border: 1px solid rgba(16, 185, 129, 0.3); font-size: 12px; }
     .request-item span { color: var(--gray-300); }
     .queue-actions { margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.1); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-    .back-link { color: #818cf8; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
+    .back-link { color: #34d399; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
     .back-link:hover { color: #ffffff; }
     .delete-btn { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; font-size: 18px; cursor: pointer; padding: 4px 10px; line-height: 1; font-weight: bold; border-radius: 6px; transition: all 0.2s ease; }
     .delete-btn:hover { background: rgba(239, 68, 68, 0.2); border-color: rgba(239, 68, 68, 0.4); }
     .clear-section { margin-left: auto; display: flex; gap: 10px; }
     .entry-header { display: flex; align-items: center; gap: 12px; }
     .entry-header strong { color: #f3f4f6; font-size: 16px; }
-    .reject-input { width: 240px; padding: 10px 14px; margin: 0; font-size: 13px; background: rgba(15, 15, 25, 0.6); border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
+    .reject-input { width: 240px; padding: 10px 14px; margin: 0; font-size: 13px; background: #111111; border: 2px solid rgba(239, 68, 68, 0.2); border-radius: 8px; color: #f3f4f6; }
     .reject-input:focus { outline: none; border-color: #f87171; box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.15); }
     .reject-input::placeholder { color: #6b7280; }
-    .agent-comment { margin: 0 0 16px 0; padding: 16px; background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 10px; border-left: 4px solid #6366f1; color: #e5e7eb; }
-    .agent-comment strong { color: #818cf8; }
-    .agent-comment a { color: #818cf8; }
+    .agent-comment { margin: 0 0 16px 0; padding: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%); border-radius: 10px; border-left: 4px solid #10b981; color: #e5e7eb; }
+    .agent-comment strong { color: #34d399; }
+    .agent-comment a { color: #34d399; }
     .rejection-reason { margin-top: 16px; padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 10px; border-left: 4px solid #f87171; color: #e5e7eb; }
     .rejection-reason strong { color: #f87171; }
     .empty-state { text-align: center; padding: 60px 40px; }
@@ -388,8 +388,8 @@ function renderQueuePage(entries, filter, counts = {}) {
     .notify-sent { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
     .notify-failed { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
     .notify-pending { background: rgba(156, 163, 175, 0.15); color: #9ca3af; border: 1px solid rgba(156, 163, 175, 0.3); }
-    .btn-link { background: none; border: none; color: #818cf8; cursor: pointer; text-decoration: underline; padding: 4px 8px; font-size: 13px; }
-    .btn-link:hover { color: #a5b4fc; }
+    .btn-link { background: none; border: none; color: #34d399; cursor: pointer; text-decoration: underline; padding: 4px 8px; font-size: 13px; }
+    .btn-link:hover { color: #6ee7b7; }
     .warning-badge { background: rgba(245, 158, 11, 0.2); color: #fbbf24; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.3); }
     .warnings-section { margin-top: 16px; padding: 16px; background: rgba(245, 158, 11, 0.08); border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.2); }
     .warnings-header { color: #fbbf24; font-weight: 600; margin-bottom: 12px; font-size: 14px; }
@@ -516,7 +516,7 @@ function renderQueuePage(entries, filter, counts = {}) {
 
       // Flash effect for visual feedback
       entryEl.style.transition = 'box-shadow 0.3s ease';
-      entryEl.style.boxShadow = '0 0 0 2px rgba(99, 102, 241, 0.6)';
+      entryEl.style.boxShadow = '0 0 0 2px rgba(16, 185, 129, 0.6)';
       setTimeout(() => { entryEl.style.boxShadow = ''; }, 1500);
     }
 
