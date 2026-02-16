@@ -45,7 +45,7 @@ router.get('/', (req, res) => {
           </div>
         </div>
         <div id="provider-test-${p.id}" class="provider-test-result"></div>
-        <div id="provider-edit-${p.id}" class="provider-edit-form" class="d-none">
+        <div id="provider-edit-${p.id}" class="provider-edit-form d-none">
           <div class="form-grid">
             <div class="form-group">
               <label for="edit-name-${p.id}">Name</label>
