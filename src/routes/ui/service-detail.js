@@ -599,11 +599,7 @@ function getServiceFormFields(serviceName) {
       <div class="form-group">
         <label>Client Secret</label>
         <input type="password" name="clientSecret" placeholder="Your client secret" required autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label>Refresh Token</label>
-        <input type="password" name="refreshToken" placeholder="OAuth refresh token" required autocomplete="off">
-        <p class="help">Set up OAuth at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
+        <p class="help">Enable Google Calendar API at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
       </div>`,
 
     youtube: `
