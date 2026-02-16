@@ -522,7 +522,7 @@ function renderAddService(serviceModule) {
   </div>
 
   <div class="card">
-    <form method="POST" action="/ui/${serviceName}/setup">
+    <form method="POST" action="/ui/${serviceRoutePrefix(serviceName)}/setup">
       <div class="form-group">
         <label>Account Name</label>
         <input type="text" name="accountName" placeholder="personal, work, etc." required autocomplete="off">
@@ -543,6 +543,11 @@ function renderAddService(serviceModule) {
   ${localizeScript()}
 </body>
 </html>`;
+}
+
+function serviceRoutePrefix(serviceName) {
+  const prefixes = { google_calendar: 'google' };
+  return prefixes[serviceName] || serviceName;
 }
 
 function getServiceFormFields(serviceName) {
