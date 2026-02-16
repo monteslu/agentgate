@@ -41,7 +41,7 @@ export function renderAvatar(agentName, { size = 32, className = '' } = {}) {
   
   return `<span class="avatar ${className}" style="width: ${size}px; height: ${size}px; background-color: ${color};" data-agent="${safeName}">
     <img src="/ui/keys/avatar/${encodeURIComponent(agentName)}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-    <span class="avatar-initials" class="d-none">${initial}</span>
+    <span class="avatar-initials d-none">${initial}</span>
   </span>`;
 }
 
@@ -62,7 +62,7 @@ export function statusBadge(status) {
 
 export function autoApprovedBadge(autoApproved) {
   if (!autoApproved) return '';
-  return '<span class="status" class="badge-info">auto-approved</span>';
+  return '<span class="status badge-info">auto-approved</span>';
 }
 
 // Format date for display - outputs span with data-utc for client-side localization
@@ -116,15 +116,15 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       </a>
     </div>
     <nav class="main-nav">
-      <a href="/ui/queue" class="nav-btn nav-btn-default" class="relative">
+      <a href="/ui/queue" class="nav-btn nav-btn-default relative">
         Queue
-        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'class="d-none"'}>${pendingQueueCount}</span>
+        <span id="queue-badge" class="badge${pendingQueueCount > 0 ? '' : ' d-none'}">${pendingQueueCount}</span>
       </a>
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui" class="nav-btn nav-btn-default">Services</a>
       <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
         Messages
-        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'class="d-none"'}>${pendingMessagesCount}</span>
+        <span id="messages-badge" class="badge${pendingMessagesCount > 0 ? '' : ' d-none'}">${pendingMessagesCount}</span>
       </a>
     </nav>
     <div class="header-right">
@@ -184,9 +184,9 @@ export function socketScript() {
         if (queueBadge) {
           if (data.queue.pending > 0) {
             queueBadge.textContent = data.queue.pending;
-            queueBadge.style.display = '';
+            queueBadge.classList.remove('d-none');
           } else {
-            queueBadge.style.display = 'none';
+            queueBadge.classList.add('d-none');
           }
         }
 
@@ -195,9 +195,9 @@ export function socketScript() {
         if (msgBadge) {
           if (data.messages.pending > 0) {
             msgBadge.textContent = data.messages.pending;
-            msgBadge.style.display = '';
+            msgBadge.classList.remove('d-none');
           } else {
-            msgBadge.style.display = 'none';
+            msgBadge.classList.add('d-none');
           }
         }
 
