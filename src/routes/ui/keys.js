@@ -540,7 +540,7 @@ function renderKeysPage(keys, error = null, newKey = null) {
         <div class="agent-with-avatar">
           ${renderAvatar(k.name, { size: 32 })}
           <strong>${escapeHtml(k.name)}</strong>
-          <span class="status-disabled" ${k.enabled === 0 ? '' : 'class="d-none"'}>Disabled</span>
+          <span class="status-disabled${k.enabled === 0 ? '' : ' d-none'}">Disabled</span>
         </div>
       </td>
       <td>${formatDate(k.created_at)}</td>
@@ -658,10 +658,10 @@ function renderAgentNotFound(id) {
   return `${htmlHead('Agent Not Found', { includeSocket: true })}
 <body>
   ${navHeader()}
-  <div class="card" class="text-center p-40">
+  <div class="card text-center p-40">
     <h2>Agent Not Found</h2>
     <p class="text-muted">The agent with ID "${escapeHtml(String(id))}" does not exist.</p>
-    <a href="/ui/keys" class="btn-primary" class="inline-block mt-16">Back to Agents</a>
+    <a href="/ui/keys" class="btn-primary inline-block mt-16">Back to Agents</a>
   </div>
   ${socketScript()}
   ${menuScript()}
@@ -906,7 +906,7 @@ function renderChatPopout(agent, adminToken) {
         div.id = messageId;
         div.className = 'message streaming';
         const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-        div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="content" class="text-primary-color"></div>';
+        div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="content text-primary-color"></div>';
         messagesDiv.appendChild(div);
       }
       // Update content with partial markdown (basic escaping during stream)
@@ -1054,7 +1054,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.webhook_url ? `
           <div class="detail-row">
             <span class="label">URL</span>
-            <span class="value" class="text-xs break-all">${escapeHtml(agent.webhook_url)}</span>
+            <span class="value text-xs break-all">${escapeHtml(agent.webhook_url)}</span>
           </div>
           <div class="detail-row">
             <span class="label">Token</span>
@@ -1077,7 +1077,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.gateway_proxy_enabled ? `
           <div class="detail-row">
             <span class="label">Internal URL</span>
-            <span class="value" class="text-xs">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
+            <span class="value text-xs">${escapeHtml(agent.gateway_proxy_url || 'Not set')}</span>
           </div>
           <div class="detail-row">
             <span class="label">HTTP Proxy URL</span>
@@ -1107,7 +1107,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         ${agent.channel_enabled ? `
           <div class="detail-row">
             <span class="label">Channel ID</span>
-            <span class="value" class="text-xs break-all">${escapeHtml(agent.channel_id || '')}</span>
+            <span class="value text-xs break-all">${escapeHtml(agent.channel_id || '')}</span>
           </div>
           <div class="detail-row">
             <span class="label">WebSocket URL</span>
@@ -1122,7 +1122,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
               <code id="channel-key-value"></code>
               <button type="button" class="btn-copy-sm" onclick="copyChannelKey()">Copy</button>
             </div>
-            <p class="help-text" class="text-warning">⚠️ Save this key — it won't be shown again.</p>
+            <p class="help-text text-warning">⚠️ Save this key — it won't be shown again.</p>
           </div>
           <div class="btn-row">
             <button type="button" class="btn-secondary" id="channel-regen-btn">🔑 Regenerate Key</button>
@@ -1281,7 +1281,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
       <p class="description-dim">This will permanently delete <strong>${escapeHtml(agent.name)}</strong> and all associated data.</p>
       <label>Type "<strong>${escapeHtml(agent.name)}</strong>" to confirm:</label>
       <input type="text" id="delete-confirm-input" class="delete-confirm-input" placeholder="Enter agent name" autocomplete="off">
-      <div id="delete-error" class="inline-error" class="d-none"></div>
+      <div id="delete-error" class="inline-error d-none"></div>
       <div class="modal-buttons">
         <button type="button" class="btn-secondary" onclick="closeModal('delete-modal')">Cancel</button>
         <button type="button" class="btn-danger" id="delete-confirm-btn" onclick="confirmDelete()">Delete</button>
@@ -1520,7 +1520,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
         // Show key in a display+copy pattern inline
         const card = document.getElementById('channel-enable-btn').closest('.config-card');
         const keyDiv = document.createElement('div');
-        keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\\'' + data.channel_key + '\\');showToast(\\'Copied!\\',\\'success\\')">Copy</button></div><p class="help-text" class="text-warning">⚠️ Save this key — it won\\'t be shown again. Page will reload in 5s.</p>';
+        keyDiv.innerHTML = '<div class="proxy-url-box"><code>' + data.channel_key + '</code><button type="button" class="btn-copy-sm" onclick="navigator.clipboard.writeText(\\'' + data.channel_key + '\\');showToast(\\'Copied!\\',\\'success\\')">Copy</button></div><p class="help-text text-warning">⚠️ Save this key — it won\\'t be shown again. Page will reload in 5s.</p>';
         card.appendChild(keyDiv);
         setTimeout(() => location.reload(), 5000);
       } else {
@@ -1566,7 +1566,7 @@ function renderAgentDetailPage(agent, counts, serviceAccess = [], adminChatToken
           div.id = messageId;
           div.style.marginBottom = '12px';
           const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-          div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="stream-content" class="text-primary-color"></div><span class="opacity-50">▊</span>';
+          div.innerHTML = '<div class="role-label text-success">Agent <span class="subheading-dim">' + time + '</span></div><div class="stream-content text-primary-color"></div><span class="opacity-50">▊</span>';
           messagesDiv.appendChild(div);
         }
         const contentDiv = div.querySelector('.stream-content');
