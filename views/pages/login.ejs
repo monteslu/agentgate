@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>agentgate - Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+  <link rel="stylesheet" href="/public/style.css">
+  <link rel="stylesheet" href="/public/mobile.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-logo">
+      <img src="/public/favicon.svg" alt="agentgate">
+      <h1>agentgate</h1>
+    </div>
+    <div class="card">
+      <h2 class="mt-0">Login</h2>
+      <% if (locals.error) { %>
+        <div class="error"><%= error %></div>
+      <% } %>
+      <form method="POST" action="/ui/login">
+        <label>Password</label>
+        <input type="password" name="password" required autofocus autocomplete="off">
+        <button type="submit" class="btn-primary w-full">Login</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>
