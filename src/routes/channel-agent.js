@@ -12,8 +12,11 @@
  *   Server: { type: "human_connected", connId }
  *   Server: { type: "human_disconnected", connId }
  *   Server: { type: "message", from: "human", text, id, timestamp, connId }
+ *   Server: { type: "wake", text, id, mode?, connId }       // Wake event from human
+ *   Server: { type: "agent", message, id, connId, ...opts }  // Agent turn from human
  *   
  *   Agent: { type: "message", text, id?, connId? }  // Response to human
+ *   Agent: { type: "ack", id, status, error? }      // Ack for wake/agent
  *   Agent: { type: "chunk", text, id, connId? }     // Streaming
  *   Agent: { type: "done", id, text?, connId? }     // Stream complete
  *   Agent: { type: "typing", connId? }              // Typing indicator
@@ -184,6 +187,18 @@ function handleAgentMessage(channelId, parsed, socket, rateLimit) {
 
   } else if (parsed.type === 'error') {
     const msg = { type: 'error', error: parsed.error, messageId: parsed.messageId };
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
+    }
+
+  } else if (parsed.type === 'ack') {
+    // Acknowledgment for wake/agent messages — forward to the originating human
+    channelLog(channelId, 'agent_ack', `id=${parsed.id} status=${parsed.status}`);
+    const msg = { type: 'ack', id: parsed.id, status: parsed.status };
+    if (parsed.error) msg.error = parsed.error;
+
     if (parsed.connId) {
       bridge.sendToHuman(parsed.connId, msg);
     } else {

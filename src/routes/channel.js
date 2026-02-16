@@ -10,7 +10,10 @@
  *   Client: { type: "auth", key: "<channel-key>" }
  *   Server: { type: "auth", success: true }
  *   Client: { type: "message", text: "hello" }
+ *   Client: { type: "wake", text: "...", id?: "..." }         // Wake the agent
+ *   Client: { type: "agent", message: "...", id?: "..." }     // Trigger agent turn
  *   Server: { type: "message", from: "agent", text: "hi", id: "msg_123", timestamp: "..." }
+ *   Server: { type: "ack", id: "...", status: "dispatched" }  // Wake/agent confirmation
  *   Server: { type: "chunk", text: "partial...", id: "msg_123" }
  *   Server: { type: "done", id: "msg_123" }
  *   Server: { type: "typing" }
@@ -142,6 +145,49 @@ async function handleHumanMessage(channelId, connId, parsed, socket, rateLimit) 
       timestamp,
       connId
     });
+
+  } else if (parsed.type === 'wake') {
+    // Wake event — forward to agent so it can POST to its local hooks
+    if (!parsed.text || typeof parsed.text !== 'string') {
+      sendToSocket(socket, { type: 'error', error: 'Wake requires text field' });
+      return;
+    }
+    const wakeId = parsed.id || `wake_${nanoid(12)}`;
+    channelLog(channelId, 'human_wake', `connId=${connId} id=${wakeId}`);
+
+    bridge.sendToAgent({
+      type: 'wake',
+      text: parsed.text,
+      id: wakeId,
+      mode: parsed.mode || 'now',
+      connId
+    });
+
+  } else if (parsed.type === 'agent') {
+    // Agent turn — forward to agent so it can POST to its local hooks
+    if (!parsed.message || typeof parsed.message !== 'string') {
+      sendToSocket(socket, { type: 'error', error: 'Agent turn requires message field' });
+      return;
+    }
+    const agentId = parsed.id || `agent_${nanoid(12)}`;
+    channelLog(channelId, 'human_agent_turn', `connId=${connId} id=${agentId}`);
+
+    const agentMsg = {
+      type: 'agent',
+      message: parsed.message,
+      id: agentId,
+      connId
+    };
+    // Pass through optional fields
+    if (parsed.name) agentMsg.name = parsed.name;
+    if (parsed.model) agentMsg.model = parsed.model;
+    if (parsed.thinking) agentMsg.thinking = parsed.thinking;
+    if (parsed.timeoutSeconds) agentMsg.timeoutSeconds = parsed.timeoutSeconds;
+    if (parsed.deliver !== undefined) agentMsg.deliver = parsed.deliver;
+    if (parsed.channel) agentMsg.channel = parsed.channel;
+    if (parsed.to) agentMsg.to = parsed.to;
+
+    bridge.sendToAgent(agentMsg);
 
   } else if (parsed.type === 'ping') {
     sendToSocket(socket, { type: 'pong' });

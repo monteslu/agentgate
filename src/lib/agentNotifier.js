@@ -1,10 +1,40 @@
-// Agent notification delivery - sends webhooks to agent gateways
+// Agent notification delivery - sends via channel WS (preferred) or webhooks (fallback)
 import { getApiKeyByName, updateQueueNotification, getQueueWarnings } from './db.js';
+import { getChannelBridge, hasChannelConnections } from '../routes/channel-bridge.js';
 
 // Default per-agent webhook timeout (ms)
 const WEBHOOK_TIMEOUT_MS = parseInt(process.env.AGENTGATE_WEBHOOK_TIMEOUT_MS, 10) || 10000;
 
-// Send a notification to an agent's webhook
+/**
+ * Try to deliver a notification via the agent's channel WebSocket.
+ * Returns { sent: true } if delivered, { sent: false } if no WS connection.
+ */
+function tryChannelDelivery(agent, payload) {
+  if (!agent.channel_enabled || !agent.channel_id) {
+    return { sent: false };
+  }
+
+  if (!hasChannelConnections(agent.channel_id)) {
+    return { sent: false };
+  }
+
+  const bridge = getChannelBridge(agent.channel_id);
+  if (!bridge.hasAgent()) {
+    return { sent: false };
+  }
+
+  // Send as a wake message through the channel WS
+  bridge.sendToAgent({
+    type: 'wake',
+    text: payload.text || JSON.stringify(payload),
+    id: `notify_${Date.now()}`,
+    mode: payload.mode || 'now'
+  });
+
+  return { sent: true };
+}
+
+// Send a notification to an agent — prefer channel WS, fall back to webhook
 export async function notifyAgent(agentName, payload, { timeoutMs = WEBHOOK_TIMEOUT_MS } = {}) {
   const agent = getApiKeyByName(agentName);
 
@@ -12,8 +42,15 @@ export async function notifyAgent(agentName, payload, { timeoutMs = WEBHOOK_TIME
     return { success: false, error: `Agent "${agentName}" not found` };
   }
 
+  // Try channel WebSocket first (faster, no HTTP overhead)
+  const wsResult = tryChannelDelivery(agent, payload);
+  if (wsResult.sent) {
+    return { success: true, via: 'channel' };
+  }
+
+  // Fall back to webhook
   if (!agent.webhook_url) {
-    return { success: false, error: `Agent "${agentName}" has no webhook configured` };
+    return { success: false, error: `Agent "${agentName}" has no webhook configured and no channel WS connected` };
   }
 
   try {
