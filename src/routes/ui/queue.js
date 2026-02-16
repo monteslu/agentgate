@@ -319,14 +319,14 @@ function renderQueuePage(entries, filter, counts = {}) {
             ${warningBadge}
           </div>
           <div class="flex-center gap-12">
-            <span class="help" class="m-0">${formatDate(entry.submitted_at)}</span>
+            <span class="help m-0">${formatDate(entry.submitted_at)}</span>
             <button type="button" class="delete-btn" onclick="deleteEntry('${entry.id}')" title="Delete">&times;</button>
           </div>
         </div>
 
         ${entry.comment ? `<p class="agent-comment"><strong>Agent says:</strong> ${renderMarkdownLinks(entry.comment)}</p>` : ''}
 
-        <div class="help" class="mb-8">Submitted by: <span class="agent-with-avatar">${renderAvatar(entry.submitted_by, { size: 20 })}<code>${escapeHtml(entry.submitted_by || 'unknown')}</code></span></div>
+        <div class="help mb-8">Submitted by: <span class="agent-with-avatar">${renderAvatar(entry.submitted_by, { size: 20 })}<code>${escapeHtml(entry.submitted_by || 'unknown')}</code></span></div>
 
         <div class="requests-list">
           ${requestsSummary}
@@ -369,8 +369,8 @@ function renderQueuePage(entries, filter, counts = {}) {
       ${filter === 'failed' && counts.failed > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'failed\')">Clear Failed</button>' : ''}
       ${filter === 'rejected' && counts.rejected > 0 ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'rejected\')">Clear Rejected</button>' : ''}
       ${filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0) ? '<button type="button" class="btn-sm btn-danger" onclick="clearByStatus(\'all\')">Clear All Non-Pending</button>' : ''}
-      <a href="/ui/queue/export?format=json" class="btn-sm" class="no-underline">Export JSON</a>
-      <a href="/ui/queue/export?format=csv" class="btn-sm" class="no-underline">Export CSV</a>
+      <a href="/ui/queue/export?format=json" class="btn-sm no-underline">Export JSON</a>
+      <a href="/ui/queue/export?format=csv" class="btn-sm no-underline">Export CSV</a>
     </div>
   </div>
 
