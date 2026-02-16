@@ -608,9 +608,13 @@ function getServiceFormFields(serviceName) {
 
     youtube: `
       <div class="form-group">
-        <label>API Key</label>
-        <input type="password" name="apiKey" placeholder="Your YouTube API key" required autocomplete="off">
-        <p class="help">Get an API key from <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
+        <label>Client ID</label>
+        <input type="text" name="clientId" placeholder="xxxxx.apps.googleusercontent.com" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Client Secret</label>
+        <input type="password" name="clientSecret" placeholder="Your client secret" required autocomplete="off">
+        <p class="help">Enable YouTube Data API v3 at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console</a></p>
       </div>`,
 
     linkedin: `
