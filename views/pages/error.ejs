@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>agentgate - <%= title %></title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
+  <link rel="stylesheet" href="/public/style.css">
+  <link rel="stylesheet" href="/public/mobile.css">
+</head>
+<body>
+  <div class="container">
+    <h1><%= title %></h1>
+    <p><%= message %></p>
+    <a href="<%= locals.backUrl || '/ui' %>" class="btn btn-primary"><%= locals.backText || 'Back' %></a>
+  </div>
+</body>
+</html>
