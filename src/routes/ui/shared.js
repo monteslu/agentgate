@@ -41,7 +41,7 @@ export function renderAvatar(agentName, { size = 32, className = '' } = {}) {
   
   return `<span class="avatar ${className}" style="width: ${size}px; height: ${size}px; background-color: ${color};" data-agent="${safeName}">
     <img src="/ui/keys/avatar/${encodeURIComponent(agentName)}" alt="" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-    <span class="avatar-initials" style="display: none;">${initial}</span>
+    <span class="avatar-initials" class="d-none">${initial}</span>
   </span>`;
 }
 
@@ -62,7 +62,7 @@ export function statusBadge(status) {
 
 export function autoApprovedBadge(autoApproved) {
   if (!autoApproved) return '';
-  return '<span class="status" style="background: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.3); margin-left: 6px;">auto-approved</span>';
+  return '<span class="status" class="badge-info">auto-approved</span>';
 }
 
 // Format date for display - outputs span with data-utc for client-side localization
@@ -116,15 +116,15 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       </a>
     </div>
     <nav class="main-nav">
-      <a href="/ui/queue" class="nav-btn nav-btn-default" style="position: relative;">
+      <a href="/ui/queue" class="nav-btn nav-btn-default" class="relative">
         Queue
-        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'style="display:none"'}>${pendingQueueCount}</span>
+        <span id="queue-badge" class="badge" ${pendingQueueCount > 0 ? '' : 'class="d-none"'}>${pendingQueueCount}</span>
       </a>
       <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
       <a href="/ui" class="nav-btn nav-btn-default">Services</a>
       <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;${messagingMode === 'off' ? ' display:none;' : ''}">
         Messages
-        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'style="display:none"'}>${pendingMessagesCount}</span>
+        <span id="messages-badge" class="badge" ${pendingMessagesCount > 0 ? '' : 'class="d-none"'}>${pendingMessagesCount}</span>
       </a>
     </nav>
     <div class="header-right">
@@ -141,7 +141,7 @@ export function navHeader({ pendingQueueCount = 0, pendingMessagesCount = 0, mes
       <a href="/ui/llm" class="dropdown-item">LLM Providers</a>
       <a href="/ui/settings" class="dropdown-item">Settings</a>
       <div class="dropdown-divider"></div>
-      <form method="POST" action="/ui/logout" style="margin: 0;">
+      <form method="POST" action="/ui/logout" class="m-0">
         <button type="submit" class="dropdown-item dropdown-item-danger">Logout</button>
       </form>
     </div>
@@ -244,33 +244,7 @@ export function renderErrorPage(title, message, { backUrl = '/ui', backText = 'B
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
   <link rel="stylesheet" href="/public/style.css">
-  <style>
-    .error-container {
-      max-width: 500px;
-      margin: 80px auto;
-      padding: 32px;
-      text-align: center;
-    }
-    .error-icon {
-      font-size: 64px;
-      margin-bottom: 16px;
-    }
-    .error-title {
-      color: #f87171;
-      margin-bottom: 16px;
-    }
-    .error-message {
-      color: #9ca3af;
-      margin-bottom: 24px;
-      line-height: 1.6;
-      word-break: break-word;
-    }
-    .error-actions {
-      display: flex;
-      gap: 12px;
-      justify-content: center;
-    }
-  </style>
+  
 </head>
 <body>
   <div class="container">
