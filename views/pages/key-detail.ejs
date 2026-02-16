@@ -660,7 +660,8 @@
   // Sessions
   async function loadSessions() {
     try {
-      const res = await fetch('/ui/keys/' + agentId + '/sessions');
+      const res = await fetch('/ui/keys/' + agentId + '/sessions', { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const container = document.getElementById('sessions-container');
       const killAllBtn = document.getElementById('kill-all-sessions-btn');
