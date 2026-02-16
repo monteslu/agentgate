@@ -255,7 +255,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         emojiSection = `
           <div class="emoji-section" id="emoji-section-${entry.id}">
             <span class="reaction-emoji-display" data-id="${entry.id}" title="Click to change">${escapeHtml(entry.reaction_emoji)}</span>
-            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" class="d-none">
+            <div class="emoji-picker-popup d-none" id="emoji-popup-${entry.id}">
               ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
               <button type="button" class="emoji-btn emoji-remove" data-id="${entry.id}" data-emoji="" title="Remove">✕</button>
             </div>
@@ -264,8 +264,8 @@ function renderQueuePage(entries, filter, counts = {}) {
       } else {
         emojiSection = `
           <div class="emoji-section" id="emoji-section-${entry.id}">
-            <button type="button" class="emoji-trigger" data-id="${entry.id}" title="Add reaction">😀</button>
-            <div class="emoji-picker-popup" id="emoji-popup-${entry.id}" class="d-none">
+            <button type="button" class="emoji-trigger" data-id="${entry.id}" title="Add reaction"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#737373" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
+            <div class="emoji-picker-popup d-none" id="emoji-popup-${entry.id}">
               ${ALL_EMOJIS.map(e => `<button type="button" class="emoji-btn" data-id="${entry.id}" data-emoji="${e}">${e}</button>`).join('')}
             </div>
           </div>
@@ -612,7 +612,7 @@ function renderQueuePage(entries, filter, counts = {}) {
         return '<button type="button" class="emoji-btn" data-id="'+id+'" data-emoji="'+e+'">'+e+'</button>';
       }).join('');
       if (includeRemove) btns += '<button type="button" class="emoji-btn emoji-remove" data-id="'+id+'" data-emoji="" title="Remove">✕</button>';
-      return '<div class="emoji-picker-popup" id="emoji-popup-'+id+'" class="d-none">'+btns+'</div>';
+      return '<div class="emoji-picker-popup d-none" id="emoji-popup-'+id+'">'+btns+'</div>';
     }
 
     async function setReaction(id, emoji) {
