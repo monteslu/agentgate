@@ -69,7 +69,7 @@ ${htmlHead('Settings', { includeSocket: true })}
       <button type="submit" class="btn-primary btn-sm">Save</button>
     </form>
     ${messagingMode === 'supervised' && pendingMessagesCount > 0 ? `
-      <p style="margin-top: 12px;"><a href="/ui/messages" style="color: #818cf8;">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
+      <p style="margin-top: 12px;"><a href="/ui/messages" style="color: #34d399;">${pendingMessagesCount} pending message${pendingMessagesCount > 1 ? 's' : ''} awaiting approval →</a></p>
     ` : ''}
   </div>
 
