@@ -1,0 +1,93 @@
+<script>
+  // Hamburger menu toggle
+  function toggleMenu() {
+    const menu = document.getElementById('dropdown-menu');
+    const hamburger = document.querySelector('.hamburger');
+    menu.classList.toggle('open');
+    hamburger.classList.toggle('open');
+  }
+
+  document.addEventListener('click', function(e) {
+    const menu = document.getElementById('dropdown-menu');
+    const hamburger = document.querySelector('.hamburger');
+    if (!menu.contains(e.target) && !hamburger.contains(e.target)) {
+      menu.classList.remove('open');
+      hamburger.classList.remove('open');
+    }
+  });
+
+  // Localize timestamps
+  document.querySelectorAll('.local-time[data-utc]').forEach(function(el) {
+    const utc = el.getAttribute('data-utc');
+    if (utc) {
+      const d = new Date(utc);
+      el.textContent = d.toLocaleString();
+      el.title = utc + ' UTC';
+    }
+  });
+
+  // Convert help-hint title → data-tooltip (suppress native tooltip)
+  document.querySelectorAll('.help-hint[title]').forEach(function(el) {
+    el.setAttribute('data-tooltip', el.getAttribute('title'));
+    el.removeAttribute('title');
+  });
+
+  // Copy text helper
+  function copyText(text, btn) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = orig, 1500);
+    });
+  }
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      copyText(this.dataset.copy, this);
+    });
+  });
+
+  // Toast notification
+  function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-' + (type || 'info');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
+  }
+</script>
+
+<% if (locals.includeSocket) { %>
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    const socket = io();
+
+    socket.on('counts', function(data) {
+      const queueBadge = document.getElementById('queue-badge');
+      if (queueBadge) {
+        if (data.queue.pending > 0) {
+          queueBadge.textContent = data.queue.pending;
+          queueBadge.classList.remove('d-none');
+        } else {
+          queueBadge.classList.add('d-none');
+        }
+      }
+
+      const msgBadge = document.getElementById('messages-badge');
+      if (msgBadge) {
+        if (data.messages.pending > 0) {
+          msgBadge.textContent = data.messages.pending;
+          msgBadge.classList.remove('d-none');
+        } else {
+          msgBadge.classList.add('d-none');
+        }
+      }
+
+      const msgNav = document.getElementById('messages-nav');
+      if (msgNav) {
+        msgNav.style.display = data.messagingEnabled ? '' : 'none';
+      }
+    });
+  });
+</script>
+<% } %>

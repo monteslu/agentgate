@@ -1,0 +1,126 @@
+<h2 class="mb-16">🧠 Agent Mementos</h2>
+
+<!-- Stats Bar -->
+<div class="flex gap-16 mb-20 flex-wrap">
+  <div class="stat-card">
+    <div class="stat-value"><%= counts.total || 0 %></div>
+    <div class="stat-label">Total</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= counts.byAgent ? counts.byAgent.length : agents.length %></div>
+    <div class="stat-label">Agents</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value"><%= counts.last24h || 0 %></div>
+    <div class="stat-label">Last 24h</div>
+  </div>
+  <div class="ml-auto">
+    <a href="/ui/mementos/export<%= agent || keyword ? '?agent=' + encodeURIComponent(agent || '') + '&keyword=' + encodeURIComponent(keyword || '') : '' %>" class="btn btn-secondary inline-flex-center">
+      📥 Export JSON
+    </a>
+  </div>
+</div>
+
+<!-- Filters -->
+<form method="GET" action="/ui/mementos" class="flex-center gap-12 mb-16 flex-wrap">
+  <select name="agent" class="select-input">
+    <option value="">All Agents</option>
+    <% agents.forEach(function(a) { %>
+      <option value="<%= a %>" <%= agent === a ? 'selected' : '' %>><%= a %></option>
+    <% }); %>
+  </select>
+  <input type="text" name="keyword" placeholder="Filter by keyword..." value="<%= keyword || '' %>"
+    class="select-input-wide" autocomplete="off">
+  <button type="submit" class="btn btn-primary">Filter</button>
+  <% if (agent || keyword) { %>
+    <a href="/ui/mementos" class="btn btn-secondary">Clear</a>
+  <% } %>
+</form>
+
+<!-- Results -->
+<div class="card">
+  <% if (mementos.length === 0) { %>
+    <div class="text-center p-40 text-dim">
+      <div class="emoji-display">🧠</div>
+      <p>No mementos found<%= agent || keyword ? ' matching your filters' : '' %>.</p>
+      <p class="meta-line">Agents can store mementos via POST /api/agents/memento</p>
+    </div>
+  <% } else { %>
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th class="w-40">ID</th>
+          <th class="w-120">Agent</th>
+          <th class="w-150">Keywords</th>
+          <th>Preview</th>
+          <th class="w-140">Created</th>
+          <th class="w-60"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <% mementos.forEach(function(m) { %>
+          <tr>
+            <td class="font-mono text-dim"><%= m.id %></td>
+            <td>
+              <div class="flex-center gap-8">
+                <%- renderAvatar(m.agent_id, { size: 24 }) %>
+                <span class="text-sm"><%= m.agent_id %></span>
+              </div>
+            </td>
+            <td>
+              <div class="flex flex-wrap gap-4">
+                <% m.keywords.slice(0, 5).forEach(function(k) { %>
+                  <span class="tag"><%= k %></span>
+                <% }); %>
+                <% if (m.keywords.length > 5) { %>
+                  <span class="tag opacity-60">+<%= m.keywords.length - 5 %></span>
+                <% } %>
+              </div>
+            </td>
+            <td class="detail-mono"><%= m.preview %></td>
+            <td class="text-xs"><%- formatDate(m.created_at) %></td>
+            <td class="whitespace-nowrap">
+              <a href="/ui/mementos/<%= m.id %>" class="btn btn-secondary btn-xs">View</a>
+              <button onclick="deleteMemento(<%= m.id %>)" class="btn btn-danger btn-xs ml-4">×</button>
+            </td>
+          </tr>
+        <% }); %>
+      </tbody>
+    </table>
+
+    <!-- Pagination -->
+    <div class="flex-between mt-16" style="padding-top: 16px; border-top: 1px solid var(--border-strong);">
+      <span class="text-dim text-sm">
+        Showing <%= parsedOffset + 1 %>-<%= parsedOffset + mementos.length %> mementos
+      </span>
+      <div class="flex gap-8">
+        <% if (parsedOffset > 0) { %>
+          <a href="/ui/mementos?<%= new URLSearchParams({ ...(agent && { agent }), ...(keyword && { keyword }), limit: parsedLimit, offset: Math.max(0, parsedOffset - parsedLimit) }) %>" class="btn btn-secondary">← Previous</a>
+        <% } %>
+        <% if (mementos.length === parsedLimit) { %>
+          <a href="/ui/mementos?<%= new URLSearchParams({ ...(agent && { agent }), ...(keyword && { keyword }), limit: parsedLimit, offset: parsedOffset + parsedLimit }) %>" class="btn btn-secondary">Next →</a>
+        <% } %>
+      </div>
+    </div>
+  <% } %>
+</div>
+
+<script>
+  async function deleteMemento(id) {
+    if (!confirm('Delete this memento? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/ui/mementos/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to delete');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+</script>

@@ -1,0 +1,219 @@
+<div class="flex-between mb-16">
+  <h2 class="m-0">Agent Messages</h2>
+  <span class="mode-badge">Mode: <%= mode %></span>
+</div>
+<p>Review and approve messages between agents<%= mode === 'supervised' ? ' (supervised mode)' : '' %>.</p>
+
+<div class="card mb-24">
+  <h3 class="mt-0 flex-center gap-8">
+    <span>📢</span> Broadcast Message
+  </h3>
+  <p class="help mb-16">Send a message to all agents with webhooks configured.</p>
+  <form method="POST" action="/ui/messages/broadcast" id="broadcast-form">
+    <textarea name="message" id="broadcast-message" placeholder="Enter your broadcast message..." rows="3" class="textarea-input" required autocomplete="off"></textarea>
+    <div class="flex-center gap-12">
+      <button type="submit" class="btn-primary" id="broadcast-btn">Send Broadcast</button>
+      <span id="broadcast-status" class="help m-0"></span>
+    </div>
+  </form>
+</div>
+
+<h3>Timeline</h3>
+
+<div class="filter-bar" id="filter-bar">
+  <% ['all', 'pending', 'delivered', 'rejected'].forEach(function(f) { %>
+    <a href="/ui/messages?filter=<%= f %>" class="filter-link <%= filter === f ? 'active' : '' %>"><%= f %><%= counts[f] > 0 ? ' (' + counts[f] + ')' : '' %></a>
+  <% }); %>
+  <div class="clear-section">
+    <% if (filter === 'delivered' && counts.delivered > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('delivered')">Clear Delivered</button>
+    <% } %>
+    <% if (filter === 'rejected' && counts.rejected > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('rejected')">Clear Rejected</button>
+    <% } %>
+    <% if (filter === 'all' && (counts.delivered > 0 || counts.rejected > 0)) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('all')">Clear All Non-Pending</button>
+    <% } %>
+    <% if (broadcasts.length > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearBroadcasts()">Clear Broadcasts</button>
+    <% } %>
+    <a href="/ui/messages/export?format=json" class="btn-sm no-underline">Export JSON</a>
+    <a href="/ui/messages/export?format=csv" class="btn-sm no-underline">Export CSV</a>
+  </div>
+</div>
+
+<div id="messages-container">
+  <% if (timeline.length === 0) { %>
+    <div class="card empty-state">
+      <p>No <%= filter === 'all' ? '' : filter + ' ' %>messages</p>
+    </div>
+  <% } else { %>
+    <% timeline.forEach(function(item) { %>
+      <% if (item._type === 'broadcast') { %>
+        <%- include('../partials/broadcast-entry', { b: item, renderAvatar, escapeHtml, formatDate }) %>
+      <% } else { %>
+        <%- include('../partials/message-entry', { msg: item, renderAvatar, escapeHtml, formatDate, statusBadge }) %>
+      <% } %>
+    <% }); %>
+  <% } %>
+</div>
+
+<script>
+  function escapeHtml(str) {
+    if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  document.getElementById('broadcast-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const btn = document.getElementById('broadcast-btn');
+    const status = document.getElementById('broadcast-status');
+    const message = document.getElementById('broadcast-message').value;
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    status.textContent = '';
+
+    try {
+      const res = await fetch('/ui/messages/broadcast', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'message=' + encodeURIComponent(message)
+      });
+      const data = await res.json();
+
+      if (data.error) {
+        status.textContent = '❌ ' + data.error;
+        status.className = 'status-error';
+      } else {
+        const deliveredNames = data.delivered.join(', ') || 'none';
+        const failedCount = data.failed.length;
+        status.textContent = '✅ Delivered to: ' + deliveredNames + (failedCount > 0 ? ' | Failed: ' + failedCount : '');
+        status.className = 'status-success';
+        document.getElementById('broadcast-message').value = '';
+      }
+    } catch (err) {
+      status.textContent = '❌ Error: ' + err.message;
+      status.className = 'status-error';
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Send Broadcast';
+  });
+
+  async function approveMessage(id) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Approving...';
+    try {
+      const res = await fetch('/ui/messages/' + id + '/approve', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to approve');
+        btn.disabled = false;
+        btn.textContent = 'Approve';
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Approve';
+    }
+  }
+
+  async function rejectMessage(id) {
+    const btn = event.target;
+    const reason = document.getElementById('reason-' + id)?.value || '';
+    btn.disabled = true;
+    btn.textContent = 'Rejecting...';
+    try {
+      const res = await fetch('/ui/messages/' + id + '/reject', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason })
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to reject');
+        btn.disabled = false;
+        btn.textContent = 'Reject';
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+      btn.textContent = 'Reject';
+    }
+  }
+
+  async function deleteMessage(id) {
+    if (!confirm('Delete this message?')) return;
+    try {
+      const res = await fetch('/ui/messages/' + id + '/delete', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('message-' + id)?.remove();
+        const container = document.getElementById('messages-container');
+        if (container.querySelectorAll('.message-entry').length === 0) {
+          container.innerHTML = '<div class="card empty-state"><p>No messages</p></div>';
+        }
+      } else {
+        alert(data.error || 'Failed to delete');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  async function deleteBroadcast(id) {
+    if (!confirm('Delete this broadcast?')) return;
+    try {
+      const res = await fetch('/ui/messages/broadcast/' + id + '/delete', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to delete broadcast');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  async function clearBroadcasts() {
+    if (!confirm('Clear all broadcasts?')) return;
+    try {
+      const res = await fetch('/ui/messages/broadcasts/clear', { method: 'POST', headers: { 'Accept': 'application/json' } });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      } else {
+        alert(data.error || 'Failed to clear broadcasts');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+
+  async function clearByStatus(status) {
+    const btn = event.target;
+    btn.disabled = true;
+    btn.textContent = 'Clearing...';
+    try {
+      const res = await fetch('/ui/messages/clear', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.reload();
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+      btn.disabled = false;
+    }
+  }
+</script>

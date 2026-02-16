@@ -1,0 +1,100 @@
+<h2>Add Webhook</h2>
+<p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
+
+<form method="POST" action="/ui/webhooks/add" id="webhook-form">
+  <div class="card">
+    <h3>1. Select Source</h3>
+    <% Object.entries(webhookSources).forEach(function([key, src]) { %>
+      <div class="webhook-item cursor-pointer" onclick="selectSource('<%= key %>')">
+        <img src="<%= src.icon %>" alt="<%= src.name %>">
+        <div class="webhook-info">
+          <div class="webhook-name"><%= src.name %></div>
+          <div class="webhook-meta"><%= src.events.length %> event types available</div>
+        </div>
+        <input type="radio" name="source" value="<%= key %>" id="source-<%= key %>" class="d-none" autocomplete="off">
+      </div>
+    <% }); %>
+  </div>
+
+  <div id="config-section" class="d-none">
+    <div class="card">
+      <h3>2. Webhook Name</h3>
+      <input type="text" name="name" placeholder="e.g., Main Repo Webhook" class="input w-full" autocomplete="off">
+    </div>
+
+    <div class="card">
+      <h3>3. Events</h3>
+      <% Object.entries(webhookSources).forEach(function([key, src]) { %>
+        <div id="events-<%= key %>" class="event-section d-none">
+          <h4>Select Events to Listen For</h4>
+          <div class="event-grid">
+            <% src.events.forEach(function(e) { %>
+              <label class="event-checkbox">
+                <input type="checkbox" name="events" value="<%= e.id %>" checked autocomplete="off">
+                <div>
+                  <div class="event-name"><%= e.name %></div>
+                  <div class="event-desc"><%= e.description %></div>
+                </div>
+              </label>
+            <% }); %>
+          </div>
+        </div>
+      <% }); %>
+    </div>
+
+    <div class="card">
+      <h3>4. Assigned Agents</h3>
+      <p class="help">Select which agents will receive notifications for this webhook. If none selected, no agents will be notified.</p>
+      <div class="agent-grid">
+        <% if (agents.length === 0) { %>
+          <p class="text-muted-italic">No agents configured. Add agents in API Keys first.</p>
+        <% } else { %>
+          <% agents.forEach(function(a) { %>
+            <label class="agent-checkbox" onclick="updateAgentStyle(this)">
+              <input type="checkbox" name="assigned_agents" value="<%- escapeHtml(a.name) %>" autocomplete="off">
+              <span class="agent-name"><%- escapeHtml(a.name) %></span>
+            </label>
+          <% }); %>
+        <% } %>
+      </div>
+      <div class="no-agents-warning" id="no-agents-warning">
+        ⚠ No agents selected — webhook events will not be delivered to any agent.
+      </div>
+    </div>
+
+    <button type="submit" class="btn-primary">Create Webhook</button>
+  </div>
+</form>
+
+<script>
+  let selectedSource = null;
+
+  function selectSource(source) {
+    selectedSource = source;
+    document.getElementById('source-' + source).checked = true;
+    document.getElementById('config-section').style.display = 'block';
+
+    document.querySelectorAll('.event-section').forEach(el => el.style.display = 'none');
+    document.getElementById('events-' + source).style.display = 'block';
+
+    document.querySelectorAll('.webhook-item').forEach(el => {
+      el.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+  }
+
+  function updateAgentStyle(label) {
+    setTimeout(() => {
+      const cb = label.querySelector('input');
+      label.classList.toggle('selected', cb.checked);
+      updateAgentWarning();
+    }, 0);
+  }
+
+  function updateAgentWarning() {
+    const anyChecked = document.querySelectorAll('input[name="assigned_agents"]:checked').length > 0;
+    document.getElementById('no-agents-warning').style.display = anyChecked ? 'none' : 'block';
+  }
+
+  updateAgentWarning();
+</script>

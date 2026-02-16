@@ -1,0 +1,67 @@
+<div class="flex-center gap-12 mb-16">
+  <a href="/ui/mementos" class="btn btn-secondary">← Back</a>
+  <h2 class="m-0" style="flex: 1;">Memento #<%= memento.id %></h2>
+  <button onclick="deleteMemento(<%= memento.id %>)" class="btn btn-danger">Delete</button>
+</div>
+
+<div class="card mb-16">
+  <div class="stats-grid">
+    <div>
+      <div class="label-dim">Agent</div>
+      <div class="flex-center gap-8">
+        <%- renderAvatar(memento.agent_id, { size: 28 }) %>
+        <span><%= memento.agent_id %></span>
+      </div>
+    </div>
+    <div>
+      <div class="label-dim">Created</div>
+      <div><%- formatDate(memento.created_at) %></div>
+    </div>
+    <% if (memento.model) { %>
+      <div>
+        <div class="label-dim">Model</div>
+        <div class="font-mono text-sm"><%= memento.model %></div>
+      </div>
+    <% } %>
+    <% if (memento.role) { %>
+      <div>
+        <div class="label-dim">Role</div>
+        <div><%= memento.role %></div>
+      </div>
+    <% } %>
+  </div>
+
+  <div class="mb-16">
+    <div class="label-dim-8">Keywords</div>
+    <div class="flex flex-wrap gap-6">
+      <% memento.keywords.forEach(function(k) { %>
+        <a href="/ui/mementos?keyword=<%= encodeURIComponent(k) %>" class="tag no-underline"><%= k %></a>
+      <% }); %>
+    </div>
+  </div>
+
+  <div>
+    <div class="label-dim-8">Content</div>
+    <pre class="output-block"><%= memento.content %></pre>
+  </div>
+</div>
+
+<script>
+  async function deleteMemento(id) {
+    if (!confirm('Delete this memento? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/ui/mementos/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.location.href = '/ui/mementos';
+      } else {
+        alert(data.error || 'Failed to delete');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    }
+  }
+</script>

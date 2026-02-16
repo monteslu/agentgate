@@ -1,0 +1,38 @@
+<header class="site-header">
+  <div class="header-left">
+    <a href="/ui" class="logo-link">
+      <img src="/public/favicon.svg" alt="agentgate" class="logo">
+      <h1>agentgate</h1>
+    </a>
+  </div>
+  <nav class="main-nav">
+    <a href="/ui/queue" class="nav-btn nav-btn-default relative">
+      Queue
+      <span id="queue-badge" class="badge<%= pendingQueueCount > 0 ? '' : ' d-none' %>"><%= pendingQueueCount %></span>
+    </a>
+    <a href="/ui/keys" class="nav-btn nav-btn-default">Agents</a>
+    <a href="/ui" class="nav-btn nav-btn-default">Services</a>
+    <a href="/ui/messages" id="messages-nav" class="nav-btn nav-btn-default" style="position: relative;<%= messagingMode === 'off' ? ' display:none;' : '' %>">
+      Messages
+      <span id="messages-badge" class="badge<%= pendingMessagesCount > 0 ? '' : ' d-none' %>"><%= pendingMessagesCount %></span>
+    </a>
+  </nav>
+  <div class="header-right">
+    <button class="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
+  <div class="dropdown-menu" id="dropdown-menu">
+    <a href="/ui/access" class="dropdown-item">Access Control</a>
+    <a href="/ui/mementos" class="dropdown-item">Mementos</a>
+    <a href="/ui/webhooks" class="dropdown-item">Service Hooks</a>
+    <a href="/ui/llm" class="dropdown-item">LLM Providers</a>
+    <a href="/ui/settings" class="dropdown-item">Settings</a>
+    <div class="dropdown-divider"></div>
+    <form method="POST" action="/ui/logout" class="m-0">
+      <button type="submit" class="dropdown-item dropdown-item-danger">Logout</button>
+    </form>
+  </div>
+</header>

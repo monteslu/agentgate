@@ -55,6 +55,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser(getCookieSecret()));
 app.use('/public', express.static(join(__dirname, '../public')));
 
+// EJS template engine
+app.set('view engine', 'ejs');
+app.set('views', join(__dirname, '../views'));
+
 // Health endpoint - public, no auth required
 // Used by tunnel test button and Docker healthcheck
 app.get('/health', (_req, res) => {

@@ -1,0 +1,41 @@
+<div class="flex-between mb-16">
+  <h2 class="m-0">Inbound Webhooks</h2>
+  <a href="/ui/webhooks/add" class="btn-primary">+ Add Webhook</a>
+</div>
+
+<p class="help">Receive events from external services like GitHub. Configure webhook endpoints and secrets here.</p>
+
+<div class="webhook-list card card-overflow-hidden">
+  <% if (configs.length === 0) { %>
+    <div class="empty-state">No webhooks configured. Click "Add Webhook" to get started.</div>
+  <% } else { %>
+    <% configs.forEach(function(c) { %>
+      <% var source = webhookSources[c.source] || { name: c.source, icon: '/public/favicon.svg' }; %>
+      <% var eventCount = (c.events || []).length; %>
+      <a href="/ui/webhooks/<%= c.id %>" class="webhook-item no-underline">
+        <img src="<%= source.icon %>" alt="<%= source.name %>">
+        <div class="webhook-info">
+          <div class="webhook-name"><%= c.name %></div>
+          <div class="webhook-meta"><%= eventCount %> event<%= eventCount !== 1 ? 's' : '' %> configured</div>
+        </div>
+        <span class="webhook-status <%= c.enabled ? 'enabled' : 'disabled' %>"><%= c.enabled ? 'Active' : 'Disabled' %></span>
+      </a>
+    <% }); %>
+  <% } %>
+</div>
+
+<h3>Recent Deliveries</h3>
+<div class="card delivery-list card-overflow-hidden">
+  <% if (deliveries.length === 0) { %>
+    <div class="empty-state p-20">No deliveries yet</div>
+  <% } else { %>
+    <% deliveries.forEach(function(d) { %>
+      <a href="/ui/webhooks/delivery/<%= d.id %>" class="delivery-item no-underline">
+        <span class="delivery-status <%= d.success ? 'success' : 'failed' %>"></span>
+        <span class="delivery-event"><%= d.event_type %></span>
+        <span class="delivery-repo"><%= d.repo || '-' %></span>
+        <span class="delivery-time" data-ts="<%= d.received_at %>"><%= d.received_at %></span>
+      </a>
+    <% }); %>
+  <% } %>
+</div>

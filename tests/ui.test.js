@@ -225,7 +225,12 @@ describe('UI Routes Integration', () => {
     const express = (await import('express')).default;
     const cookieParser = (await import('cookie-parser')).default;
 
+    const { join } = await import('path');
+    const { fileURLToPath } = await import('url');
+
     app = express();
+    app.set('view engine', 'ejs');
+    app.set('views', join(fileURLToPath(import.meta.url), '../../views'));
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use(cookieParser('test-secret'));

@@ -1,0 +1,265 @@
+<div class="llm-section">
+  <h2>🔌 LLM Providers</h2>
+
+  <div class="card">
+    <h3>Add Provider</h3>
+    <p class="help">Connect an LLM provider to enable AI capabilities for agents.</p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label for="add-name">Name</label>
+        <input type="text" id="add-name" placeholder="my-openai" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="add-type">Type</label>
+        <select id="add-type">
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+          <option value="google">Google</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="add-key">API Key</label>
+        <input type="password" id="add-key" placeholder="sk-..." autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="add-url">Base URL (optional) <span class="help-hint" title="Only needed for self-hosted or custom API endpoints (e.g. local LLM servers, Azure OpenAI). Leave blank for standard providers like OpenAI, Anthropic, or Google.">?</span></label>
+        <input type="text" id="add-url" placeholder="https://api.example.com" autocomplete="off">
+      </div>
+    </div>
+    <button class="btn-primary" onclick="addProvider()">Add Provider</button>
+    <div id="add-result" class="form-result"></div>
+  </div>
+
+  <div id="providers-list">
+    <% if (providers.length === 0) { %>
+      <div class="empty-state-box">No providers configured yet.</div>
+    <% } else { %>
+      <% providers.forEach(function(p) { %>
+        <% const icon = providerIcons[p.provider_type] || '⚙️'; %>
+        <div class="card provider-card" id="provider-<%= p.id %>">
+          <div class="provider-header">
+            <div class="provider-info">
+              <span class="provider-icon"><%= icon %></span>
+              <div>
+                <strong class="provider-name"><%= p.name %></strong>
+                <span class="provider-type"><%= p.provider_type %></span>
+                <% if (p.base_url) { %><div class="provider-url"><%= p.base_url %></div><% } %>
+              </div>
+            </div>
+            <div class="provider-actions">
+              <span class="status <%= p.enabled ? 'configured' : 'not-configured' %>"><%= p.enabled ? 'Enabled' : 'Disabled' %></span>
+              <button class="btn-sm" onclick="testProvider(<%= p.id %>)">Test</button>
+              <button class="btn-sm" onclick="toggleProvider(<%= p.id %>, <%= p.enabled ? 0 : 1 %>)"><%= p.enabled ? 'Disable' : 'Enable' %></button>
+              <button class="btn-sm" onclick="editProvider(<%= p.id %>)">Edit</button>
+              <button class="btn-sm btn-danger" onclick="deleteProvider(<%= p.id %>, '<%= p.name.replace(/'/g, "\\'") %>')">Delete</button>
+            </div>
+          </div>
+          <div id="provider-test-<%= p.id %>" class="provider-test-result"></div>
+          <div id="provider-edit-<%= p.id %>" class="provider-edit-form d-none">
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="edit-name-<%= p.id %>" value="<%= p.name %>" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label>Type</label>
+                <select id="edit-type-<%= p.id %>">
+                  <option value="openai" <%= p.provider_type === 'openai' ? 'selected' : '' %>>OpenAI</option>
+                  <option value="anthropic" <%= p.provider_type === 'anthropic' ? 'selected' : '' %>>Anthropic</option>
+                  <option value="google" <%= p.provider_type === 'google' ? 'selected' : '' %>>Google</option>
+                  <option value="custom" <%= p.provider_type === 'custom' ? 'selected' : '' %>>Custom</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>API Key (leave blank to keep)</label>
+                <input type="password" id="edit-key-<%= p.id %>" placeholder="sk-..." autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label>Base URL</label>
+                <input type="text" id="edit-url-<%= p.id %>" value="<%= p.base_url || '' %>" autocomplete="off">
+              </div>
+            </div>
+            <button class="btn-primary" onclick="saveProvider(<%= p.id %>)">Save</button>
+            <button class="btn-sm" onclick="document.getElementById('provider-edit-<%= p.id %>').style.display='none'">Cancel</button>
+          </div>
+        </div>
+      <% }); %>
+    <% } %>
+  </div>
+</div>
+
+<div class="llm-section">
+  <h2>🎯 Agent Model Assignments</h2>
+
+  <div class="card">
+    <h3>Assign Model</h3>
+    <p class="help">Map agents to specific models. Use * as a wildcard for default assignments. <span class="help-hint" title="Assign a model to a specific agent, or use * to set a fallback model for all agents without their own assignment. Specific agent assignments always override the * wildcard.">?</span></p>
+    <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+      <div class="form-group">
+        <label for="assign-agent">Agent</label>
+        <select id="assign-agent">
+          <option value="*">* (default/wildcard)</option>
+          <% agents.forEach(function(a) { %>
+            <option value="<%= a %>"><%= a %></option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="assign-provider">Provider</label>
+        <select id="assign-provider">
+          <% if (providers.length === 0) { %>
+            <option value="">No providers</option>
+          <% } else { %>
+            <% providers.forEach(function(p) { %>
+              <option value="<%= p.id %>"><%= p.name %> (<%= p.provider_type %>)</option>
+            <% }); %>
+          <% } %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="assign-model">Model ID</label>
+        <input type="text" id="assign-model" placeholder="gpt-4o" autocomplete="off">
+      </div>
+    </div>
+    <div class="flex-center gap-16">
+      <label class="flex-center gap-8 m-0 cursor-pointer text-muted">
+        <input type="checkbox" id="assign-default" class="icon-18 m-0" autocomplete="off">
+        Set as default <span class="help-hint" title="When checked, this becomes the agent's default model. If another model was previously the default for this agent, it will be replaced.">?</span>
+      </label>
+      <button class="btn-primary" onclick="assignModel()">Assign Model</button>
+    </div>
+    <div id="assign-result" class="form-result"></div>
+  </div>
+
+  <div class="card">
+    <table class="models-table">
+      <thead>
+        <tr>
+          <th>Agent</th>
+          <th>Model</th>
+          <th>Provider</th>
+          <th>Default</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="models-tbody">
+        <% if (models.length === 0) { %>
+          <tr class="empty-row"><td colspan="5">No model assignments yet.</td></tr>
+        <% } else { %>
+          <% models.forEach(function(m) { %>
+            <tr>
+              <td><%= m.agent_name %></td>
+              <td><code><%= m.model_id %></code></td>
+              <td><%= m.provider_name || 'Unknown' %></td>
+              <td><%= m.is_default ? '✅' : '' %></td>
+              <td><button class="btn-sm btn-danger" onclick="deleteModel('<%= m.agent_name %>', <%= m.provider_id %>, '<%= m.model_id %>')">×</button></td>
+            </tr>
+          <% }); %>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  function showMsg(elId, msg, isError) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerHTML = '<span class="' + (isError ? 'status-error' : 'status-success') + '">' + msg + '</span>';
+    setTimeout(() => el.innerHTML = '', 5000);
+  }
+
+  async function addProvider() {
+    const name = document.getElementById('add-name').value.trim();
+    const provider_type = document.getElementById('add-type').value;
+    const api_key = document.getElementById('add-key').value;
+    const base_url = document.getElementById('add-url').value.trim() || undefined;
+    if (!name || !api_key) return showMsg('add-result', 'Name and API key required', true);
+    const res = await fetch('/ui/llm/providers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, provider_type, api_key, base_url })
+    });
+    const data = await res.json();
+    if (data.success) location.reload();
+    else showMsg('add-result', data.error || 'Failed', true);
+  }
+
+  async function deleteProvider(id, name) {
+    if (!confirm('Delete provider "' + name + '"?')) return;
+    await fetch('/ui/llm/providers/' + id, { method: 'DELETE' });
+    location.reload();
+  }
+
+  function editProvider(id) {
+    document.getElementById('provider-edit-' + id).style.display = '';
+  }
+
+  async function saveProvider(id) {
+    const body = {};
+    const name = document.getElementById('edit-name-' + id).value.trim();
+    const provider_type = document.getElementById('edit-type-' + id).value;
+    const api_key = document.getElementById('edit-key-' + id).value;
+    const base_url = document.getElementById('edit-url-' + id).value.trim();
+    if (name) body.name = name;
+    if (provider_type) body.provider_type = provider_type;
+    if (api_key) body.api_key = api_key;
+    if (base_url) body.base_url = base_url;
+    const res = await fetch('/ui/llm/providers/' + id, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (data.success) location.reload();
+    else alert(data.error || 'Failed');
+  }
+
+  async function toggleProvider(id, enabled) {
+    await fetch('/ui/llm/providers/' + id, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled })
+    });
+    location.reload();
+  }
+
+  async function testProvider(id) {
+    const el = document.getElementById('provider-test-' + id);
+    el.innerHTML = '<span class="opacity-60">Testing...</span>';
+    try {
+      const res = await fetch('/ui/llm/providers/' + id + '/test', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        el.innerHTML = '<span class="text-success">✅ Connected — ' + data.latency + 'ms</span>';
+      } else {
+        el.innerHTML = '<span class="text-danger">❌ ' + (data.error || 'Failed') + (data.latency ? ' (' + data.latency + 'ms)' : '') + '</span>';
+      }
+    } catch (e) {
+      el.innerHTML = '<span class="text-danger">❌ Network error</span>';
+    }
+  }
+
+  async function assignModel() {
+    const agent_name = document.getElementById('assign-agent').value;
+    const provider_id = parseInt(document.getElementById('assign-provider').value);
+    const model_id = document.getElementById('assign-model').value.trim();
+    const is_default = document.getElementById('assign-default').checked;
+    if (!model_id) return showMsg('assign-result', 'Model ID required', true);
+    if (!provider_id) return showMsg('assign-result', 'Select a provider', true);
+    const res = await fetch('/ui/llm/models', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name, provider_id, model_id, is_default })
+    });
+    const data = await res.json();
+    if (data.success) location.reload();
+    else showMsg('assign-result', data.error || 'Failed', true);
+  }
+
+  async function deleteModel(agent_name, provider_id, model_id) {
+    if (!confirm('Remove model assignment?')) return;
+    await fetch('/ui/llm/models', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_name, provider_id, model_id })
+    });
+    location.reload();
+  }
+</script>

@@ -1,0 +1,55 @@
+<p>API gateway for agents with human-in-the-loop write approval.</p>
+<p class="help">API pattern: <code>/api/{service}/{accountName}/...</code></p>
+
+<div class="services-header">
+  <h2>Services</h2>
+  <div class="add-service-dropdown">
+    <button class="btn-primary" onclick="toggleAddMenu(event)">+ Add Service</button>
+    <div class="add-service-menu" id="add-service-menu">
+      <% services.forEach(function(s) { %>
+        <a href="/ui/services/add/<%= s.serviceName %>"><img src="<%= getServiceIcon(s.serviceName) %>" alt=""><%= s.displayName %></a>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <% if (accounts.length === 0) { %>
+    <div class="empty-state">No services configured yet. Click "Add Service" to get started.</div>
+  <% } else { %>
+    <% accounts.forEach(function(acc) { %>
+      <div class="service-row">
+        <img src="<%= getServiceIcon(acc.service) %>" alt="<%= acc.displayName %>">
+        <span class="service-type"><%= acc.displayName %></span>
+        <span class="account-name"><%- acc.name %></span>
+        <a href="/ui/services/<%= acc.id %>" class="btn-sm">Details</a>
+      </div>
+    <% }); %>
+  <% } %>
+</div>
+
+<script>
+  function toggleAddMenu(e) {
+    e.stopPropagation();
+    document.getElementById('add-service-menu').classList.toggle('show');
+  }
+  document.addEventListener('click', () => {
+    document.getElementById('add-service-menu').classList.remove('show');
+  });
+</script>
+
+<h2>Usage</h2>
+<div class="card">
+  <p>Make requests with your API key in the Authorization header:</p>
+  <pre>
+# Read requests (immediate)
+curl -H "Authorization: Bearer rms_your_key_here" \
+  http://localhost:<%= port %>/api/github/personal/users/octocat
+
+# Write requests (queued for approval)
+curl -X POST http://localhost:<%= port %>/api/queue/github/personal/submit \
+  -H "Authorization: Bearer rms_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"requests":[{"method":"POST","path":"/repos/owner/repo/issues","body":{"title":"Bug"}}],"comment":"Creating issue"}'
+  </pre>
+</div>

@@ -1,0 +1,34 @@
+<h2>Delivery Details</h2>
+<p><a href="/ui/webhooks">← Back to Service Hooks</a></p>
+
+<div class="card">
+  <dl class="detail-grid">
+    <dt>Status</dt>
+    <dd><span class="delivery-status <%= delivery.success ? 'success' : 'failed' %> status-dot-sm"></span> <%= delivery.success ? 'Success' : 'Failed' %></dd>
+
+    <dt>Event</dt>
+    <dd><code><%- escapeHtml(delivery.event_type) %></code></dd>
+
+    <dt>Repository</dt>
+    <dd><%- escapeHtml(delivery.repo || '-') %></dd>
+
+    <dt>Received</dt>
+    <dd data-ts="<%= delivery.received_at %>"><%= delivery.received_at %></dd>
+
+    <dt>Delivery ID</dt>
+    <dd><code><%- escapeHtml(delivery.delivery_id || '-') %></code></dd>
+
+    <dt>Source</dt>
+    <dd><%- escapeHtml(delivery.source) %></dd>
+  </dl>
+</div>
+
+<div class="card">
+  <h3>Broadcast Result</h3>
+  <pre class="code-block-dark"><%- escapeHtml(broadcastResult || 'No broadcast result') %></pre>
+</div>
+
+<div class="card">
+  <h3>Payload</h3>
+  <pre class="code-block-dark-scroll"><%- escapeHtml(payload || 'No payload') %></pre>
+</div>
