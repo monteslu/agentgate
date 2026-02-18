@@ -3,7 +3,8 @@ import { Router } from 'express';
 import {
   listQueueEntries, getQueueEntry, updateQueueStatus,
   clearQueueByStatus, deleteQueueEntry, getQueueCounts,
-  getQueueWarnings, listAutoApprovedEntries, getAutoApprovedCount
+  getQueueWarnings, listAutoApprovedEntries, getAutoApprovedCount,
+  clearAutoApprovedEntries
 } from '../../lib/db.js';
 import { executeQueueEntry } from '../../lib/queueExecutor.js';
 import { notifyAgentQueueStatus } from '../../lib/agentNotifier.js';
@@ -156,15 +157,20 @@ router.post('/clear', (req, res) => {
   const wantsJson = req.headers.accept?.includes('application/json');
   const { status } = req.body;
 
-  const allowedStatuses = ['completed', 'failed', 'rejected', 'withdrawn', 'all'];
+  const allowedStatuses = ['completed', 'failed', 'rejected', 'withdrawn', 'auto-approved', 'all'];
   if (status && !allowedStatuses.includes(status)) {
     return wantsJson
       ? res.status(400).json({ error: 'Invalid status' })
       : res.status(400).send('Invalid status');
   }
 
-  clearQueueByStatus(status || 'all');
+  if (status === 'auto-approved') {
+    clearAutoApprovedEntries();
+  } else {
+    clearQueueByStatus(status || 'all');
+  }
   const counts = getQueueCounts();
+  counts['auto-approved'] = getAutoApprovedCount();
   emitCountUpdate();
 
   if (wantsJson) {

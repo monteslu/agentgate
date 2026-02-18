@@ -16,6 +16,9 @@
     <% if (filter === 'rejected' && counts.rejected > 0) { %>
       <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('rejected')">Clear Rejected</button>
     <% } %>
+    <% if (filter === 'auto-approved' && counts['auto-approved'] > 0) { %>
+      <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('auto-approved')">Clear Auto-Approved</button>
+    <% } %>
     <% if (filter === 'all' && (counts.completed > 0 || counts.failed > 0 || counts.rejected > 0)) { %>
       <button type="button" class="btn-sm btn-danger" onclick="clearByStatus('all')">Clear All Non-Pending</button>
     <% } %>
@@ -312,11 +315,12 @@
       const data = await res.json();
       if (data.success) {
         const entries = document.querySelectorAll('.queue-entry');
+        const removeAll = status === 'auto-approved';
         const targetStatuses = status === 'all'
           ? ['completed', 'failed', 'rejected', 'withdrawn']
           : [status];
         entries.forEach(el => {
-          if (targetStatuses.includes(el.dataset.status)) {
+          if (removeAll || targetStatuses.includes(el.dataset.status)) {
             el.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
             el.style.opacity = '0';
             el.style.transform = 'translateX(20px)';
