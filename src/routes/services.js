@@ -3,8 +3,6 @@ import {
   listServicesWithAccess,
   checkServiceAccess,
   checkBypassAuth,
-  addPathBlock,
-  removePathBlock,
   getPathBlocks
 } from '../lib/db.js';
 
@@ -60,8 +58,8 @@ router.get('/:service/:account/access', (req, res) => {
   });
 });
 
-// NOTE: Configuration endpoints (PUT access mode, POST agents, PUT bypass) 
-// have been REMOVED from the API for security.
+// NOTE: Configuration endpoints (PUT access mode, POST agents, PUT bypass, path blocks)
+// have been REMOVED from the agent-facing API for security.
 // All access configuration must be done through the Admin UI at /ui/access
 // which requires admin authentication.
 
@@ -87,41 +85,20 @@ router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
   });
 });
 
-// ============================================
-// Path Block Management
-// ============================================
-
-// GET /api/services/:service/:account/path-blocks?agent=X
+// GET /api/services/:service/:account/path-blocks — agents can view their own blocks (read-only)
+// Restricted to own agent name only
 router.get('/:service/:account/path-blocks', (req, res) => {
   const { service, account } = req.params;
-  const agent = req.query.agent;
-  if (!agent) {
-    return res.status(400).json({ error: 'agent query parameter is required' });
+  const callingAgent = req.apiKeyInfo?.name;
+  const agent = req.query.agent || callingAgent;
+
+  // Agents can only view their own path blocks
+  if (callingAgent && agent.toLowerCase() !== callingAgent.toLowerCase()) {
+    return res.status(403).json({ error: 'You can only view your own path blocks' });
   }
+
   const blocks = getPathBlocks(service, account, agent);
   res.json({ blocks });
-});
-
-// POST /api/services/:service/:account/path-blocks
-router.post('/:service/:account/path-blocks', (req, res) => {
-  const { service, account } = req.params;
-  const { agent, method, pathPattern } = req.body;
-  if (!agent || !method || !pathPattern) {
-    return res.status(400).json({ error: 'agent, method, and pathPattern are required' });
-  }
-  addPathBlock(service, account, agent, method, pathPattern);
-  res.json({ ok: true });
-});
-
-// DELETE /api/services/:service/:account/path-blocks
-router.delete('/:service/:account/path-blocks', (req, res) => {
-  const { service, account } = req.params;
-  const { agent, method, pathPattern } = req.body;
-  if (!agent || !method || !pathPattern) {
-    return res.status(400).json({ error: 'agent, method, and pathPattern are required' });
-  }
-  removePathBlock(service, account, agent, method, pathPattern);
-  res.json({ ok: true });
 });
 
 export default router;
