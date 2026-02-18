@@ -7,20 +7,7 @@
  * This is where the OpenClaw channel plugin connects.
  * Humans connect via /channel/<id>.
  * 
- * Protocol:
- *   Server: { type: "connected", channelId, humans: [...] }  // On connect
- *   Server: { type: "human_connected", connId }
- *   Server: { type: "human_disconnected", connId }
- *   Server: { type: "message", from: "human", text, id, timestamp, connId }
- *   Server: { type: "wake", text, id, mode?, connId }       // Wake event from human
- *   Server: { type: "agent", message, id, connId, ...opts }  // Agent turn from human
- *   
- *   Agent: { type: "message", text, id?, connId? }  // Response to human
- *   Agent: { type: "ack", id, status, error? }      // Ack for wake/agent
- *   Agent: { type: "chunk", text, id, connId? }     // Streaming
- *   Agent: { type: "done", id, text?, connId? }     // Stream complete
- *   Agent: { type: "typing", connId? }              // Typing indicator
- *   Agent: { type: "error", error, messageId?, connId? }
+ * See docs/channel-ws-protocol.md for the full protocol specification.
  */
 
 import crypto from 'crypto';
@@ -38,6 +25,11 @@ import {
   createPongFrame,
   WS_OPCODES 
 } from '../lib/ws-utils.js';
+import {
+  ENVELOPE_TYPES,
+  validateEnvelope,
+  createError as createErrorEnvelope,
+} from '../lib/channelProtocol.js';
 
 // Configuration
 const PING_INTERVAL_MS = 30000;
@@ -108,105 +100,141 @@ function completeHandshake(req, socket) {
 }
 
 /**
- * Handle agent message
+ * Handle agent message — validates envelope and routes by type.
  */
 function handleAgentMessage(channelId, parsed, socket, rateLimit) {
   if (!checkRateLimit(rateLimit)) {
-    sendToSocket(socket, { type: 'error', error: 'Rate limited' });
+    sendToSocket(socket, createErrorEnvelope('Rate limited'));
+    return;
+  }
+
+  // Validate envelope structure
+  const validation = validateEnvelope(parsed);
+  if (!validation.valid) {
+    sendToSocket(socket, createErrorEnvelope(validation.error));
     return;
   }
 
   const bridge = getChannelBridge(channelId);
 
-  if (parsed.type === 'message') {
-    const msgId = parsed.id || `msg_${nanoid(12)}`;
-    const timestamp = parsed.timestamp || new Date().toISOString();
+  switch (parsed.type) {
+    case ENVELOPE_TYPES.MESSAGE: {
+      const msgId = parsed.id || `msg_${nanoid(12)}`;
+      const timestamp = parsed.timestamp || new Date().toISOString();
 
-    // Save to database
-    saveChatMessage({
-      channelId,
-      messageId: msgId,
-      from: 'agent',
-      text: parsed.text,
-      timestamp,
-      replyTo: parsed.replyTo
-    });
-
-    channelLog(channelId, 'agent_message', `msgId=${msgId}`);
-
-    const msg = {
-      type: 'message',
-      from: 'agent',
-      text: parsed.text,
-      id: msgId,
-      timestamp
-    };
-
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
-    }
-
-  } else if (parsed.type === 'chunk') {
-    const msg = { type: 'chunk', text: parsed.text, id: parsed.id };
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
-    }
-
-  } else if (parsed.type === 'done') {
-    const timestamp = new Date().toISOString();
-
-    if (parsed.text) {
+      // Save to database
       saveChatMessage({
         channelId,
-        messageId: parsed.id,
+        messageId: msgId,
         from: 'agent',
         text: parsed.text,
         timestamp,
         replyTo: parsed.replyTo
       });
+
+      channelLog(channelId, 'agent_message', `msgId=${msgId}`);
+
+      const msg = {
+        type: ENVELOPE_TYPES.MESSAGE,
+        from: 'agent',
+        text: parsed.text,
+        id: msgId,
+        timestamp
+      };
+
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
     }
 
-    const msg = { type: 'done', id: parsed.id, timestamp };
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
+    case ENVELOPE_TYPES.CHUNK: {
+      const msg = { type: ENVELOPE_TYPES.CHUNK, text: parsed.text, id: parsed.id };
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
     }
 
-  } else if (parsed.type === 'typing') {
-    const msg = { type: 'typing' };
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
+    case ENVELOPE_TYPES.DONE: {
+      const timestamp = new Date().toISOString();
+
+      if (parsed.text) {
+        saveChatMessage({
+          channelId,
+          messageId: parsed.id,
+          from: 'agent',
+          text: parsed.text,
+          timestamp,
+          replyTo: parsed.replyTo
+        });
+      }
+
+      const msg = { type: ENVELOPE_TYPES.DONE, id: parsed.id, timestamp };
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
     }
 
-  } else if (parsed.type === 'error') {
-    const msg = { type: 'error', error: parsed.error, messageId: parsed.messageId };
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
+    case ENVELOPE_TYPES.TYPING: {
+      const msg = { type: ENVELOPE_TYPES.TYPING };
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
     }
 
-  } else if (parsed.type === 'ack') {
-    // Acknowledgment for wake/agent messages — forward to the originating human
-    channelLog(channelId, 'agent_ack', `id=${parsed.id} status=${parsed.status}`);
-    const msg = { type: 'ack', id: parsed.id, status: parsed.status };
-    if (parsed.error) msg.error = parsed.error;
-
-    if (parsed.connId) {
-      bridge.sendToHuman(parsed.connId, msg);
-    } else {
-      bridge.broadcastToHumans(msg);
+    case ENVELOPE_TYPES.ERROR: {
+      const msg = { type: ENVELOPE_TYPES.ERROR, error: parsed.error, messageId: parsed.messageId };
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
     }
 
-  } else if (parsed.type === 'ping') {
-    sendToSocket(socket, { type: 'pong' });
+    case ENVELOPE_TYPES.ACK: {
+      channelLog(channelId, 'agent_ack', `id=${parsed.id} status=${parsed.status}`);
+      const msg = { type: ENVELOPE_TYPES.ACK, id: parsed.id, status: parsed.status };
+      if (parsed.error) msg.error = parsed.error;
+
+      if (parsed.connId) {
+        bridge.sendToHuman(parsed.connId, msg);
+      } else {
+        bridge.broadcastToHumans(msg);
+      }
+      break;
+    }
+
+    case ENVELOPE_TYPES.PING: {
+      sendToSocket(socket, { type: ENVELOPE_TYPES.PONG });
+      break;
+    }
+
+    case ENVELOPE_TYPES.PONG: {
+      // Received pong from plugin — no action needed (keepalive confirmed)
+      break;
+    }
+
+    default: {
+      // reply type from issue spec — treat as message for backward compatibility
+      if (parsed.type === ENVELOPE_TYPES.REPLY) {
+        handleAgentMessage(channelId, { ...parsed, type: ENVELOPE_TYPES.MESSAGE }, socket, rateLimit);
+      } else {
+        sendToSocket(socket, createErrorEnvelope(`Unhandled envelope type: ${parsed.type}`, parsed.id));
+      }
+      break;
+    }
   }
 }
 
@@ -220,7 +248,7 @@ function setupAgentConnection(channel, socket, agentName) {
 
   if (!bridge.setAgent(socket)) {
     channelLog(channelId, 'agent_rejected', 'already connected');
-    sendToSocket(socket, { type: 'error', error: 'Agent already connected to this channel' });
+    sendToSocket(socket, createErrorEnvelope('Agent already connected to this channel'));
     socket.end();
     return;
   }
@@ -228,8 +256,10 @@ function setupAgentConnection(channel, socket, agentName) {
   channelLog(channelId, 'agent_connected', `agent=${agentName}`);
   markChannelConnected(channel.id);
 
+  // bridge.setAgent() already sends the `connected` envelope via the bridge
+
   const pingInterval = setInterval(() => {
-    if (socket.writable) sendToSocket(socket, { type: 'ping' });
+    if (socket.writable) sendToSocket(socket, { type: ENVELOPE_TYPES.PING });
   }, PING_INTERVAL_MS);
 
   let buffer = Buffer.alloc(0);
@@ -253,7 +283,7 @@ function setupAgentConnection(channel, socket, agentName) {
         const parsed = JSON.parse(frame.payload.toString('utf8'));
         handleAgentMessage(channelId, parsed, socket, rateLimit);
       } catch {
-        sendToSocket(socket, { type: 'error', error: 'Invalid message format' });
+        sendToSocket(socket, createErrorEnvelope('Invalid message format'));
       }
     }
   });
