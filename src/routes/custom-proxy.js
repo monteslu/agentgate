@@ -1,24 +1,10 @@
 // Dynamic proxy for custom services (#249)
 // Loads enabled custom services and proxies requests to upstream APIs
 import { Router } from 'express';
-import { getEnabledServices, injectAuth } from '../services/customServiceService.js';
+import { injectAuth } from '../services/customServiceService.js';
 import { getCustomServiceAccount, getCustomService } from '../lib/db.js';
 
 const router = Router();
-
-// Cache of loaded services (refreshed on CRUD operations)
-let serviceCache = null;
-
-export function refreshCustomServiceCache() {
-  serviceCache = null;
-}
-
-function loadServices() {
-  if (!serviceCache) {
-    serviceCache = getEnabledServices();
-  }
-  return serviceCache;
-}
 
 /**
  * Match a request path against an endpoint definition path pattern
