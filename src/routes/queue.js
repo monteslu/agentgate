@@ -31,8 +31,8 @@ router.post('/:service/:accountName/submit', async (req, res) => {
       });
     }
 
-    // Normal queued response
-    res.status(201).json({
+    // Queued response - 202 Accepted (awaiting approval)
+    res.status(202).json({
       id: result.id,
       status: result.status,
       message: result.message
