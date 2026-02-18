@@ -31,7 +31,7 @@ router.get('/', (req, res) => {
   const filter = req.query.filter || 'pending';
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const offset = (page - 1) * PAGE_SIZE;
-  const pagination = { limit: PAGE_SIZE + 1, offset };
+  const pagination = { limit: PAGE_SIZE + 1, offset, light: true };
 
   let entries;
   if (filter === 'all') {
@@ -63,6 +63,16 @@ router.get('/', (req, res) => {
     formatDate,
     renderAvatar,
     getQueueWarnings
+  });
+});
+
+// Lazy-load full details for a queue entry
+router.get('/:id/details', (req, res) => {
+  const entry = getQueueEntry(req.params.id);
+  if (!entry) return res.status(404).json({ error: 'Not found' });
+  res.json({
+    requests: entry.requests,
+    results: entry.results
   });
 });
 

@@ -35,7 +35,7 @@
 <% } else { %>
   <% entries.forEach(function(entry) { %>
     <%
-      var requestsSummary = entry.requests.map(function(r) {
+      var requestsSummary = entry.requestSummary.map(function(r) {
         return '<div class="request-item"><code>' + r.method + '</code> <span>' + escapeHtml(r.path) + '</span></div>';
       }).join('');
 
@@ -68,15 +68,15 @@
         <%- requestsSummary %>
       </div>
 
-      <details class="mt-12">
-        <summary>Request Details</summary>
-        <pre class="meta-line"><%- escapeHtml(JSON.stringify(entry.requests, null, 2)) %></pre>
+      <details class="mt-12 lazy-details" data-entry-id="<%= entry.id %>" data-field="requests">
+        <summary>Request Details (<%= entry.requestSummary.length %>)</summary>
+        <div class="lazy-content"><span class="loading-text">Loading...</span></div>
       </details>
 
-      <% if (entry.results) { %>
-        <details class="mt-12">
-          <summary>Results (<%= entry.results.length %>)</summary>
-          <pre class="meta-line"><%- escapeHtml(JSON.stringify(entry.results, null, 2)) %></pre>
+      <% if (entry.resultCount > 0) { %>
+        <details class="mt-12 lazy-details" data-entry-id="<%= entry.id %>" data-field="results">
+          <summary>Results (<%= entry.resultCount %>)</summary>
+          <div class="lazy-content"><span class="loading-text">Loading...</span></div>
         </details>
       <% } %>
 
@@ -169,6 +169,32 @@
 </div>
 
 <script>
+  // Lazy-load details on expand
+  const detailsCache = {};
+  document.addEventListener('toggle', async function(e) {
+    const details = e.target.closest('.lazy-details');
+    if (!details || !details.open) return;
+    const entryId = details.dataset.entryId;
+    const field = details.dataset.field;
+    const container = details.querySelector('.lazy-content');
+    if (container.dataset.loaded) return;
+
+    try {
+      if (!detailsCache[entryId]) {
+        const res = await fetch('/ui/queue/' + entryId + '/details', {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (!res.ok) throw new Error('Failed to load');
+        detailsCache[entryId] = await res.json();
+      }
+      const data = detailsCache[entryId][field];
+      container.innerHTML = '<pre class="meta-line">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
+      container.dataset.loaded = '1';
+    } catch (err) {
+      container.innerHTML = '<p class="error">Failed to load details</p>';
+    }
+  }, true);
+
   function escapeHtml(str) {
     if (typeof str !== 'string') str = JSON.stringify(str, null, 2);
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
