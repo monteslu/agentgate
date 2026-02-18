@@ -154,6 +154,17 @@
       </div>
     </div>
   <% }); %>
+
+  <div class="pagination">
+    <% if (page > 1) { %>
+      <a href="/ui/queue?filter=<%= filter %>&page=<%= page - 1 %>" class="btn-sm">&laquo; Previous</a>
+    <% } %>
+    <span class="page-info">Page <%= page %></span>
+    <% if (hasNext) { %>
+      <a href="/ui/queue?filter=<%= filter %>&page=<%= page + 1 %>" class="btn-sm">Next &raquo;</a>
+    <% } %>
+  </div>
+
 <% } %>
 </div>
 

@@ -25,16 +25,26 @@ function validateReactionEmoji(emoji) {
 }
 
 // Write Queue Management
+const PAGE_SIZE = 25;
+
 router.get('/', (req, res) => {
   const filter = req.query.filter || 'pending';
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+  const pagination = { limit: PAGE_SIZE + 1, offset };
+
   let entries;
   if (filter === 'all') {
-    entries = listQueueEntries();
+    entries = listQueueEntries(undefined, pagination);
   } else if (filter === 'auto-approved') {
-    entries = listAutoApprovedEntries();
+    entries = listAutoApprovedEntries(pagination);
   } else {
-    entries = listQueueEntries(filter);
+    entries = listQueueEntries(filter, pagination);
   }
+
+  const hasNext = entries.length > PAGE_SIZE;
+  if (hasNext) entries = entries.slice(0, PAGE_SIZE);
+
   const counts = getQueueCounts();
   counts['auto-approved'] = getAutoApprovedCount();
   renderPage(res, 'pages/queue', {
@@ -43,6 +53,8 @@ router.get('/', (req, res) => {
     entries,
     filter,
     counts,
+    page,
+    hasNext,
     allEmojis: ALL_EMOJIS,
     escapeHtml,
     renderMarkdownLinks,

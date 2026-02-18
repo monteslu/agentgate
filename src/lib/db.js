@@ -1012,12 +1012,20 @@ export function getQueueEntry(id) {
   };
 }
 
-export function listQueueEntries(status) {
+export function listQueueEntries(status, { limit, offset } = {}) {
   let rows;
   if (status) {
-    rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC').all(status);
+    if (limit !== null) {
+      rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(status, limit, offset || 0);
+    } else {
+      rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC').all(status);
+    }
   } else {
-    rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC').all();
+    if (limit !== null) {
+      rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
+    } else {
+      rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC').all();
+    }
   }
   return rows.map(row => ({
     ...row,
@@ -1028,8 +1036,13 @@ export function listQueueEntries(status) {
   }));
 }
 
-export function listAutoApprovedEntries() {
-  const rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC').all();
+export function listAutoApprovedEntries({ limit, offset } = {}) {
+  let rows;
+  if (limit !== null) {
+    rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
+  } else {
+    rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC').all();
+  }
   return rows.map(row => ({
     ...row,
     requests: JSON.parse(row.requests),
