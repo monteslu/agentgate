@@ -18,6 +18,7 @@ import jiraRoutes from './routes/jira.js';
 import fitbitRoutes from './routes/fitbit.js';
 import braveRoutes from './routes/brave.js';
 import googleSearchRoutes from './routes/google-search.js';
+import homeassistantRoutes from './routes/homeassistant.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
@@ -78,6 +79,7 @@ app.use('/api/jira', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('jira'), ji
 app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('fitbit'), fitbitRoutes);
 app.use('/api/brave', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('brave'), braveRoutes);
 app.use('/api/google_search', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('google_search'), googleSearchRoutes);
+app.use('/api/homeassistant', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('homeassistant'), homeassistantRoutes);
 
 // Service access management - admin API (requires auth)
 app.use('/api/services', apiKeyAuth, servicesRoutes);

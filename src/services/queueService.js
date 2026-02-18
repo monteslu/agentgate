@@ -19,7 +19,7 @@ import { executeQueueEntry } from '../lib/queueExecutor.js';
 import { notifyAgentQueueWarning } from '../lib/agentNotifier.js';
 
 // Valid services that support write operations
-const VALID_SERVICES = ['github', 'bluesky', 'reddit', 'mastodon', 'calendar', 'google_calendar', 'youtube', 'linkedin', 'jira', 'fitbit'];
+const VALID_SERVICES = ['github', 'bluesky', 'reddit', 'mastodon', 'calendar', 'google_calendar', 'youtube', 'linkedin', 'jira', 'fitbit', 'homeassistant'];
 
 // Valid HTTP methods for write operations
 const VALID_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];

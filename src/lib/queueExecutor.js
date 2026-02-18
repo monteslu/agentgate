@@ -13,7 +13,8 @@ const SERVICE_URLS = {
   youtube: 'https://www.googleapis.com/youtube/v3',
   linkedin: 'https://api.linkedin.com/v2',
   jira: null, // Dynamic: https://{domain}/rest/api/3
-  fitbit: 'https://api.fitbit.com'
+  fitbit: 'https://api.fitbit.com',
+  homeassistant: null // Dynamic: {host}/api
 };
 
 // Get access token for a service, refreshing if needed
@@ -50,6 +51,9 @@ async function getAccessToken(service, accountName) {
 
   case 'fitbit':
     return await getOAuthToken(accountName, creds, 'fitbit', refreshFitbitToken);
+
+  case 'homeassistant':
+    return creds.token || null;
 
   default:
     return null;
@@ -236,6 +240,10 @@ function buildUrl(service, accountName, path) {
   }
   if (service === 'jira' && creds?.domain) {
     return `https://${creds.domain}/rest/api/3/${path.replace(/^\//, '')}`;
+  }
+  if (service === 'homeassistant' && creds?.host) {
+    const host = creds.host.replace(/\/+$/, '');
+    return `${host}/api/${path.replace(/^\//, '')}`;
   }
 
   const baseUrl = SERVICE_URLS[service];

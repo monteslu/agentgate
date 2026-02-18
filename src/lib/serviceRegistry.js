@@ -9,6 +9,7 @@ import { serviceInfo as jiraInfo, readService as jiraRead } from '../routes/jira
 import { serviceInfo as fitbitInfo, readService as fitbitRead } from '../routes/fitbit.js';
 import { serviceInfo as braveInfo, readService as braveRead } from '../routes/brave.js';
 import { serviceInfo as googleSearchInfo, readService as googleSearchRead } from '../routes/google-search.js';
+import { serviceInfo as homeassistantInfo, readService as homeassistantRead } from '../routes/homeassistant.js';
 
 // Aggregate service metadata from all routes
 const SERVICE_REGISTRY = {
@@ -22,7 +23,8 @@ const SERVICE_REGISTRY = {
   [jiraInfo.key]: jiraInfo,
   [fitbitInfo.key]: fitbitInfo,
   [braveInfo.key]: braveInfo,
-  [googleSearchInfo.key]: googleSearchInfo
+  [googleSearchInfo.key]: googleSearchInfo,
+  [homeassistantInfo.key]: homeassistantInfo
 };
 
 /**
@@ -47,7 +49,8 @@ export const SERVICE_READERS = {
   [jiraInfo.key]: jiraRead,
   [fitbitInfo.key]: fitbitRead,
   [braveInfo.key]: braveRead,
-  [googleSearchInfo.key]: googleSearchRead
+  [googleSearchInfo.key]: googleSearchRead,
+  [homeassistantInfo.key]: homeassistantRead
 };
 
 // Category mapping for MCP tool registration
@@ -55,7 +58,8 @@ export const SERVICE_CATEGORIES = {
   search:   { name: 'Search',   description: 'Web, news, and image search', services: ['brave', 'google_search'], hasWrite: false },
   social:   { name: 'Social',   description: 'Social networks — posts, profiles, timelines', services: ['bluesky', 'mastodon', 'reddit', 'linkedin'], hasWrite: true },
   code:     { name: 'Code',     description: 'Code repos, issues, PRs, projects', services: ['github', 'jira'], hasWrite: true },
-  personal: { name: 'Personal', description: 'Health, calendar, and media', services: ['fitbit', 'calendar', 'google_calendar', 'youtube'], hasWrite: true }
+  personal: { name: 'Personal', description: 'Health, calendar, and media', services: ['fitbit', 'calendar', 'google_calendar', 'youtube'], hasWrite: true },
+  iot:      { name: 'IoT',      description: 'Smart home and IoT devices', services: ['homeassistant'], hasWrite: true }
 };
 
 /**
