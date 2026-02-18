@@ -6,7 +6,7 @@ import { getCookieSecret } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
-import { apiKeyAuth, readOnlyEnforce, serviceAccessCheck } from './lib/middleware.js';
+import { apiKeyAuth, readOnlyEnforce, serviceAccessCheck, pathAccessCheck } from './lib/middleware.js';
 import githubRoutes from './routes/github.js';
 import blueskyRoutes from './routes/bluesky.js';
 import redditRoutes from './routes/reddit.js';
@@ -67,17 +67,17 @@ app.get('/health', (_req, res) => {
 
 // API routes - require auth, read-only, and service access check
 // Pattern: /api/{service}/{accountName}/...
-app.use('/api/github', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('github'), githubRoutes);
-app.use('/api/bluesky', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('bluesky'), blueskyRoutes);
-app.use('/api/reddit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('reddit'), redditRoutes);
-app.use('/api/calendar', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('calendar'), calendarRoutes);
-app.use('/api/mastodon', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('mastodon'), mastodonRoutes);
-app.use('/api/linkedin', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('linkedin'), linkedinRoutes);
-app.use('/api/youtube', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('youtube'), youtubeRoutes);
-app.use('/api/jira', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('jira'), jiraRoutes);
-app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('fitbit'), fitbitRoutes);
-app.use('/api/brave', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('brave'), braveRoutes);
-app.use('/api/google_search', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('google_search'), googleSearchRoutes);
+app.use('/api/github', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('github'), pathAccessCheck('github'), githubRoutes);
+app.use('/api/bluesky', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('bluesky'), pathAccessCheck('bluesky'), blueskyRoutes);
+app.use('/api/reddit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('reddit'), pathAccessCheck('reddit'), redditRoutes);
+app.use('/api/calendar', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('calendar'), pathAccessCheck('calendar'), calendarRoutes);
+app.use('/api/mastodon', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('mastodon'), pathAccessCheck('mastodon'), mastodonRoutes);
+app.use('/api/linkedin', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('linkedin'), pathAccessCheck('linkedin'), linkedinRoutes);
+app.use('/api/youtube', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('youtube'), pathAccessCheck('youtube'), youtubeRoutes);
+app.use('/api/jira', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('jira'), pathAccessCheck('jira'), jiraRoutes);
+app.use('/api/fitbit', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('fitbit'), pathAccessCheck('fitbit'), fitbitRoutes);
+app.use('/api/brave', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('brave'), pathAccessCheck('brave'), braveRoutes);
+app.use('/api/google_search', apiKeyAuth, readOnlyEnforce, serviceAccessCheck('google_search'), pathAccessCheck('google_search'), googleSearchRoutes);
 
 // Service access management - admin API (requires auth)
 app.use('/api/services', apiKeyAuth, servicesRoutes);

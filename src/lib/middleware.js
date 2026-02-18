@@ -1,4 +1,4 @@
-import { validateApiKey, checkServiceAccess } from './db.js';
+import { validateApiKey, checkServiceAccess, isPathBlocked } from './db.js';
 
 // API key auth middleware for /api routes
 export async function apiKeyAuth(req, res, next) {
@@ -51,6 +51,35 @@ export function serviceAccessCheck(serviceName) {
         error: `Agent '${agentName}' does not have access to service '${serviceName}/${accountName}'`,
         reason: access.reason
       });
+    }
+    next();
+  };
+}
+
+// Per-path access control middleware factory
+// Checks if the agent is blocked from accessing a specific path on this service
+export function pathAccessCheck(serviceName) {
+  return (req, res, next) => {
+    const pathSegments = req.path.split('/').filter(Boolean);
+    const accountName = pathSegments[0];
+    if (!accountName) {
+      return next();
+    }
+
+    const agentName = req.apiKeyInfo?.name;
+    if (!agentName) {
+      return next();
+    }
+
+    // The service-relative path (everything after the account name)
+    const servicePath = pathSegments.slice(1).join('/');
+    if (!servicePath) {
+      return next();
+    }
+
+    const method = req.method;
+    if (isPathBlocked(serviceName, accountName, agentName, method, servicePath)) {
+      return res.status(403).json({ error: 'Path blocked by access policy' });
     }
     next();
   };
