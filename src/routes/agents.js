@@ -198,6 +198,7 @@ router.get('/messageable', async (req, res) => {
     .filter(k => k.name.toLowerCase() !== callerName.toLowerCase())
     .map(k => ({
       name: k.name,
+      bio: k.bio || '',
       enabled: !!k.enabled
     }));
 
