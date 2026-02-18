@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { serviceInfo, readService } from '../src/routes/homeassistant.js';
+import { jest } from '@jest/globals';
 
-// Mock the db module
-vi.mock('../src/lib/db.js', () => ({
-  getAccountCredentials: vi.fn()
+jest.unstable_mockModule('../src/lib/db.js', () => ({
+  getAccountCredentials: jest.fn()
 }));
 
-import { getAccountCredentials } from '../src/lib/db.js';
+const { getAccountCredentials } = await import('../src/lib/db.js');
+const { serviceInfo, readService } = await import('../src/routes/homeassistant.js');
 
 describe('homeassistant service', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    jest.restoreAllMocks();
+    delete globalThis.fetch;
   });
 
   describe('serviceInfo', () => {
@@ -65,7 +65,7 @@ describe('homeassistant service', () => {
       ];
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -81,7 +81,6 @@ describe('homeassistant service', () => {
         last_changed: '2024-01-01T00:00:00Z',
         friendly_name: 'Living Room Light'
       });
-      // Should not include extra attributes
       expect(result.data[0].brightness).toBeUndefined();
       expect(result.data[0].context).toBeUndefined();
     });
@@ -95,7 +94,7 @@ describe('homeassistant service', () => {
       };
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -121,7 +120,7 @@ describe('homeassistant service', () => {
       ];
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -135,7 +134,7 @@ describe('homeassistant service', () => {
 
     it('should handle HA offline/errors', async () => {
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+      globalThis.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(readService('test', 'states')).rejects.toThrow('ECONNREFUSED');
     });
@@ -143,7 +142,7 @@ describe('homeassistant service', () => {
     it('should handle binary camera proxy responses', async () => {
       const mockBuffer = new ArrayBuffer(8);
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'image/jpeg' },
@@ -157,7 +156,7 @@ describe('homeassistant service', () => {
 
     it('should strip trailing slashes from host', async () => {
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123/', token: 'test-token' });
-      globalThis.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = jest.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
