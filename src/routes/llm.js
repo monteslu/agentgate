@@ -1,6 +1,7 @@
 // LLM Proxy — transparent OpenAI-compatible proxy with credential injection
 import { Router } from 'express';
 import { getLlmProvider, getAgentLlmConfig, listAgentModels } from '../lib/db.js';
+import { translateRequest, translateResponse, translateStream } from '../lib/anthropicTranslator.js';
 
 const router = Router();
 
@@ -73,14 +74,21 @@ router.post('/v1/chat/completions', async (req, res) => {
     }
 
     // Build upstream request
+    const isAnthropic = provider.provider_type === 'anthropic';
     const baseUrl = provider.base_url || PROVIDER_DEFAULTS[provider.provider_type] || provider.base_url;
-    const upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+    const endpoint = isAnthropic ? '/v1/messages' : '/v1/chat/completions';
+    const upstreamUrl = `${baseUrl.replace(/\/+$/, '')}${endpoint}`;
     const upstreamHeaders = buildUpstreamHeaders(provider, req.headers);
 
     // Override model if agent has a specific model assigned
-    const body = { ...req.body };
+    let body = { ...req.body };
     if (config.model_id) {
       body.model = config.model_id;
+    }
+
+    // Translate request for Anthropic providers
+    if (isAnthropic) {
+      body = translateRequest(body);
     }
 
     const isStreaming = body.stream === true;
@@ -105,34 +113,53 @@ router.post('/v1/chat/completions', async (req, res) => {
       }
 
       if (isStreaming) {
-        // Pipe SSE stream directly
+        // Pipe SSE stream
         res.set('Content-Type', 'text/event-stream');
         res.set('Cache-Control', 'no-cache');
         res.set('Connection', 'keep-alive');
 
-        const reader = upstreamRes.body.getReader();
-        const decoder = new TextDecoder();
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            res.write(chunk);
-          }
-        } catch (streamErr) {
-          // Client disconnected or stream error
-          if (streamErr.name !== 'AbortError') {
-            console.error(`[llm-proxy] Stream error for ${agentName}:`, streamErr.message);
-          }
-        } finally {
+        if (isAnthropic) {
+          // Translate Anthropic SSE → OpenAI SSE
+          await translateStream(upstreamRes, res);
           res.end();
+        } else {
+          // Pipe OpenAI-compatible stream directly
+          const reader = upstreamRes.body.getReader();
+          const decoder = new TextDecoder();
+
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              const chunk = decoder.decode(value, { stream: true });
+              res.write(chunk);
+            }
+          } catch (streamErr) {
+            if (streamErr.name !== 'AbortError') {
+              console.error(`[llm-proxy] Stream error for ${agentName}:`, streamErr.message);
+            }
+          } finally {
+            res.end();
+          }
         }
       } else {
         // Forward JSON response
         const responseBody = await upstreamRes.text();
         res.set('Content-Type', 'application/json');
-        res.send(responseBody);
+
+        if (isAnthropic) {
+          // Translate Anthropic JSON → OpenAI format
+          try {
+            const anthropicJson = JSON.parse(responseBody);
+            const openaiJson = translateResponse(anthropicJson);
+            res.json(openaiJson);
+          } catch {
+            // If parsing fails, forward as-is
+            res.send(responseBody);
+          }
+        } else {
+          res.send(responseBody);
+        }
       }
     } finally {
       clearTimeout(timer);
