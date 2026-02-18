@@ -19,6 +19,22 @@ const router = Router();
 
 const MAX_MESSAGE_LENGTH = 10 * 1024; // 10KB limit
 
+// GET /api/agents - List all agents with bios
+router.get('/', async (req, res) => {
+  const apiKeys = listApiKeys();
+
+  const agents = apiKeys.map(k => ({
+    name: k.name,
+    bio: k.bio || '',
+    enabled: !!k.enabled
+  }));
+
+  return res.json({
+    via: 'agentgate',
+    agents
+  });
+});
+
 // POST /api/agents/message - Send a message to another agent
 router.post('/message', async (req, res) => {
   const { to_agent, to, message, reply_to } = req.body;
