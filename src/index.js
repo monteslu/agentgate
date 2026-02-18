@@ -31,9 +31,8 @@ import { setupHumanChannelProxy, setAdminTokenValidator } from './routes/channel
 import { setupAgentChannelProxy } from './routes/channel-agent.js';
 import { validateAdminChatToken } from './routes/ui/keys.js';
 import llmRoutes from './routes/llm.js';
-import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
-import customServicesUiRoutes from './routes/ui/custom-services.js';
 import customProxyRoutes from './routes/custom-proxy.js';
+import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -102,6 +101,9 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 // LLM proxy - require auth, no read-only enforcement (POST for completions)
 app.use('/api/llm', apiKeyAuth, llmRoutes);
 
+// Custom service proxy - require auth and read-only enforcement
+app.use('/api/custom', apiKeyAuth, readOnlyEnforce, customProxyRoutes);
+
 // MCP server - Streamable HTTP transport (requires auth)
 // POST handles initialization + messages, GET opens optional SSE stream, DELETE terminates session
 app.post('/mcp', apiKeyAuth, createMCPPostHandler());
@@ -120,12 +122,6 @@ app.use('/api/skill', (req, res, next) => {
 
 // UI routes - no API key needed (local admin access)
 app.use('/ui', uiRoutes);
-
-// Custom services admin API (under UI auth)
-app.use('/ui/custom-services', customServicesUiRoutes);
-
-// Custom service proxy (agent-facing, requires API key auth)
-app.use('/api/custom', apiKeyAuth, readOnlyEnforce, customProxyRoutes);
 
 // Webhook routes - no API key needed (uses signature verification instead)
 app.use('/webhooks', webhooksRoutes);
