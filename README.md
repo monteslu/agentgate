@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  API gateway for AI agents to access your personal data with human-in-the-loop write approval.
+  Open-source, self-hosted API gateway for AI agents to access external services with human-in-the-loop write approval.
 </p>
 
 <p align="center">
@@ -46,13 +46,20 @@ GitHub, Bluesky, Mastodon, Reddit, Google Calendar, YouTube, LinkedIn, Jira, Fit
 All writes require human approval before execution. Agents submit requests with a comment explaining why, you approve or reject in the UI. [Details →](docs/write-queue.md)
 
 ### Skills
-Generate a skill file for [OpenClaw](https://openclaw.ai) or [ClawdBot](https://clawdbot.com) with one curl. Drop it in your skills folder and your agent has secure access to all your services. [Details →](docs/skills.md)
+Install the agentgate skill pack via [ClawHub](https://clawhub.ai) for [OpenClaw](https://openclaw.ai) or [ClawdBot](https://clawdbot.com). Multiple focused skill files are generated per service category so agents only load what's relevant to the task at hand. [Details →](docs/skills.md)
 
 ### MCP Server
-Works with Claude Code and other MCP clients. Your agent gets tools for services, queue, messaging, and mementos without seeing your credentials. [Details →](docs/mcp.md)
+Works with Claude Code and other MCP clients. Add the server with one command:
+
+```bash
+claude mcp add --transport http agentgate https://your-server.com/mcp \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+Your agent gets tools for services, queue, messaging, and mementos without seeing your credentials. [Details →](docs/mcp.md)
 
 ### Agent Messaging
-Agents can message each other for multi-agent coordination. Run in supervised mode (you approve messages) or open mode (instant delivery). [Details →](docs/messaging.md)
+Agents can message each other for multi-agent coordination. Configure messaging mode: off, supervised (you approve messages), or open (instant delivery). [Details →](docs/messaging.md)
 
 ### Mementos
 Persistent memory storage with keyword tagging. Agents can save context and retrieve it later across sessions. [Details →](docs/memento.md)
@@ -61,18 +68,18 @@ Persistent memory storage with keyword tagging. Agents can save context and retr
 Control which agents can access which services. Allowlist, denylist, or allow all. [Details →](docs/access-control.md)
 
 ### Webhooks
-Get notified when requests are approved or completed. Works with OpenClaw's webhook system. [Details →](docs/webhooks.md)
+Get notified when requests are approved or completed. Also supports receiving GitHub webhook events and forwarding them to agents. Works with OpenClaw's webhook system. [Details →](docs/webhooks.md)
 
 ## Security
 
+- Agents never see your actual credentials — all API calls are proxied through agentgate
 - Writes require human approval (or explicit bypass for trusted agents)
 - DMs blocked on social services
-- Agents never see your actual credentials
 - **Run on a separate machine from your agents** - if an agent has local filesystem access, it could read the database directly
 
 ## Self-Hosting
 
-Works with systemd, Docker, PM2, or any Node.js host. Supports hsync and Cloudflare tunnels for remote access.
+Open-source and self-hosted — you control the data, the access, and the approvals. Works with systemd, Docker, PM2, or any Node.js host. Supports hsync and Cloudflare tunnels for remote access.
 
 [Self-hosting guide →](docs/self-hosting.md)
 
