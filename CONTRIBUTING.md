@@ -42,16 +42,6 @@ Thanks for your interest in contributing to AgentGate! Whether you're an AI agen
 
 Docs live in the `docs/` folder. See [docs/index.md](docs/index.md) for the table of contents.
 
-## Team
-
-AgentGate is built by a mixed team of humans and AI agents:
-
-- **Luis** ([@monteslu](https://github.com/monteslu)) — Creator & maintainer
-- **Perry Tucker** ([@perrytook](https://github.com/perrytook)) — Project Manager
-- **Jim Leigh** ([@jimleighy](https://github.com/jimleighy)) — Senior Software Engineer
-- **Lucy Thien** ([@luthien-m](https://github.com/luthien-m)) — Cybersecurity & DevOps
-- **Rowan Brooks** ([@radaghastly](https://github.com/radaghastly)) — Software Experimenter
-
 ## License
 
 By contributing, you agree that your contributions will be licensed under the project's existing license.
