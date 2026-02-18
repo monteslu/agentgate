@@ -1,3 +1,4 @@
+import { matchesPattern } from './pathMatcher.js';
 import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
@@ -281,6 +282,18 @@ db.exec(`
   -- Replay protection: unique delivery IDs per source
   CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_delivery_dedup
   ON webhook_deliveries(source, delivery_id) WHERE delivery_id IS NOT NULL;
+
+  -- Per-path access control blocks
+  CREATE TABLE IF NOT EXISTS path_blocks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service TEXT NOT NULL,
+    account TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    method TEXT NOT NULL,
+    path_pattern TEXT NOT NULL,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(service, account, agent, method, path_pattern)
+  );
 `);
 
 // ============================================
@@ -2449,3 +2462,51 @@ export function getChatMessageCount(channelId) {
   return row ? row.count : 0;
 }
 
+
+// ============================================
+// Path Blocks (Per-path access control)
+// ============================================
+
+
+export function addPathBlock(service, account, agent, method, pathPattern) {
+  db.prepare(`
+    INSERT OR IGNORE INTO path_blocks (service, account, agent, method, path_pattern)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(service, account, agent, method, pathPattern);
+}
+
+export function removePathBlock(service, account, agent, method, pathPattern) {
+  db.prepare(`
+    DELETE FROM path_blocks
+    WHERE service = ? AND account = ? AND agent = ? AND method = ? AND path_pattern = ?
+  `).run(service, account, agent, method, pathPattern);
+}
+
+export function getPathBlocks(service, account, agent) {
+  return db.prepare(`
+    SELECT * FROM path_blocks
+    WHERE service = ? AND account = ? AND agent = ?
+    ORDER BY created_at ASC
+  `).all(service, account, agent);
+}
+
+export function isPathBlocked(service, account, agent, method, path) {
+  const blocks = db.prepare(`
+    SELECT path_pattern FROM path_blocks
+    WHERE service = ? AND account = ? AND agent = ? AND method = ?
+  `).all(service, account, agent, method);
+
+  for (const block of blocks) {
+    if (matchesPattern(block.path_pattern, path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function clearPathBlocks(service, account, agent) {
+  db.prepare(`
+    DELETE FROM path_blocks
+    WHERE service = ? AND account = ? AND agent = ?
+  `).run(service, account, agent);
+}

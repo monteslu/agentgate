@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
   listServicesWithAccess,
   checkServiceAccess,
-  checkBypassAuth
+  checkBypassAuth,
+  getPathBlocks
 } from '../lib/db.js';
 
 const router = Router();
@@ -57,8 +58,8 @@ router.get('/:service/:account/access', (req, res) => {
   });
 });
 
-// NOTE: Configuration endpoints (PUT access mode, POST agents, PUT bypass) 
-// have been REMOVED from the API for security.
+// NOTE: Configuration endpoints (PUT access mode, POST agents, PUT bypass, path blocks)
+// have been REMOVED from the agent-facing API for security.
 // All access configuration must be done through the Admin UI at /ui/access
 // which requires admin authentication.
 
@@ -82,6 +83,22 @@ router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
     agent: agentName,
     bypass_auth: hasBypass
   });
+});
+
+// GET /api/services/:service/:account/path-blocks — agents can view their own blocks (read-only)
+// Restricted to own agent name only
+router.get('/:service/:account/path-blocks', (req, res) => {
+  const { service, account } = req.params;
+  const callingAgent = req.apiKeyInfo?.name;
+  const agent = req.query.agent || callingAgent;
+
+  // Agents can only view their own path blocks
+  if (callingAgent && agent.toLowerCase() !== callingAgent.toLowerCase()) {
+    return res.status(403).json({ error: 'You can only view your own path blocks' });
+  }
+
+  const blocks = getPathBlocks(service, account, agent);
+  res.json({ blocks });
 });
 
 export default router;
