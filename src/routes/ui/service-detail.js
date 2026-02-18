@@ -324,6 +324,21 @@ function getServiceFormFields(serviceName) {
         <label>Search Engine ID (CX)</label>
         <input type="text" name="cx" placeholder="Your custom search engine ID" required autocomplete="off">
         <p class="help">Set up at <a href="https://programmablesearchengine.google.com/" target="_blank">Programmable Search Engine</a></p>
+      </div>`,
+
+    homeassistant: `
+      <div class="form-group">
+        <label>Host URL</label>
+        <input type="text" name="host" placeholder="http://homeassistant.local:8123" required autocomplete="off">
+        <p class="help">The URL of your Home Assistant instance (include port if not 80/443)</p>
+      </div>
+      <div class="form-group">
+        <label>Long-Lived Access Token</label>
+        <div style="position:relative;">
+          <input type="text" name="token" id="ha-token" placeholder="eyJ..." required autocomplete="off" style="padding-right:60px;">
+          <button type="button" onclick="const i=document.getElementById('ha-token');const t=i.type==='password'?'text':'password';i.type=t;this.textContent=t==='password'?'Show':'Hide';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:0.85em;">Hide</button>
+        </div>
+        <p class="help">Create a token in Home Assistant: Profile → Security → Long-Lived Access Tokens → Create Token</p>
       </div>`
   };
 

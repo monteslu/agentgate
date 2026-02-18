@@ -53,7 +53,10 @@ export function renderCard(accounts, _baseUrl) {
           <label>Host URL</label>
           <input type="text" name="host" placeholder="http://homeassistant.local:8123" required autocomplete="off">
           <label>Long-Lived Access Token</label>
-          <input type="password" name="token" placeholder="eyJ..." required autocomplete="off">
+          <div style="position:relative;">
+            <input type="text" name="token" id="ha-token-card" placeholder="eyJ..." required autocomplete="off" style="padding-right:60px;">
+            <button type="button" onclick="const i=document.getElementById('ha-token-card');const t=i.type==='password'?'text':'password';i.type=t;this.textContent=t==='password'?'Show':'Hide';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:0.85em;">Hide</button>
+          </div>
           <button type="submit" class="btn-primary">Add Account</button>
         </form>
       </div>
