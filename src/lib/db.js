@@ -1012,44 +1012,73 @@ export function getQueueEntry(id) {
   };
 }
 
-export function listQueueEntries(status, { limit, offset } = {}) {
-  let rows;
-  if (status) {
-    if (limit !== null) {
-      rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(status, limit, offset || 0);
-    } else {
-      rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC').all(status);
-    }
-  } else {
-    if (limit !== null) {
-      rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
-    } else {
-      rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC').all();
-    }
-  }
-  return rows.map(row => ({
+const QUEUE_LIGHT_COLS = 'id, service, account_name, comment, status, rejection_reason, submitted_by, submitted_at, reviewed_at, completed_at, notified, notified_at, notify_error, auto_approved, reaction_emoji, requests';
+
+function mapQueueRow(row) {
+  return {
     ...row,
     requests: JSON.parse(row.requests),
     results: row.results ? JSON.parse(row.results) : null,
     notified: Boolean(row.notified),
     auto_approved: Boolean(row.auto_approved)
-  }));
+  };
 }
 
-export function listAutoApprovedEntries({ limit, offset } = {}) {
-  let rows;
-  if (limit !== null) {
-    rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
-  } else {
-    rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC').all();
-  }
-  return rows.map(row => ({
-    ...row,
-    requests: JSON.parse(row.requests),
-    results: row.results ? JSON.parse(row.results) : null,
+function mapQueueRowLight(row) {
+  const requests = JSON.parse(row.requests);
+  return {
+    id: row.id,
+    service: row.service,
+    account_name: row.account_name,
+    comment: row.comment,
+    status: row.status,
+    rejection_reason: row.rejection_reason,
+    submitted_by: row.submitted_by,
+    submitted_at: row.submitted_at,
+    reviewed_at: row.reviewed_at,
+    completed_at: row.completed_at,
     notified: Boolean(row.notified),
-    auto_approved: true
-  }));
+    notified_at: row.notified_at,
+    notify_error: row.notify_error,
+    auto_approved: Boolean(row.auto_approved),
+    reaction_emoji: row.reaction_emoji,
+    requestSummary: requests.map(r => ({ method: r.method, path: r.path })),
+    resultCount: row.result_count || 0
+  };
+}
+
+export function listQueueEntries(status, { limit, offset, light } = {}) {
+  const cols = light
+    ? QUEUE_LIGHT_COLS + ', (CASE WHEN results IS NOT NULL THEN json_array_length(results) ELSE 0 END) as result_count'
+    : '*';
+  let rows;
+  if (status) {
+    if (limit !== null && limit !== undefined) {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE status = ? ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(status, limit, offset || 0);
+    } else {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE status = ? ORDER BY submitted_at DESC`).all(status);
+    }
+  } else {
+    if (limit !== null && limit !== undefined) {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(limit, offset || 0);
+    } else {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue ORDER BY submitted_at DESC`).all();
+    }
+  }
+  return rows.map(light ? mapQueueRowLight : mapQueueRow);
+}
+
+export function listAutoApprovedEntries({ limit, offset, light } = {}) {
+  const cols = light
+    ? QUEUE_LIGHT_COLS + ', (CASE WHEN results IS NOT NULL THEN json_array_length(results) ELSE 0 END) as result_count'
+    : '*';
+  let rows;
+  if (limit !== null && limit !== undefined) {
+    rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(limit, offset || 0);
+  } else {
+    rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC`).all();
+  }
+  return rows.map(light ? mapQueueRowLight : mapQueueRow);
 }
 
 export function getAutoApprovedCount() {
