@@ -7,7 +7,6 @@ import {
   updateCustomService,
   deleteCustomService,
   createAccount,
-  getAccount,
   listAccounts,
   updateAccount,
   deleteAccount,
