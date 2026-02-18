@@ -18,7 +18,7 @@ const SERVICE_URLS = {
 };
 
 // Get access token for a service, refreshing if needed
-async function getAccessToken(service, accountName) {
+export async function getAccessToken(service, accountName) {
   const creds = getAccountCredentials(service, accountName);
   if (!creds) return null;
 
@@ -231,7 +231,7 @@ async function refreshFitbitToken(accountName, creds) {
 }
 
 // Build the full URL for a service request
-function buildUrl(service, accountName, path) {
+export function buildUrl(service, accountName, path) {
   const creds = getAccountCredentials(service, accountName);
 
   // Handle dynamic URLs
@@ -253,7 +253,7 @@ function buildUrl(service, accountName, path) {
 }
 
 // Build headers for a service request
-function buildHeaders(service, token, customHeaders = {}) {
+export function buildHeaders(service, token, customHeaders = {}) {
   // Start with service defaults
   const defaults = {
     'Accept': 'application/json',
