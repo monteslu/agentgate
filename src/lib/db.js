@@ -1293,9 +1293,16 @@ export function rejectAgentMessage(id, reason) {
 }
 
 // Admin: list all messages (for UI)
-export function listAgentMessages(status = null) {
+export function listAgentMessages(status = null, { limit, offset } = {}) {
+  const hasLimit = limit !== null && limit !== undefined;
   if (status) {
+    if (hasLimit) {
+      return db.prepare('SELECT * FROM agent_messages WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(status, limit, offset || 0);
+    }
     return db.prepare('SELECT * FROM agent_messages WHERE status = ? ORDER BY created_at DESC').all(status);
+  }
+  if (hasLimit) {
+    return db.prepare('SELECT * FROM agent_messages ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
   }
   return db.prepare('SELECT * FROM agent_messages ORDER BY created_at DESC').all();
 }
