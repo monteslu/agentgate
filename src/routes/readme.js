@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAccountsByService, getMessagingMode, checkServiceAccess } from '../lib/db.js';
+import { getAccountsByService, getMessagingMode, checkServiceAccess, listCustomServices, listCustomServiceAccounts } from '../lib/db.js';
 import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
 
 const router = Router();
@@ -54,6 +54,25 @@ router.get('/', (req, res) => {
     urlPattern: '/api/{service}/{accountName}/...',
     services,
     endpoints,
+    customServices: (() => {
+      const customs = listCustomServices().filter(s => s.enabled);
+      if (customs.length === 0) return undefined;
+      const result = {};
+      for (const svc of customs) {
+        const accounts = listCustomServiceAccounts(svc.name).filter(a => a.enabled).map(a => a.account_name);
+        if (accounts.length === 0) continue;
+        result[svc.name] = {
+          displayName: svc.display_name,
+          description: svc.description,
+          docs: svc.docs_url,
+          category: svc.category,
+          accounts,
+          base: `/api/custom/${svc.name}/{accountName}`,
+          endpoints: svc.endpoints.map(ep => `${ep.method} /api/custom/${svc.name}/{accountName}${ep.path}`)
+        };
+      }
+      return Object.keys(result).length > 0 ? result : undefined;
+    })(),
     auth: {
       type: 'bearer',
       header: 'Authorization: Bearer {your_api_key}'
