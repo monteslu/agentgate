@@ -37,8 +37,9 @@ export function readOnlyEnforce(req, res, next) {
 // executed immediately (bypass) or queued for approval (202 Accepted).
 export function writeProxy(serviceName) {
   return async (req, res, next) => {
-    // GET requests pass through to read routes
-    if (req.method === 'GET') {
+    // Only intercept explicit write methods; everything else passes through
+    const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+    if (!WRITE_METHODS.includes(req.method)) {
       return next();
     }
 
