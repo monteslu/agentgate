@@ -1,6 +1,7 @@
 import { Router } from 'express';
-import { getAccountsByService, getMessagingMode, checkServiceAccess, listCustomServices, listCustomServiceAccounts } from '../lib/db.js';
+import { getAccountsByService, getMessagingMode, checkServiceAccess } from '../lib/db.js';
 import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
+import { listCustomServices } from '../services/customServiceService.js';
 
 const router = Router();
 
@@ -48,31 +49,29 @@ router.get('/', (req, res) => {
     }
   }
 
+  // Add custom services
+  try {
+    const customServices = listCustomServices();
+    for (const svc of customServices) {
+      if (!svc.enabled) continue;
+      services[svc.name] = {
+        description: svc.description || svc.display_name,
+        docs: svc.docs_url || undefined,
+        category: svc.category || 'custom',
+        accounts: ['(see custom service accounts)'],
+        examples: (svc.endpoints || []).map(ep => `${ep.method} /api/custom/${svc.name}/{accountName}${ep.path}`)
+      };
+    }
+  } catch {
+    // Custom services table may not exist yet
+  }
+
   res.json({
     name: 'agentgate',
     description: 'API gateway for personal data with human-in-the-loop write approval. Read requests (GET) execute immediately. Write requests (POST/PUT/DELETE) are queued for human approval before execution.',
     urlPattern: '/api/{service}/{accountName}/...',
     services,
     endpoints,
-    customServices: (() => {
-      const customs = listCustomServices().filter(s => s.enabled);
-      if (customs.length === 0) return undefined;
-      const result = {};
-      for (const svc of customs) {
-        const accounts = listCustomServiceAccounts(svc.name).filter(a => a.enabled).map(a => a.account_name);
-        if (accounts.length === 0) continue;
-        result[svc.name] = {
-          displayName: svc.display_name,
-          description: svc.description,
-          docs: svc.docs_url,
-          category: svc.category,
-          accounts,
-          base: `/api/custom/${svc.name}/{accountName}`,
-          endpoints: svc.endpoints.map(ep => `${ep.method} /api/custom/${svc.name}/{accountName}${ep.path}`)
-        };
-      }
-      return Object.keys(result).length > 0 ? result : undefined;
-    })(),
     auth: {
       type: 'bearer',
       header: 'Authorization: Bearer {your_api_key}'
