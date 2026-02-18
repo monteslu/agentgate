@@ -21,7 +21,8 @@ const SERVICE_ICONS = {
   jira: '/public/icons/jira.svg',
   fitbit: '/public/icons/fitbit.svg',
   brave: '/public/icons/brave.svg',
-  google_search: '/public/icons/google-search.svg'
+  google_search: '/public/icons/google-search.svg',
+  homeassistant: '/public/icons/homeassistant.svg'
 };
 
 function getServiceIcon(service) {

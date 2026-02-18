@@ -21,6 +21,7 @@ import * as jira from './jira.js';
 import * as fitbit from './fitbit.js';
 import * as brave from './brave.js';
 import * as googleSearch from './google-search.js';
+import * as homeassistant from './homeassistant.js';
 
 // Export all implemented services in display order
 export const services = [
@@ -34,7 +35,8 @@ export const services = [
   jira,
   linkedin,
   brave,
-  googleSearch
+  googleSearch,
+  homeassistant
 ];
 
 // Full service catalog with categories — includes both implemented and coming-soon services
@@ -74,6 +76,12 @@ export const catalog = [
     services: [
       { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true },
       { id: 'stripe', name: 'Stripe', icon: '💳', implemented: false }
+    ]
+  },
+  {
+    category: 'IoT & Smart Home',
+    services: [
+      { id: 'homeassistant', name: 'Home Assistant', icon: '🏠', implemented: true }
     ]
   }
 ];
@@ -198,7 +206,8 @@ function getServiceIcon(service) {
     jira: '/public/icons/jira.svg',
     fitbit: '/public/icons/fitbit.svg',
     brave: '/public/icons/brave.svg',
-    google_search: '/public/icons/google-search.svg'
+    google_search: '/public/icons/google-search.svg',
+    homeassistant: '/public/icons/homeassistant.svg'
   };
   return icons[service] || '/public/favicon.svg';
 }
