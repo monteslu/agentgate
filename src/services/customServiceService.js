@@ -12,6 +12,7 @@ import {
   deleteCustomServiceAccount as dbDeleteAccount,
   listEnabledCustomServices
 } from '../lib/db.js';
+import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
 
 // Validate service name: URL-safe, starts with letter
 const NAME_RE = /^[a-z][a-z0-9_-]*$/;
@@ -32,9 +33,9 @@ export function createCustomService(data) {
   if (!data.authConfig || !data.authConfig.type) {
     throw new Error('Auth config with type is required');
   }
-  // Check for name collision with built-in services
-  const builtins = ['github', 'bluesky', 'reddit', 'calendar', 'mastodon', 'linkedin', 'youtube', 'jira', 'fitbit', 'brave', 'google_search', 'google_calendar'];
-  if (builtins.includes(data.name)) {
+  // Check for name collision with built-in services (from registry)
+  const builtinNames = Object.keys(SERVICE_REGISTRY);
+  if (builtinNames.includes(data.name)) {
     throw new Error(`Service name '${data.name}' conflicts with a built-in service`);
   }
   const existing = dbGet(data.name);
