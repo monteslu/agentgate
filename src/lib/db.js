@@ -1044,6 +1044,10 @@ export function getAutoApprovedCount() {
   return row.count;
 }
 
+export function clearAutoApprovedEntries() {
+  return db.prepare('DELETE FROM write_queue WHERE auto_approved = 1').run();
+}
+
 export function updateQueueNotification(id, success, error = null) {
   if (success) {
     db.prepare(`
