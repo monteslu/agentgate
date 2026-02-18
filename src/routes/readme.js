@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getAccountsByService, getMessagingMode, checkServiceAccess } from '../lib/db.js';
 import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
+import { getRouteRegistry } from '../lib/routeRegistry.js';
 
 const router = Router();
 
@@ -48,12 +49,27 @@ router.get('/', (req, res) => {
     }
   }
 
+  // Build internal API docs from route metadata
+  const internalAPIs = getRouteRegistry().map(meta => ({
+    name: meta.name,
+    description: meta.description,
+    category: meta.category,
+    endpoints: meta.endpoints.map(ep => ({
+      method: ep.method,
+      path: ep.path,
+      description: ep.description,
+      auth: ep.auth,
+      ...(ep.params && Object.keys(ep.params).length > 0 ? { params: ep.params } : {})
+    }))
+  }));
+
   res.json({
     name: 'agentgate',
     description: 'API gateway for personal data with human-in-the-loop write approval. Read requests (GET) execute immediately. Write requests (POST/PUT/DELETE) are queued for human approval before execution.',
     urlPattern: '/api/{service}/{accountName}/...',
     services,
     endpoints,
+    internalAPIs,
     auth: {
       type: 'bearer',
       header: 'Authorization: Bearer {your_api_key}'

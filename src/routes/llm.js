@@ -216,4 +216,39 @@ router.post('/v1/test', async (req, res) => {
   }
 });
 
+export const routeMeta = {
+  name: 'LLM Proxy',
+  description: 'OpenAI-compatible proxy with credential injection for multiple LLM providers',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/v1/chat/completions',
+      description: 'Proxy chat completion request to configured LLM provider',
+      params: {
+        body: {
+          model: { type: 'string', required: false, description: 'Model ID (overridden if agent has assigned model)' },
+          messages: { type: 'array', required: true, description: 'Array of chat messages' },
+          stream: { type: 'boolean', required: false, description: 'Enable SSE streaming' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/v1/models',
+      description: 'List available models for the authenticated agent',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'POST',
+      path: '/v1/test',
+      description: 'Test LLM provider connectivity',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;

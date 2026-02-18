@@ -405,4 +405,23 @@ Returns: \`{ mementos: [{ id, content, keywords, created_at, ... }, ...] }\`
 `;
 }
 
+export const routeMeta = {
+  name: 'Skills',
+  description: 'Generate OpenClaw skill definitions for configured services',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/api/skill',
+      description: 'Generate category-based OpenClaw skills as JSON',
+      params: {
+        query: {
+          base_url: { type: 'string', required: false, description: 'Override base URL for skill generation' }
+        }
+      },
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;

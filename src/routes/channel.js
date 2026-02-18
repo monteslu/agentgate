@@ -352,4 +352,19 @@ export function setupHumanChannelProxy(server) {
   });
 }
 
+export const routeMeta = {
+  name: 'Channel',
+  description: 'WebSocket-based human-agent chat channels',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/channel/:channelId',
+      description: 'WebSocket upgrade for human chat connection (auth via first message)',
+      params: {},
+      auth: 'none'
+    }
+  ]
+};
+
 export default { setupHumanChannelProxy, setAdminTokenValidator };

@@ -321,4 +321,87 @@ router.get('/broadcasts/:id', (req, res) => {
   return res.json({ via: 'agentgate', ...broadcast });
 });
 
+export const routeMeta = {
+  name: 'Agent Messaging',
+  description: 'Inter-agent messaging, broadcasts, and status',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/api/agents/message',
+      description: 'Send a message to another agent',
+      params: {
+        body: {
+          to_agent: { type: 'string', required: true, description: 'Recipient agent name (preferred)' },
+          to: { type: 'string', required: false, description: 'Recipient agent name (legacy alias)' },
+          message: { type: 'string', required: true, description: 'Message content (max 10KB)' },
+          reply_to: { type: 'string', required: false, description: 'ID of message to reply to' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/messages',
+      description: 'Get messages for the authenticated agent',
+      params: {
+        query: {
+          unread: { type: 'string', required: false, description: 'Set to "true" for unread only' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'POST',
+      path: '/api/agents/messages/:id/read',
+      description: 'Mark a message as read',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/status',
+      description: 'Get messaging status, mode, and unread count',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/messageable',
+      description: 'Discover which agents can be messaged',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'POST',
+      path: '/api/agents/broadcast',
+      description: 'Broadcast a message to all agents with webhooks',
+      params: {
+        body: {
+          message: { type: 'string', required: true, description: 'Broadcast message content (max 10KB)' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/broadcasts',
+      description: 'List broadcast history',
+      params: {
+        query: {
+          limit: { type: 'number', required: false, description: 'Max results (default 50, max 100)' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/broadcasts/:id',
+      description: 'Get a specific broadcast by ID',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;

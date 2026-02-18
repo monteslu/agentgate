@@ -2,7 +2,10 @@ import { Router } from 'express';
 import {
   listServicesWithAccess,
   checkServiceAccess,
-  checkBypassAuth
+  checkBypassAuth,
+  addPathBlock,
+  removePathBlock,
+  getPathBlocks
 } from '../lib/db.js';
 
 const router = Router();
@@ -83,5 +86,108 @@ router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
     bypass_auth: hasBypass
   });
 });
+
+// ============================================
+// Path Block Management
+// ============================================
+
+// GET /api/services/:service/:account/path-blocks?agent=X
+router.get('/:service/:account/path-blocks', (req, res) => {
+  const { service, account } = req.params;
+  const agent = req.query.agent;
+  if (!agent) {
+    return res.status(400).json({ error: 'agent query parameter is required' });
+  }
+  const blocks = getPathBlocks(service, account, agent);
+  res.json({ blocks });
+});
+
+// POST /api/services/:service/:account/path-blocks
+router.post('/:service/:account/path-blocks', (req, res) => {
+  const { service, account } = req.params;
+  const { agent, method, pathPattern } = req.body;
+  if (!agent || !method || !pathPattern) {
+    return res.status(400).json({ error: 'agent, method, and pathPattern are required' });
+  }
+  addPathBlock(service, account, agent, method, pathPattern);
+  res.json({ ok: true });
+});
+
+// DELETE /api/services/:service/:account/path-blocks
+router.delete('/:service/:account/path-blocks', (req, res) => {
+  const { service, account } = req.params;
+  const { agent, method, pathPattern } = req.body;
+  if (!agent || !method || !pathPattern) {
+    return res.status(400).json({ error: 'agent, method, and pathPattern are required' });
+  }
+  removePathBlock(service, account, agent, method, pathPattern);
+  res.json({ ok: true });
+});
+
+export const routeMeta = {
+  name: 'Services',
+  description: 'Service discovery and access control management',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/api/services',
+      description: 'List services accessible to the authenticated agent',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/services/:service/:account/access',
+      description: 'Get your access info for a specific service/account',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/services/:service/:account/access/agents/:agentName/bypass',
+      description: 'Check bypass_auth status (own status only)',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/services/:service/:account/path-blocks',
+      description: 'Get path blocks for an agent',
+      params: {
+        query: {
+          agent: { type: 'string', required: true, description: 'Agent name' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'POST',
+      path: '/api/services/:service/:account/path-blocks',
+      description: 'Add a path block rule',
+      params: {
+        body: {
+          agent: { type: 'string', required: true, description: 'Agent name' },
+          method: { type: 'string', required: true, description: 'HTTP method' },
+          pathPattern: { type: 'string', required: true, description: 'Path pattern to block' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'DELETE',
+      path: '/api/services/:service/:account/path-blocks',
+      description: 'Remove a path block rule',
+      params: {
+        body: {
+          agent: { type: 'string', required: true, description: 'Agent name' },
+          method: { type: 'string', required: true, description: 'HTTP method' },
+          pathPattern: { type: 'string', required: true, description: 'Path pattern to unblock' }
+        }
+      },
+      auth: 'agent'
+    }
+  ]
+};
 
 export default router;
