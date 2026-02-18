@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountCredentials, setAccountCredentials } from '../lib/db.js';
+import { getForwardableHeaders, mergeHeaders } from '../lib/headerUtils.js';
 
 const router = Router();
 const BSKY_API = 'https://bsky.social/xrpc';
@@ -155,7 +156,7 @@ async function getAccessToken(accountName) {
 }
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw = false, reqHeaders = {} } = {}) {
   const accessToken = await getAccessToken(accountName);
   if (!accessToken) {
     return { status: 401, data: { error: 'Bluesky account not configured', message: `Set up Bluesky account "${accountName}" in the admin UI` } };
@@ -170,11 +171,13 @@ export async function readService(accountName, path, { query = {}, raw = false }
   const queryString = new URLSearchParams(query).toString();
   const url = `${BSKY_API}/${path}${queryString ? '?' + queryString : ''}`;
 
+  const defaults = {
+    'Authorization': `Bearer ${accessToken}`,
+    'Accept': 'application/json'
+  };
+
   const response = await fetch(url, {
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Accept': 'application/json'
-    }
+    headers: mergeHeaders(defaults, getForwardableHeaders(reqHeaders))
   });
 
   let data = await response.json();
@@ -197,7 +200,7 @@ router.get('/:accountName/*', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Bluesky API request failed', message: error.message });

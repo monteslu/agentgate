@@ -1,5 +1,6 @@
 import { getAccountCredentials, setAccountCredentials, updateQueueStatus, getQueueEntry } from './db.js';
 import { notifyAgentQueueStatus } from './agentNotifier.js';
+import { getForwardableHeaders, mergeHeaders } from './headerUtils.js';
 
 // Service base URLs
 const SERVICE_URLS = {
@@ -245,28 +246,31 @@ function buildUrl(service, accountName, path) {
 
 // Build headers for a service request
 function buildHeaders(service, token, customHeaders = {}) {
-  const headers = {
+  // Start with service defaults
+  const defaults = {
     'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    ...customHeaders
+    'Content-Type': 'application/json'
   };
 
   if (service === 'jira' && token?.email && token?.apiToken) {
-    // Jira uses basic auth
     const basicAuth = Buffer.from(`${token.email}:${token.apiToken}`).toString('base64');
-    headers['Authorization'] = `Basic ${basicAuth}`;
+    defaults['Authorization'] = `Basic ${basicAuth}`;
   } else if (token && typeof token === 'string') {
-    headers['Authorization'] = `Bearer ${token}`;
+    defaults['Authorization'] = `Bearer ${token}`;
   }
 
-  // Service-specific headers
+  // Service-specific defaults
   if (service === 'github') {
-    headers['Accept'] = 'application/vnd.github+json';
-    headers['User-Agent'] = 'agentgate-gateway';
+    defaults['Accept'] = 'application/vnd.github+json';
+    defaults['User-Agent'] = 'agentgate-gateway';
   }
   if (service === 'reddit') {
-    headers['User-Agent'] = 'agentgate-gateway/1.0';
+    defaults['User-Agent'] = 'agentgate-gateway/1.0';
   }
+
+  // Merge: agent-provided headers override defaults (except Authorization which is always from creds)
+  const forwarded = getForwardableHeaders(customHeaders);
+  const headers = mergeHeaders(defaults, forwarded);
 
   return headers;
 }
