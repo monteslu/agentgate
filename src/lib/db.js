@@ -1,4 +1,4 @@
-import { matchesPattern } from "./pathMatcher.js";
+import { matchesPattern } from './pathMatcher.js';
 import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
