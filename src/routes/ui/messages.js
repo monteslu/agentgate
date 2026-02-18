@@ -13,19 +13,28 @@ import { escapeHtml, statusBadge, formatDate, renderAvatar } from './shared.js';
 import { renderPage } from '../../lib/render.js';
 
 const router = Router();
+const PAGE_SIZE = 25;
 
 // Agent Messages Queue
 router.get('/', (req, res) => {
   const filter = req.query.filter || 'all';
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+  const pagination = { limit: PAGE_SIZE + 1, offset };
+
   let messages;
   if (filter === 'all') {
-    messages = listAgentMessages();
+    messages = listAgentMessages(null, pagination);
   } else {
-    messages = listAgentMessages(filter);
+    messages = listAgentMessages(filter, pagination);
   }
+
+  const hasNext = messages.length > PAGE_SIZE;
+  if (hasNext) messages = messages.slice(0, PAGE_SIZE);
+
   const counts = getMessageCounts();
   const mode = getMessagingMode();
-  const broadcasts = listBroadcastsWithRecipients(10);
+  const broadcasts = page === 1 ? listBroadcastsWithRecipients(10) : [];
 
   // Build timeline
   const messageItems = messages.map(m => ({ ...m, _type: 'message' }));
@@ -42,6 +51,8 @@ router.get('/', (req, res) => {
     mode,
     broadcasts,
     timeline,
+    page,
+    hasNext,
     renderAvatar,
     escapeHtml,
     formatDate,
