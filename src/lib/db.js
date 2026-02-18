@@ -1,3 +1,4 @@
+import { matchesPattern } from "./pathMatcher.js";
 import Database from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
@@ -2466,7 +2467,6 @@ export function getChatMessageCount(channelId) {
 // Path Blocks (Per-path access control)
 // ============================================
 
-import { matchesPattern } from './pathMatcher.js';
 
 export function addPathBlock(service, account, agent, method, pathPattern) {
   db.prepare(`
