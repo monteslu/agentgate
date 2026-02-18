@@ -65,7 +65,7 @@ describe('homeassistant service', () => {
       ];
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -95,7 +95,7 @@ describe('homeassistant service', () => {
       };
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -121,7 +121,7 @@ describe('homeassistant service', () => {
       ];
 
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -135,7 +135,7 @@ describe('homeassistant service', () => {
 
     it('should handle HA offline/errors', async () => {
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      global.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+      globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
 
       await expect(readService('test', 'states')).rejects.toThrow('ECONNREFUSED');
     });
@@ -143,7 +143,7 @@ describe('homeassistant service', () => {
     it('should handle binary camera proxy responses', async () => {
       const mockBuffer = new ArrayBuffer(8);
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123', token: 'test-token' });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'image/jpeg' },
@@ -157,7 +157,7 @@ describe('homeassistant service', () => {
 
     it('should strip trailing slashes from host', async () => {
       getAccountCredentials.mockReturnValue({ host: 'http://localhost:8123/', token: 'test-token' });
-      global.fetch = vi.fn().mockResolvedValue({
+      globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
         headers: { get: () => 'application/json' },
@@ -165,7 +165,7 @@ describe('homeassistant service', () => {
       });
 
       await readService('test', 'config');
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(globalThis.fetch).toHaveBeenCalledWith(
         'http://localhost:8123/api/config',
         expect.any(Object)
       );
