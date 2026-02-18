@@ -546,6 +546,34 @@ code {
   border: 1px solid var(--primary);
 }
 
+.auth-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.auth-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.auth-logo img {
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+}
+
+.auth-logo h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
 .main-nav {
   display: flex;
   gap: 8px;
@@ -1559,6 +1587,10 @@ body > p:first-of-type {
     .btn-danger:hover {
       background: rgba(239, 68, 68, 0.2);
     }
+
+/* ===== Pagination ===== */
+.pagination { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; }
+.pagination .page-info { color: var(--text-muted); font-size: 14px; }
 
 /* ===== Messages Page ===== */
 .filter-bar { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; align-items: center; }
