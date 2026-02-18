@@ -281,6 +281,32 @@ db.exec(`
   -- Replay protection: unique delivery IDs per source
   CREATE UNIQUE INDEX IF NOT EXISTS idx_webhook_delivery_dedup
   ON webhook_deliveries(source, delivery_id) WHERE delivery_id IS NOT NULL;
+
+  -- Custom services (user-defined REST API endpoints, #249)
+  CREATE TABLE IF NOT EXISTS custom_services (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    base_url TEXT NOT NULL,
+    docs_url TEXT,
+    category TEXT DEFAULT 'custom',
+    auth_config TEXT NOT NULL,
+    endpoints TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS custom_service_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    service_id INTEGER NOT NULL REFERENCES custom_services(id) ON DELETE CASCADE,
+    account_name TEXT NOT NULL,
+    credentials TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(service_id, account_name)
+  );
 `);
 
 // ============================================
@@ -2447,5 +2473,155 @@ export function getChatMessageCount(channelId) {
   const stmt = db.prepare('SELECT COUNT(*) as count FROM chat_messages WHERE channel_id = ?');
   const row = stmt.get(channelId);
   return row ? row.count : 0;
+}
+
+// ============================================
+// Custom Services (#249)
+// ============================================
+
+export function createCustomService({ name, displayName, description, baseUrl, docsUrl, category, authConfig, endpoints }) {
+  const result = db.prepare(`
+    INSERT INTO custom_services (name, display_name, description, base_url, docs_url, category, auth_config, endpoints)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(name, displayName, description || null, baseUrl, docsUrl || null, category || 'custom',
+    JSON.stringify(authConfig), JSON.stringify(endpoints || []));
+  return { id: Number(result.lastInsertRowid), name };
+}
+
+export function getCustomService(nameOrId) {
+  const row = typeof nameOrId === 'number'
+    ? db.prepare('SELECT * FROM custom_services WHERE id = ?').get(nameOrId)
+    : db.prepare('SELECT * FROM custom_services WHERE name = ?').get(nameOrId);
+  if (!row) return null;
+  return {
+    ...row,
+    auth_config: JSON.parse(row.auth_config),
+    endpoints: JSON.parse(row.endpoints),
+    enabled: row.enabled === 1
+  };
+}
+
+export function listCustomServices() {
+  const rows = db.prepare('SELECT * FROM custom_services ORDER BY name').all();
+  return rows.map(row => ({
+    ...row,
+    auth_config: JSON.parse(row.auth_config),
+    endpoints: JSON.parse(row.endpoints),
+    enabled: row.enabled === 1
+  }));
+}
+
+export function updateCustomService(name, updates) {
+  const fields = [];
+  const values = [];
+  const mapping = {
+    displayName: 'display_name', description: 'description', baseUrl: 'base_url',
+    docsUrl: 'docs_url', category: 'category', enabled: 'enabled'
+  };
+  for (const [jsKey, dbKey] of Object.entries(mapping)) {
+    if (updates[jsKey] !== undefined) {
+      fields.push(`${dbKey} = ?`);
+      values.push(jsKey === 'enabled' ? (updates[jsKey] ? 1 : 0) : updates[jsKey]);
+    }
+  }
+  if (updates.authConfig !== undefined) {
+    fields.push('auth_config = ?');
+    values.push(JSON.stringify(updates.authConfig));
+  }
+  if (updates.endpoints !== undefined) {
+    fields.push('endpoints = ?');
+    values.push(JSON.stringify(updates.endpoints));
+  }
+  if (fields.length === 0) return;
+  fields.push('updated_at = datetime(\'now\')');
+  values.push(name);
+  db.prepare(`UPDATE custom_services SET ${fields.join(', ')} WHERE name = ?`).run(...values);
+}
+
+export function deleteCustomService(name) {
+  return db.prepare('DELETE FROM custom_services WHERE name = ?').run(name);
+}
+
+// Custom service accounts
+export function createCustomServiceAccount(serviceName, accountName, credentials) {
+  const svc = db.prepare('SELECT id FROM custom_services WHERE name = ?').get(serviceName);
+  if (!svc) throw new Error(`Custom service '${serviceName}' not found`);
+  const result = db.prepare(`
+    INSERT INTO custom_service_accounts (service_id, account_name, credentials)
+    VALUES (?, ?, ?)
+  `).run(svc.id, accountName, JSON.stringify(credentials));
+  return { id: Number(result.lastInsertRowid), service: serviceName, account_name: accountName };
+}
+
+export function getCustomServiceAccount(serviceName, accountName) {
+  const row = db.prepare(`
+    SELECT csa.* FROM custom_service_accounts csa
+    JOIN custom_services cs ON csa.service_id = cs.id
+    WHERE cs.name = ? AND csa.account_name = ?
+  `).get(serviceName, accountName);
+  if (!row) return null;
+  return { ...row, credentials: JSON.parse(row.credentials), enabled: row.enabled === 1 };
+}
+
+export function listCustomServiceAccounts(serviceName) {
+  const rows = db.prepare(`
+    SELECT csa.id, csa.account_name, csa.enabled, csa.created_at
+    FROM custom_service_accounts csa
+    JOIN custom_services cs ON csa.service_id = cs.id
+    WHERE cs.name = ?
+    ORDER BY csa.account_name
+  `).all(serviceName);
+  return rows.map(r => ({ ...r, enabled: r.enabled === 1 }));
+}
+
+export function updateCustomServiceAccount(serviceName, accountName, updates) {
+  const svc = db.prepare('SELECT id FROM custom_services WHERE name = ?').get(serviceName);
+  if (!svc) return;
+  if (updates.credentials !== undefined) {
+    db.prepare(`
+      UPDATE custom_service_accounts SET credentials = ? WHERE service_id = ? AND account_name = ?
+    `).run(JSON.stringify(updates.credentials), svc.id, accountName);
+  }
+  if (updates.enabled !== undefined) {
+    db.prepare(`
+      UPDATE custom_service_accounts SET enabled = ? WHERE service_id = ? AND account_name = ?
+    `).run(updates.enabled ? 1 : 0, svc.id, accountName);
+  }
+}
+
+export function deleteCustomServiceAccount(serviceName, accountName) {
+  const svc = db.prepare('SELECT id FROM custom_services WHERE name = ?').get(serviceName);
+  if (!svc) return { changes: 0 };
+  return db.prepare('DELETE FROM custom_service_accounts WHERE service_id = ? AND account_name = ?').run(svc.id, accountName);
+}
+
+export function listEnabledCustomServices() {
+  const rows = db.prepare(`
+    SELECT cs.*, csa.account_name, csa.credentials as account_credentials, csa.enabled as account_enabled
+    FROM custom_services cs
+    LEFT JOIN custom_service_accounts csa ON cs.id = csa.service_id AND csa.enabled = 1
+    WHERE cs.enabled = 1
+    ORDER BY cs.name, csa.account_name
+  `).all();
+  // Group by service
+  const services = new Map();
+  for (const row of rows) {
+    if (!services.has(row.name)) {
+      services.set(row.name, {
+        ...row,
+        auth_config: JSON.parse(row.auth_config),
+        endpoints: JSON.parse(row.endpoints),
+        enabled: true,
+        accounts: []
+      });
+    }
+    if (row.account_name) {
+      services.get(row.name).accounts.push({
+        account_name: row.account_name,
+        credentials: JSON.parse(row.account_credentials)
+      });
+    }
+  }
+  return [...services.values()];
 }
 
