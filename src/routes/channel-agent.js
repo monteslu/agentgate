@@ -28,7 +28,7 @@ import {
 import {
   ENVELOPE_TYPES,
   validateEnvelope,
-  createError as createErrorEnvelope,
+  createError as createErrorEnvelope
 } from '../lib/channelProtocol.js';
 
 // Configuration
@@ -118,123 +118,123 @@ function handleAgentMessage(channelId, parsed, socket, rateLimit) {
   const bridge = getChannelBridge(channelId);
 
   switch (parsed.type) {
-    case ENVELOPE_TYPES.MESSAGE: {
-      const msgId = parsed.id || `msg_${nanoid(12)}`;
-      const timestamp = parsed.timestamp || new Date().toISOString();
+  case ENVELOPE_TYPES.MESSAGE: {
+    const msgId = parsed.id || `msg_${nanoid(12)}`;
+    const timestamp = parsed.timestamp || new Date().toISOString();
 
-      // Save to database
+    // Save to database
+    saveChatMessage({
+      channelId,
+      messageId: msgId,
+      from: 'agent',
+      text: parsed.text,
+      timestamp,
+      replyTo: parsed.replyTo
+    });
+
+    channelLog(channelId, 'agent_message', `msgId=${msgId}`);
+
+    const msg = {
+      type: ENVELOPE_TYPES.MESSAGE,
+      from: 'agent',
+      text: parsed.text,
+      id: msgId,
+      timestamp
+    };
+
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
+    }
+    break;
+  }
+
+  case ENVELOPE_TYPES.CHUNK: {
+    const msg = { type: ENVELOPE_TYPES.CHUNK, text: parsed.text, id: parsed.id };
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
+    }
+    break;
+  }
+
+  case ENVELOPE_TYPES.DONE: {
+    const timestamp = new Date().toISOString();
+
+    if (parsed.text) {
       saveChatMessage({
         channelId,
-        messageId: msgId,
+        messageId: parsed.id,
         from: 'agent',
         text: parsed.text,
         timestamp,
         replyTo: parsed.replyTo
       });
-
-      channelLog(channelId, 'agent_message', `msgId=${msgId}`);
-
-      const msg = {
-        type: ENVELOPE_TYPES.MESSAGE,
-        from: 'agent',
-        text: parsed.text,
-        id: msgId,
-        timestamp
-      };
-
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
     }
 
-    case ENVELOPE_TYPES.CHUNK: {
-      const msg = { type: ENVELOPE_TYPES.CHUNK, text: parsed.text, id: parsed.id };
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
+    const msg = { type: ENVELOPE_TYPES.DONE, id: parsed.id, timestamp };
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
     }
+    break;
+  }
 
-    case ENVELOPE_TYPES.DONE: {
-      const timestamp = new Date().toISOString();
-
-      if (parsed.text) {
-        saveChatMessage({
-          channelId,
-          messageId: parsed.id,
-          from: 'agent',
-          text: parsed.text,
-          timestamp,
-          replyTo: parsed.replyTo
-        });
-      }
-
-      const msg = { type: ENVELOPE_TYPES.DONE, id: parsed.id, timestamp };
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
+  case ENVELOPE_TYPES.TYPING: {
+    const msg = { type: ENVELOPE_TYPES.TYPING };
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
     }
+    break;
+  }
 
-    case ENVELOPE_TYPES.TYPING: {
-      const msg = { type: ENVELOPE_TYPES.TYPING };
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
+  case ENVELOPE_TYPES.ERROR: {
+    const msg = { type: ENVELOPE_TYPES.ERROR, error: parsed.error, messageId: parsed.messageId };
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
     }
+    break;
+  }
 
-    case ENVELOPE_TYPES.ERROR: {
-      const msg = { type: ENVELOPE_TYPES.ERROR, error: parsed.error, messageId: parsed.messageId };
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
+  case ENVELOPE_TYPES.ACK: {
+    channelLog(channelId, 'agent_ack', `id=${parsed.id} status=${parsed.status}`);
+    const msg = { type: ENVELOPE_TYPES.ACK, id: parsed.id, status: parsed.status };
+    if (parsed.error) msg.error = parsed.error;
+
+    if (parsed.connId) {
+      bridge.sendToHuman(parsed.connId, msg);
+    } else {
+      bridge.broadcastToHumans(msg);
     }
+    break;
+  }
 
-    case ENVELOPE_TYPES.ACK: {
-      channelLog(channelId, 'agent_ack', `id=${parsed.id} status=${parsed.status}`);
-      const msg = { type: ENVELOPE_TYPES.ACK, id: parsed.id, status: parsed.status };
-      if (parsed.error) msg.error = parsed.error;
+  case ENVELOPE_TYPES.PING: {
+    sendToSocket(socket, { type: ENVELOPE_TYPES.PONG });
+    break;
+  }
 
-      if (parsed.connId) {
-        bridge.sendToHuman(parsed.connId, msg);
-      } else {
-        bridge.broadcastToHumans(msg);
-      }
-      break;
+  case ENVELOPE_TYPES.PONG: {
+    // Received pong from plugin — no action needed (keepalive confirmed)
+    break;
+  }
+
+  default: {
+    // reply type from issue spec — treat as message for backward compatibility
+    if (parsed.type === ENVELOPE_TYPES.REPLY) {
+      handleAgentMessage(channelId, { ...parsed, type: ENVELOPE_TYPES.MESSAGE }, socket, rateLimit);
+    } else {
+      sendToSocket(socket, createErrorEnvelope(`Unhandled envelope type: ${parsed.type}`, parsed.id));
     }
-
-    case ENVELOPE_TYPES.PING: {
-      sendToSocket(socket, { type: ENVELOPE_TYPES.PONG });
-      break;
-    }
-
-    case ENVELOPE_TYPES.PONG: {
-      // Received pong from plugin — no action needed (keepalive confirmed)
-      break;
-    }
-
-    default: {
-      // reply type from issue spec — treat as message for backward compatibility
-      if (parsed.type === ENVELOPE_TYPES.REPLY) {
-        handleAgentMessage(channelId, { ...parsed, type: ENVELOPE_TYPES.MESSAGE }, socket, rateLimit);
-      } else {
-        sendToSocket(socket, createErrorEnvelope(`Unhandled envelope type: ${parsed.type}`, parsed.id));
-      }
-      break;
-    }
+    break;
+  }
   }
 }
 

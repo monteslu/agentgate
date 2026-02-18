@@ -27,7 +27,7 @@ export const ENVELOPE_TYPES = {
 
   // Bidirectional keepalive
   PING: 'ping',
-  PONG: 'pong',
+  PONG: 'pong'
 };
 
 /** All valid type strings */
@@ -42,7 +42,7 @@ export const SERVER_TYPES = new Set([
   ENVELOPE_TYPES.HUMAN_CONNECTED,
   ENVELOPE_TYPES.HUMAN_DISCONNECTED,
   ENVELOPE_TYPES.PING,
-  ENVELOPE_TYPES.PONG,
+  ENVELOPE_TYPES.PONG
 ]);
 
 /** Types the plugin sends to the server */
@@ -54,14 +54,14 @@ export const PLUGIN_TYPES = new Set([
   ENVELOPE_TYPES.ERROR,
   ENVELOPE_TYPES.TYPING,
   ENVELOPE_TYPES.PING,
-  ENVELOPE_TYPES.PONG,
+  ENVELOPE_TYPES.PONG
 ]);
 
 // ── Wake modes ──────────────────────────────────────────────────────────────
 
 export const WAKE_MODES = {
   NOW: 'now',
-  NEXT_HEARTBEAT: 'next-heartbeat',
+  NEXT_HEARTBEAT: 'next-heartbeat'
 };
 
 // ── ID generation ───────────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ export function createConnected(channelId, humans = []) {
   return {
     type: ENVELOPE_TYPES.CONNECTED,
     channelId,
-    humans,
+    humans
   };
 }
 
@@ -160,7 +160,7 @@ export function createMessage({ from, text, id, timestamp, connId } = {}) {
     from: from || 'human',
     text,
     timestamp: timestamp || new Date().toISOString(),
-    ...(connId ? { connId } : {}),
+    ...(connId ? { connId } : {})
   };
 }
 
@@ -173,7 +173,7 @@ export function createWake({ text, id, mode, connId } = {}) {
     id: id || generateId('wake'),
     text,
     mode: mode || WAKE_MODES.NOW,
-    ...(connId ? { connId } : {}),
+    ...(connId ? { connId } : {})
   };
 }
 
@@ -184,7 +184,7 @@ export function createAgentEnvelope({ message, id, connId, name, deliver, channe
   const env = {
     type: ENVELOPE_TYPES.AGENT,
     id: id || generateId('agent'),
-    message,
+    message
   };
   if (connId) env.connId = connId;
   if (name) env.name = name;
@@ -266,5 +266,5 @@ export default {
   createChunk,
   createDone,
   createPing,
-  createPong,
+  createPong
 };

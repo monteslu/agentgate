@@ -24,7 +24,7 @@ import {
   createChunk,
   createDone,
   createPing,
-  createPong,
+  createPong
 } from '../src/lib/channelProtocol.js';
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ describe('createAgentEnvelope', () => {
       message: 'do it',
       name: 'test',
       model: 'gpt-4',
-      deliver: true,
+      deliver: true
     });
     expect(msg.type).toBe('agent');
     expect(msg.message).toBe('do it');
