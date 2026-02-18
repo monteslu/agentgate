@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { matchesPattern } from '../src/lib/pathMatcher.js';
 
 describe('matchesPattern', () => {
