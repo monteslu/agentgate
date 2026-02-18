@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountCredentials } from '../lib/db.js';
+import { getForwardableHeaders, mergeHeaders } from '../lib/headerUtils.js';
 
 const router = Router();
 const BRAVE_API = 'https://api.search.brave.com/res/v1';
@@ -67,7 +68,7 @@ const BRAVE_SIMPLIFIERS = {
 };
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw = false, reqHeaders = {} } = {}) {
   const creds = getAccountCredentials('brave', accountName);
   if (!creds?.api_key) {
     return { status: 401, data: { error: 'Brave Search API key not configured', hint: `Configure API key for account "${accountName}" in the AgentGate UI` } };
@@ -76,11 +77,13 @@ export async function readService(accountName, path, { query = {}, raw = false }
   const queryString = new URLSearchParams(query).toString();
   const url = `${BRAVE_API}/${path}${queryString ? '?' + queryString : ''}`;
 
+  const defaults = {
+    'Accept': 'application/json',
+    'X-Subscription-Token': creds.api_key
+  };
+
   const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'X-Subscription-Token': creds.api_key
-    }
+    headers: mergeHeaders(defaults, getForwardableHeaders(reqHeaders))
   });
 
   let data = await response.json();
@@ -100,7 +103,7 @@ router.get('/:accountName/web/search', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, 'web/search', { query: req.query, raw });
+    const result = await readService(req.params.accountName, 'web/search', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
@@ -112,7 +115,7 @@ router.get('/:accountName/images/search', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, 'images/search', { query: req.query, raw });
+    const result = await readService(req.params.accountName, 'images/search', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Brave Search API request failed', message: error.message });
@@ -124,7 +127,7 @@ router.get('/:accountName/news/search', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, 'news/search', { query: req.query, raw });
+    const result = await readService(req.params.accountName, 'news/search', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Brave Search API request failed', message: error.message });

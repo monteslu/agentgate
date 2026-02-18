@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountCredentials } from '../lib/db.js';
+import { getForwardableHeaders, mergeHeaders } from '../lib/headerUtils.js';
 
 const router = Router();
 const GITHUB_API = 'https://api.github.com';
@@ -92,19 +93,21 @@ function getSimplifier(path) {
 }
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw = false, reqHeaders = {} } = {}) {
   const queryString = new URLSearchParams(query).toString();
   const url = `${GITHUB_API}/${path}${queryString ? '?' + queryString : ''}`;
 
-  const headers = {
+  const defaults = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'agentgate-gateway'
   };
 
   const creds = getAccountCredentials('github', accountName);
   if (creds?.token) {
-    headers['Authorization'] = `Bearer ${creds.token}`;
+    defaults['Authorization'] = `Bearer ${creds.token}`;
   }
+
+  const headers = mergeHeaders(defaults, getForwardableHeaders(reqHeaders));
 
   const response = await fetch(url, { headers });
   let data = await response.json();
@@ -124,7 +127,7 @@ router.get('/:accountName/*', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'GitHub API request failed', message: error.message });

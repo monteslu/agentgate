@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountCredentials } from '../lib/db.js';
+import { getForwardableHeaders, mergeHeaders } from '../lib/headerUtils.js';
 
 const router = Router();
 const GOOGLE_SEARCH_API = 'https://www.googleapis.com/customsearch/v1';
@@ -33,7 +34,7 @@ export const serviceInfo = {
 };
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw = false, reqHeaders = {} } = {}) {
   const { q, searchType, start, num, ...otherParams } = query;
 
   if (!q) {
@@ -55,7 +56,9 @@ export async function readService(accountName, path, { query = {}, raw = false }
 
   const url = `${GOOGLE_SEARCH_API}?${params.toString()}`;
 
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: mergeHeaders({}, getForwardableHeaders(reqHeaders))
+  });
   let data = await response.json();
 
   if (!raw && response.ok) {
@@ -70,7 +73,7 @@ router.get('/:accountName/search', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, 'search', { query: req.query, raw });
+    const result = await readService(req.params.accountName, 'search', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Google Search API request failed', message: error.message });

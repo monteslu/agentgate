@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getAccountCredentials } from '../lib/db.js';
+import { getForwardableHeaders, mergeHeaders } from '../lib/headerUtils.js';
 
 const router = Router();
 
@@ -83,7 +84,7 @@ function getSimplifier(path) {
 }
 
 // Core read function - used by both Express routes and MCP
-export async function readService(accountName, path, { query = {}, raw = false } = {}) {
+export async function readService(accountName, path, { query = {}, raw = false, reqHeaders = {} } = {}) {
   const config = getJiraConfig(accountName);
   if (!config) {
     return { status: 401, data: { error: 'Jira account not configured', message: `Set up Jira account "${accountName}" in the admin UI` } };
@@ -94,11 +95,13 @@ export async function readService(accountName, path, { query = {}, raw = false }
 
   const basicAuth = Buffer.from(`${config.email}:${config.apiToken}`).toString('base64');
 
+  const defaults = {
+    'Authorization': `Basic ${basicAuth}`,
+    'Accept': 'application/json'
+  };
+
   const response = await fetch(url, {
-    headers: {
-      'Authorization': `Basic ${basicAuth}`,
-      'Accept': 'application/json'
-    }
+    headers: mergeHeaders(defaults, getForwardableHeaders(reqHeaders))
   });
 
   let data = await response.json();
@@ -118,7 +121,7 @@ router.get('/:accountName/*', async (req, res) => {
   try {
     const rawHeader = req.headers['x-agentgate-raw'];
     const raw = rawHeader !== undefined ? rawHeader === 'true' : !!(req.apiKeyInfo?.raw_results);
-    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw });
+    const result = await readService(req.params.accountName, req.params[0] || '', { query: req.query, raw, reqHeaders: req.headers });
     res.status(result.status).json(result.data);
   } catch (error) {
     res.status(500).json({ error: 'Jira API request failed', message: error.message });
