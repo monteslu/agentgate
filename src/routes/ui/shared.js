@@ -84,7 +84,8 @@ export function localizeScript() {
       document.querySelectorAll('.local-time[data-utc]').forEach(function(el) {
         const utc = el.getAttribute('data-utc');
         if (utc) {
-          const d = new Date(utc);
+          const normalized = utc.endsWith('Z') || utc.includes('+') ? utc : utc + 'Z';
+          const d = new Date(normalized);
           el.textContent = d.toLocaleString();
           el.title = utc + ' UTC';
         }
