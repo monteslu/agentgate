@@ -169,12 +169,14 @@ router.get('/status', async (req, res) => {
   }
 
   const messages = getMessagesForAgent(agentName, true);
+  const agent = getApiKeyByName(agentName);
 
   return res.json({
     via: 'agentgate',
     mode,
     enabled: true,
-    unread_count: messages.length
+    unread_count: messages.length,
+    bio: (agent && agent.bio) || ''
   });
 });
 
