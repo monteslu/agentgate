@@ -187,7 +187,8 @@ function getServiceIcon(service) {
     jira: '/public/icons/jira.svg',
     fitbit: '/public/icons/fitbit.svg',
     brave: '/public/icons/brave.svg',
-    google_search: '/public/icons/google-search.svg'
+    google_search: '/public/icons/google-search.svg',
+    plivo: '/public/icons/plivo.svg'
   };
   return icons[service] || '/public/favicon.svg';
 }
@@ -324,6 +325,17 @@ function getServiceFormFields(serviceName) {
         <label>Search Engine ID (CX)</label>
         <input type="text" name="cx" placeholder="Your custom search engine ID" required autocomplete="off">
         <p class="help">Set up at <a href="https://programmablesearchengine.google.com/" target="_blank">Programmable Search Engine</a></p>
+      </div>`,
+
+    plivo: `
+      <div class="form-group">
+        <label>Auth ID</label>
+        <input type="text" name="authId" placeholder="Your Plivo Auth ID" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>Auth Token</label>
+        <input type="password" name="authToken" placeholder="Your Plivo Auth Token" required autocomplete="off">
+        <p class="help">Get your credentials from the <a href="https://console.plivo.com/dashboard/" target="_blank">Plivo Console</a></p>
       </div>`,
 
     homeassistant: `
