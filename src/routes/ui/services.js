@@ -22,6 +22,7 @@ import * as fitbit from './fitbit.js';
 import * as brave from './brave.js';
 import * as googleSearch from './google-search.js';
 import * as homeassistant from './homeassistant.js';
+import * as plivo from './plivo.js';
 
 // Export all implemented services in display order
 export const services = [
@@ -36,7 +37,8 @@ export const services = [
   linkedin,
   brave,
   googleSearch,
-  homeassistant
+  homeassistant,
+  plivo
 ];
 
 // Full service catalog with categories — includes both implemented and coming-soon services
@@ -76,6 +78,12 @@ export const catalog = [
     services: [
       { id: 'fitbit', name: 'Fitbit', icon: '⌚', implemented: true },
       { id: 'stripe', name: 'Stripe', icon: '💳', implemented: false }
+    ]
+  },
+  {
+    category: 'Messaging',
+    services: [
+      { id: 'plivo', name: 'Plivo', icon: '💬', implemented: true }
     ]
   },
   {
@@ -207,7 +215,8 @@ function getServiceIcon(service) {
     fitbit: '/public/icons/fitbit.svg',
     brave: '/public/icons/brave.svg',
     google_search: '/public/icons/google-search.svg',
-    homeassistant: '/public/icons/homeassistant.svg'
+    homeassistant: '/public/icons/homeassistant.svg',
+    plivo: '/public/icons/plivo.svg'
   };
   return icons[service] || '/public/favicon.svg';
 }
