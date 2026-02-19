@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { getLlmProvider, getAgentLlmConfig, listAgentModels } from '../lib/db.js';
 import { translateRequest, translateResponse, translateStream } from '../lib/anthropicTranslator.js';
 import { translateRequest as geminiTranslateRequest, translateResponse as geminiTranslateResponse, translateStream as geminiTranslateStream, buildGeminiUrl } from '../lib/geminiTranslator.js';
+import { translateRequest as ollamaTranslateRequest, translateResponse as ollamaTranslateResponse } from '../lib/ollamaTranslator.js';
 
 const router = Router();
 
@@ -13,7 +14,8 @@ const LLM_TIMEOUT_MS = parseInt(process.env.AGENTGATE_LLM_TIMEOUT_MS, 10) || 300
 const PROVIDER_DEFAULTS = {
   openai: 'https://api.openai.com',
   anthropic: 'https://api.anthropic.com',
-  google: 'https://generativelanguage.googleapis.com'
+  google: 'https://generativelanguage.googleapis.com',
+  ollama: 'http://localhost:11434'
 };
 
 /**
@@ -34,6 +36,11 @@ function buildUpstreamHeaders(provider, originalHeaders) {
     break;
   case 'google':
     headers['x-goog-api-key'] = provider.api_key;
+    break;
+  case 'ollama':
+    if (provider.api_key) {
+      headers['Authorization'] = `Bearer ${provider.api_key}`;
+    }
     break;
   case 'openai':
   default:
@@ -80,6 +87,7 @@ router.post('/v1/chat/completions', async (req, res) => {
     // Build upstream request
     const isAnthropic = provider.provider_type === 'anthropic';
     const isGemini = provider.provider_type === 'google';
+    const isOllama = provider.provider_type === 'ollama';
     const baseUrl = provider.base_url || PROVIDER_DEFAULTS[provider.provider_type] || provider.base_url;
     const upstreamHeaders = buildUpstreamHeaders(provider, req.headers);
 
@@ -100,6 +108,9 @@ router.post('/v1/chat/completions', async (req, res) => {
     } else if (isGemini) {
       upstreamUrl = buildGeminiUrl(baseUrl, modelForUrl, isStreaming);
       body = geminiTranslateRequest(body);
+    } else if (isOllama) {
+      upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+      body = ollamaTranslateRequest(body);
     } else {
       upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
     }
@@ -138,7 +149,7 @@ router.post('/v1/chat/completions', async (req, res) => {
           await geminiTranslateStream(upstreamRes, res, modelForUrl);
           res.end();
         } else {
-          // Pipe OpenAI-compatible stream directly
+          // Pipe OpenAI-compatible stream directly (OpenAI + Ollama)
           const reader = upstreamRes.body.getReader();
           const decoder = new TextDecoder();
 
@@ -180,6 +191,15 @@ router.post('/v1/chat/completions', async (req, res) => {
             res.json(openaiJson);
           } catch {
             // If parsing fails, forward as-is
+            res.send(responseBody);
+          }
+        } else if (isOllama) {
+          // Translate Ollama response if needed
+          try {
+            const ollamaJson = JSON.parse(responseBody);
+            const openaiJson = ollamaTranslateResponse(ollamaJson, body.model);
+            res.json(openaiJson);
+          } catch {
             res.send(responseBody);
           }
         } else {
