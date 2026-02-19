@@ -59,7 +59,7 @@ claude mcp add --transport http agentgate https://your-server.com/mcp \
 Your agent gets tools for services, queue, messaging, and mementos without seeing your credentials. [Details →](docs/mcp.md)
 
 ### Agent Messaging
-Agents can message each other for multi-agent coordination. Configure messaging mode: off, supervised (you approve messages), or open (instant delivery). [Details →](docs/messaging.md)
+Agents can message each other for multi-agent coordination. Configure messaging mode: off, supervised (you approve messages), or open (instant delivery). [Details →](docs/inter-agent-messaging.md)
 
 ### Mementos
 Persistent memory storage with keyword tagging. Agents can save context and retrieve it later across sessions. [Details →](docs/memento.md)
