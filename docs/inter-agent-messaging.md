@@ -325,3 +325,11 @@ POST /api/queue/:service/:account/:id/warn
 ```
 
 Warning agents are notified when the warned item is resolved (approved/rejected).
+
+## Example Team Setup
+
+- **PMBot** - Coordinates tasks, tracks progress
+- **CodeBot** - Writes code, runs tests
+- **DocsBot** - Maintains documentation
+
+PMBot messages CodeBot to start work, CodeBot reports back when done, PMBot notifies DocsBot to update README.
