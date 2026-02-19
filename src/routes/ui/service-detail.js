@@ -187,7 +187,8 @@ function getServiceIcon(service) {
     jira: '/public/icons/jira.svg',
     fitbit: '/public/icons/fitbit.svg',
     brave: '/public/icons/brave.svg',
-    google_search: '/public/icons/google-search.svg'
+    google_search: '/public/icons/google-search.svg',
+    twilio: '/public/icons/twilio.svg'
   };
   return icons[service] || '/public/favicon.svg';
 }
@@ -339,6 +340,21 @@ function getServiceFormFields(serviceName) {
           <button type="button" onclick="const i=document.getElementById('ha-token');const t=i.type==='password'?'text':'password';i.type=t;this.textContent=t==='password'?'Show':'Hide';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:0.85em;">Hide</button>
         </div>
         <p class="help">Create a token in Home Assistant: Profile → Security → Long-Lived Access Tokens → Create Token</p>
+      </div>`,
+
+    twilio: `
+      <div class="form-group">
+        <label>Account SID</label>
+        <input type="text" name="accountSid" placeholder="AC..." required autocomplete="off">
+        <p class="help">Find your Account SID in the <a href="https://console.twilio.com/" target="_blank">Twilio Console</a></p>
+      </div>
+      <div class="form-group">
+        <label>Auth Token</label>
+        <div style="position:relative;">
+          <input type="text" name="authToken" id="twilio-token" placeholder="Your auth token" required autocomplete="off" style="padding-right:60px;">
+          <button type="button" onclick="const i=document.getElementById('twilio-token');const t=i.type==='password'?'text':'password';i.type=t;this.textContent=t==='password'?'Show':'Hide';" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--text-muted);font-size:0.85em;">Hide</button>
+        </div>
+        <p class="help">Find your Auth Token in the Twilio Console dashboard</p>
       </div>`
   };
 
