@@ -12,7 +12,8 @@
   },
   "files": [
     "src/",
-    "public/"
+    "public/",
+    "views/"
   ],
   "repository": {
     "type": "git",
