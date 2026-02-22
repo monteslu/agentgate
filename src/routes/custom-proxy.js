@@ -1,7 +1,7 @@
 // Dynamic proxy for custom services (#249)
 // Loads enabled custom services and proxies requests to upstream APIs
 import { Router } from 'express';
-import { injectAuth, assertNotPrivateUrl } from '../services/customServiceService.js';
+import { injectAuth, assertNotPrivateUrl, buildPinnedUrl } from '../services/customServiceService.js';
 import { getCustomServiceAccount, getCustomService } from '../lib/db.js';
 
 const router = Router();
@@ -158,13 +158,18 @@ router.all('/:serviceName/:accountName/*', async (req, res) => {
 
   const upstreamUrl = buildUpstreamUrl(service.base_url, matchedEndpoint.path, pathParams, query);
 
-  // SSRF protection with DNS pinning: resolve once, use the IP for fetch
-  let pinnedUrl;
+  // SSRF protection: resolve DNS and check for private IPs
+  // For HTTP: use DNS-pinned URL to prevent rebinding attacks
+  // For HTTPS: use original URL (pinning breaks TLS cert validation)
+  let fetchUrl;
   try {
-    const { address, hostname } = await assertNotPrivateUrl(upstreamUrl);
-    const parsed = new URL(upstreamUrl);
-    pinnedUrl = `${parsed.protocol}//${address}${parsed.port ? ':' + parsed.port : ''}${parsed.pathname}${parsed.search}`;
-    headers['Host'] = hostname;
+    const { address, hostname, pinnable } = await assertNotPrivateUrl(upstreamUrl);
+    if (pinnable) {
+      fetchUrl = buildPinnedUrl(upstreamUrl, address);
+      headers['Host'] = hostname;
+    } else {
+      fetchUrl = upstreamUrl;
+    }
   } catch (err) {
     return res.status(403).json({ error: 'ssrf_blocked', message: err.message });
   }
@@ -180,7 +185,7 @@ router.all('/:serviceName/:accountName/*', async (req, res) => {
     const timeout = setTimeout(() => controller.abort(), 30000);
     fetchOptions.signal = controller.signal;
 
-    const upstream = await fetch(pinnedUrl, fetchOptions);
+    const upstream = await fetch(fetchUrl, fetchOptions);
     clearTimeout(timeout);
 
     const contentType = upstream.headers.get('content-type') || '';
