@@ -5,6 +5,7 @@ import { homedir } from 'os';
 import { mkdirSync, existsSync, unlinkSync, readdirSync } from 'fs';
 import bcrypt from 'bcrypt';
 import { stemmer } from 'stemmer';
+import { encryptCredentials, decryptCredentials } from './credentials.js';
 
 // Data directory: AGENTGATE_DATA_DIR env var, or ~/.agentgate/
 const dataDir = process.env.AGENTGATE_DATA_DIR || join(homedir(), '.agentgate');
@@ -2549,7 +2550,7 @@ export function createCustomServiceAccount(serviceName, accountName, credentials
   const result = db.prepare(`
     INSERT INTO custom_service_accounts (service_id, account_name, credentials)
     VALUES (?, ?, ?)
-  `).run(svc.id, accountName, JSON.stringify(credentials));
+  `).run(svc.id, accountName, encryptCredentials(credentials));
   return { id: Number(result.lastInsertRowid), service: serviceName, account_name: accountName };
 }
 
@@ -2560,7 +2561,7 @@ export function getCustomServiceAccount(serviceName, accountName) {
     WHERE cs.name = ? AND csa.account_name = ?
   `).get(serviceName, accountName);
   if (!row) return null;
-  return { ...row, credentials: JSON.parse(row.credentials), enabled: row.enabled === 1 };
+  return { ...row, credentials: decryptCredentials(row.credentials), enabled: row.enabled === 1 };
 }
 
 export function listCustomServiceAccounts(serviceName) {
@@ -2580,7 +2581,7 @@ export function updateCustomServiceAccount(serviceName, accountName, updates) {
   if (updates.credentials !== undefined) {
     db.prepare(`
       UPDATE custom_service_accounts SET credentials = ? WHERE service_id = ? AND account_name = ?
-    `).run(JSON.stringify(updates.credentials), svc.id, accountName);
+    `).run(encryptCredentials(updates.credentials), svc.id, accountName);
   }
   if (updates.enabled !== undefined) {
     db.prepare(`
@@ -2618,7 +2619,7 @@ export function listEnabledCustomServices() {
     if (row.account_name) {
       services.get(row.name).accounts.push({
         account_name: row.account_name,
-        credentials: JSON.parse(row.account_credentials)
+        credentials: decryptCredentials(row.account_credentials)
       });
     }
   }
