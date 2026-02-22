@@ -70,13 +70,20 @@ function isPrivateIP(ip) {
 }
 
 /**
- * Resolve a URL's hostname and check it doesn't point to a private/internal IP (SSRF protection).
- * Returns { address, hostname } for DNS pinning — callers should use the resolved IP
- * to construct the fetch URL and set the Host header to the original hostname.
+ * Resolve a URL's hostname and verify it doesn't point to a private/internal IP (SSRF protection).
+ *
+ * For HTTP URLs: returns { address, hostname, pinnable: true } — callers can use the
+ * resolved IP directly to prevent DNS rebinding (TOCTOU).
+ *
+ * For HTTPS URLs: returns { address, hostname, pinnable: false } — DNS pinning would break
+ * TLS certificate validation (certs are issued for hostnames, not IPs), so callers should
+ * use the original URL. The DNS check still blocks private IPs at check time.
  */
 export async function assertNotPrivateUrl(url) {
   const parsed = new URL(url);
   const hostname = parsed.hostname;
+  const isHttps = parsed.protocol === 'https:';
+
   // Check if hostname is already an IP
   if (isPrivateIP(hostname)) {
     throw new Error('Connections to private/internal addresses are not allowed');
@@ -87,11 +94,20 @@ export async function assertNotPrivateUrl(url) {
     if (isPrivateIP(result.address)) {
       throw new Error('Connections to private/internal addresses are not allowed');
     }
-    return { address: result.address, hostname };
+    return { address: result.address, hostname, pinnable: !isHttps };
   } catch (err) {
     if (err.message.includes('private/internal')) throw err;
     throw new Error(`DNS resolution failed for ${hostname}: ${err.message}`);
   }
+}
+
+/**
+ * Build a DNS-pinned URL by replacing the hostname with the resolved IP.
+ * Only use for HTTP (not HTTPS) — see assertNotPrivateUrl docs.
+ */
+export function buildPinnedUrl(originalUrl, resolvedIp) {
+  const parsed = new URL(originalUrl);
+  return `${parsed.protocol}//${resolvedIp}${parsed.port ? ':' + parsed.port : ''}${parsed.pathname}${parsed.search}`;
 }
 
 /**
@@ -192,14 +208,15 @@ export async function testConnection(serviceName, accountName) {
 
   const url = service.base_url;
 
-  // SSRF protection with DNS pinning: resolve once, use the IP for fetch
-  const { address, hostname } = await assertNotPrivateUrl(url);
+  // SSRF protection: resolve DNS and check for private IPs
+  const { address, hostname, pinnable } = await assertNotPrivateUrl(url);
 
-  // Build DNS-pinned URL: replace hostname with resolved IP
-  const parsed = new URL(url);
-  const pinnedUrl = `${parsed.protocol}//${address}${parsed.port ? ':' + parsed.port : ''}${parsed.pathname}${parsed.search}`;
-
-  const headers = { 'Host': hostname };
+  // For HTTP, use DNS-pinned URL to prevent rebinding; for HTTPS, use original URL
+  const fetchUrl = pinnable ? buildPinnedUrl(url, address) : url;
+  const headers = {};
+  if (pinnable) {
+    headers['Host'] = hostname;
+  }
 
   // Inject auth if account provided
   if (account) {
@@ -209,7 +226,7 @@ export async function testConnection(serviceName, accountName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const resp = await fetch(pinnedUrl, { method: 'GET', headers, signal: controller.signal });
+    const resp = await fetch(fetchUrl, { method: 'GET', headers, signal: controller.signal });
     return { ok: resp.ok, status: resp.status, statusText: resp.statusText };
   } catch (err) {
     return { ok: false, status: 0, statusText: err.message };
