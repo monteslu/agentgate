@@ -1,4 +1,6 @@
 // Custom service business logic layer (#249)
+import { lookup as dnsLookup } from 'dns/promises';
+
 import {
   createCustomService as dbCreate,
   getCustomService as dbGet,
@@ -18,6 +20,64 @@ import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
 const NAME_RE = /^[a-z][a-z0-9_-]*$/;
 
 /**
+ * Validate that a base URL is a valid HTTP(S) URL.
+ */
+function validateBaseUrl(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('Invalid base URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Base URL must use http or https protocol');
+  }
+}
+
+/**
+ * Check if an IP address is private/internal.
+ */
+function isPrivateIP(ip) {
+  // IPv4 private ranges
+  const parts = ip.split('.').map(Number);
+  if (parts.length === 4) {
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 127) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 0) return true;
+  }
+  // IPv6
+  if (ip === '::1' || ip === '::') return true;
+  if (ip.startsWith('fc') || ip.startsWith('fd')) return true; // fc00::/7
+  if (ip.startsWith('fe80')) return true; // link-local
+  return false;
+}
+
+/**
+ * Resolve a URL's hostname and check it doesn't point to a private/internal IP (SSRF protection).
+ */
+async function assertNotPrivateUrl(url) {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname;
+  // Check if hostname is already an IP
+  if (isPrivateIP(hostname)) {
+    throw new Error('Connections to private/internal addresses are not allowed');
+  }
+  // Resolve DNS
+  try {
+    const result = await dnsLookup(hostname);
+    if (isPrivateIP(result.address)) {
+      throw new Error('Connections to private/internal addresses are not allowed');
+    }
+  } catch (err) {
+    if (err.message.includes('private/internal')) throw err;
+    throw new Error(`DNS resolution failed for ${hostname}: ${err.message}`);
+  }
+}
+
+/**
  * Create a custom service definition
  */
 export function createCustomService(data) {
@@ -27,6 +87,7 @@ export function createCustomService(data) {
   if (!data.baseUrl) {
     throw new Error('Base URL is required');
   }
+  validateBaseUrl(data.baseUrl);
   if (!data.displayName) {
     throw new Error('Display name is required');
   }
@@ -57,6 +118,9 @@ export function updateCustomService(name, updates) {
   const existing = dbGet(name);
   if (!existing) {
     throw new Error(`Custom service '${name}' not found`);
+  }
+  if (updates.baseUrl) {
+    validateBaseUrl(updates.baseUrl);
   }
   return dbUpdate(name, updates);
 }
@@ -110,6 +174,10 @@ export async function testConnection(serviceName, accountName) {
   }
 
   const url = service.base_url;
+
+  // SSRF protection: block requests to private/internal IPs
+  await assertNotPrivateUrl(url);
+
   const headers = {};
 
   // Inject auth if account provided
