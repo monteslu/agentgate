@@ -38,27 +38,43 @@ function validateBaseUrl(url) {
  * Check if an IP address is private/internal.
  */
 function isPrivateIP(ip) {
+  // Handle IPv4-mapped IPv6 (::ffff:x.x.x.x)
+  if (ip.startsWith('::ffff:')) {
+    const mapped = ip.slice(7);
+    if (mapped.includes('.')) {
+      return isPrivateIP(mapped);
+    }
+  }
+
   // IPv4 private ranges
   const parts = ip.split('.').map(Number);
-  if (parts.length === 4) {
-    if (parts[0] === 10) return true;
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-    if (parts[0] === 192 && parts[1] === 168) return true;
-    if (parts[0] === 127) return true;
-    if (parts[0] === 169 && parts[1] === 254) return true;
-    if (parts[0] === 0) return true;
+  if (parts.length === 4 && parts.every(p => p >= 0 && p <= 255)) {
+    if (parts[0] === 10) return true;                                          // 10.0.0.0/8
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;     // 172.16.0.0/12
+    if (parts[0] === 192 && parts[1] === 168) return true;                     // 192.168.0.0/16
+    if (parts[0] === 127) return true;                                          // 127.0.0.0/8
+    if (parts[0] === 169 && parts[1] === 254) return true;                     // 169.254.0.0/16 link-local
+    if (parts[0] === 0) return true;                                            // 0.0.0.0/8
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;    // 100.64.0.0/10 CGNAT
+    if (parts[0] === 198 && (parts[1] === 18 || parts[1] === 19)) return true; // 198.18.0.0/15 benchmarking
+    if (parts[0] >= 240) return true;                                           // 240.0.0.0/4 reserved
+    if (parts[0] === 255 && parts[1] === 255 && parts[2] === 255 && parts[3] === 255) return true; // broadcast
   }
+
   // IPv6
   if (ip === '::1' || ip === '::') return true;
-  if (ip.startsWith('fc') || ip.startsWith('fd')) return true; // fc00::/7
-  if (ip.startsWith('fe80')) return true; // link-local
+  if (ip.startsWith('fc') || ip.startsWith('fd')) return true;   // fc00::/7 unique local
+  if (ip.startsWith('fe80')) return true;                         // fe80::/10 link-local
+  if (ip.startsWith('2001:db8')) return true;                     // 2001:db8::/32 documentation
   return false;
 }
 
 /**
  * Resolve a URL's hostname and check it doesn't point to a private/internal IP (SSRF protection).
+ * Returns { address, hostname } for DNS pinning — callers should use the resolved IP
+ * to construct the fetch URL and set the Host header to the original hostname.
  */
-async function assertNotPrivateUrl(url) {
+export async function assertNotPrivateUrl(url) {
   const parsed = new URL(url);
   const hostname = parsed.hostname;
   // Check if hostname is already an IP
@@ -71,6 +87,7 @@ async function assertNotPrivateUrl(url) {
     if (isPrivateIP(result.address)) {
       throw new Error('Connections to private/internal addresses are not allowed');
     }
+    return { address: result.address, hostname };
   } catch (err) {
     if (err.message.includes('private/internal')) throw err;
     throw new Error(`DNS resolution failed for ${hostname}: ${err.message}`);
@@ -175,10 +192,14 @@ export async function testConnection(serviceName, accountName) {
 
   const url = service.base_url;
 
-  // SSRF protection: block requests to private/internal IPs
-  await assertNotPrivateUrl(url);
+  // SSRF protection with DNS pinning: resolve once, use the IP for fetch
+  const { address, hostname } = await assertNotPrivateUrl(url);
 
-  const headers = {};
+  // Build DNS-pinned URL: replace hostname with resolved IP
+  const parsed = new URL(url);
+  const pinnedUrl = `${parsed.protocol}//${address}${parsed.port ? ':' + parsed.port : ''}${parsed.pathname}${parsed.search}`;
+
+  const headers = { 'Host': hostname };
 
   // Inject auth if account provided
   if (account) {
@@ -188,7 +209,7 @@ export async function testConnection(serviceName, accountName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const resp = await fetch(url, { method: 'GET', headers, signal: controller.signal });
+    const resp = await fetch(pinnedUrl, { method: 'GET', headers, signal: controller.signal });
     return { ok: resp.ok, status: resp.status, statusText: resp.statusText };
   } catch (err) {
     return { ok: false, status: 0, statusText: err.message };
