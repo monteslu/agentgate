@@ -7,6 +7,8 @@ import { connectHsync } from './lib/hsyncManager.js';
 import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
 import { apiKeyAuth, writeProxy, serviceAccessCheck } from './lib/middleware.js';
+import { loadPlugins } from './lib/pluginLoader.js';
+import { registerPluginRoutes } from './lib/pluginRouter.js';
 import githubRoutes from './routes/github.js';
 import blueskyRoutes from './routes/bluesky.js';
 import redditRoutes from './routes/reddit.js';
@@ -129,39 +131,48 @@ app.get('/', (req, res) => {
   res.redirect('/ui');
 });
 
-const server = app.listen(PORT, async () => {
-  console.log(`Server running at: http://localhost:${PORT}`);
+// Load plugins and start server
+loadPlugins().then(() => {
+  // Register plugin routes after loading
+  registerPluginRoutes(app);
 
-  // Initialize socket.io for real-time updates
-  initSocket(server);
+  const server = app.listen(PORT, async () => {
+    console.log(`Server running at: http://localhost:${PORT}`);
 
-  // Set up WebSocket proxy for agent gateways (after socket.io)
-  setupWebSocketProxy(server);
+    // Initialize socket.io for real-time updates
+    initSocket(server);
 
-  // Set up channel WebSocket proxy for chat clients
-  setAdminTokenValidator(validateAdminChatToken);
-  setupHumanChannelProxy(server);
-  setupAgentChannelProxy(server);
+    // Set up WebSocket proxy for agent gateways (after socket.io)
+    setupWebSocketProxy(server);
 
-  // Start tunnels if configured
-  try {
-    await connectHsync(PORT);
-  } catch (err) {
-    console.error('hsync connection error:', err);
-  }
+    // Set up channel WebSocket proxy for chat clients
+    setAdminTokenValidator(validateAdminChatToken);
+    setupHumanChannelProxy(server);
+    setupAgentChannelProxy(server);
 
-  try {
-    startCloudflared();
-  } catch (err) {
-    console.error('cloudflared error:', err);
-  }
-});
+    // Start tunnels if configured
+    try {
+      await connectHsync(PORT);
+    } catch (err) {
+      console.error('hsync connection error:', err);
+    }
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Error: Port ${PORT} is already in use. Is another instance running?`);
-  } else {
-    console.error('Server error:', err.message);
-  }
+    try {
+      startCloudflared();
+    } catch (err) {
+      console.error('cloudflared error:', err);
+    }
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Error: Port ${PORT} is already in use. Is another instance running?`);
+    } else {
+      console.error('Server error:', err.message);
+    }
+    process.exit(1);
+  });
+}).catch((err) => {
+  console.error('Failed to load plugins:', err);
   process.exit(1);
 });
