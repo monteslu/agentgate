@@ -11,7 +11,10 @@ let _cachedKey = null;
 
 function getEncryptionKey() {
   if (_cachedKey) return _cachedKey;
-  const secret = process.env.CREDENTIALS_SECRET || process.env.AGENTGATE_SECRET || 'agentgate-default-secret';
+  const secret = process.env.CREDENTIALS_SECRET || process.env.AGENTGATE_SECRET;
+  if (!secret) {
+    throw new Error('CREDENTIALS_SECRET or AGENTGATE_SECRET environment variable must be set to use credential encryption');
+  }
   _cachedKey = scryptSync(secret, SALT, KEY_LENGTH);
   return _cachedKey;
 }
