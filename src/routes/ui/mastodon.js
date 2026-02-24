@@ -159,10 +159,10 @@ export function renderCard(accounts, _baseUrl) {
         statusBadge = '<span class="badge-warning" style="margin-left: 8px;">⏳ Pending</span>';
       }
       
-      const retryBtn = (!hasToken && hasCredentials) ? `
+      const retryBtn = hasCredentials ? `
         <form method="POST" action="/ui/mastodon/retry" style="margin:0;">
           <input type="hidden" name="accountName" value="${acc.name}" autocomplete="off">
-          <button type="submit" class="btn-sm btn-primary">Retry Auth</button>
+          <button type="submit" class="btn-sm ${hasToken ? 'btn-secondary' : 'btn-primary'}">${hasToken ? 'Re-authorize' : 'Retry Auth'}</button>
         </form>` : '';
       
       return `
