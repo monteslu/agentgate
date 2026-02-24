@@ -1,6 +1,6 @@
 {
   "name": "agentgate",
-  "version": "0.12.2",
+  "version": "0.15.0",
   "type": "module",
   "description": "API gateway for AI agents with human-in-the-loop write approval",
   "main": "src/index.js",
@@ -12,7 +12,8 @@
   },
   "files": [
     "src/",
-    "public/"
+    "public/",
+    "views/"
   ],
   "repository": {
     "type": "git",
