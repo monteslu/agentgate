@@ -70,6 +70,8 @@ router.get('/:id', (req, res) => {
     return { key, masked };
   });
 
+  const retryRoute = getRetryRoute(account.service);
+
   renderPage(res, 'pages/service-detail', {
     title: `${displayName} - ${account.name}`,
     includeSocket: true,
@@ -79,6 +81,7 @@ router.get('/:id', (req, res) => {
     displayName,
     icon,
     credFields,
+    retryRoute,
     escapeHtml,
     renderAvatar
   });
@@ -173,6 +176,21 @@ function renderServiceTypeNotFound(res, serviceType) {
     includeSocket: true,
     message: `The service type "${escapeHtml(serviceType)}" is not available.`
   });
+}
+
+/**
+ * Return the retry-auth route for OAuth services, or null for non-OAuth.
+ */
+function getRetryRoute(serviceName) {
+  const routes = {
+    youtube: '/ui/youtube/retry',
+    google_calendar: '/ui/google/retry',
+    fitbit: '/ui/fitbit/retry',
+    linkedin: '/ui/linkedin/retry',
+    reddit: '/ui/reddit/retry',
+    mastodon: '/ui/mastodon/retry'
+  };
+  return routes[serviceName] || null;
 }
 
 function getServiceIcon(service) {
