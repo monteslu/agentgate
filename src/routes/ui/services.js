@@ -175,12 +175,23 @@ export function renderConfiguredCards(accounts) {
     const displayName = svcModule?.displayName || serviceId;
     const icon = getServiceIcon(serviceId);
 
-    const accountRows = svcAccounts.map(acc => `
+    const accountRows = svcAccounts.map(acc => {
+      const retryRoute = getRetryRoute(serviceId);
+      const { hasToken, hasCredentials } = acc.status || {};
+      const reauthBtn = (retryRoute && hasCredentials) ? `
+        <form method="POST" action="${retryRoute}" style="margin:0;">
+          <input type="hidden" name="accountName" value="${escapeHtml(acc.name)}" autocomplete="off">
+          <button type="submit" class="btn-sm ${hasToken ? 'btn-secondary' : 'btn-primary'}">${hasToken ? 'Re-authorize' : 'Retry Auth'}</button>
+        </form>` : '';
+      return `
       <div class="configured-account">
         <span class="account-name">${escapeHtml(acc.name)}</span>
-        <a href="/ui/services/${acc.id}" class="btn-sm">Details</a>
-      </div>
-    `).join('');
+        <div style="display: flex; gap: 8px;">
+          ${reauthBtn}
+          <a href="/ui/services/${acc.id}" class="btn-sm">Details</a>
+        </div>
+      </div>`;
+    }).join('');
 
     return `
       <div class="card configured-service" id="service-${serviceId}">
@@ -192,6 +203,21 @@ export function renderConfiguredCards(accounts) {
       </div>
     `;
   }).join('\n');
+}
+
+/**
+ * Get the OAuth retry/re-auth route for a service, or null if not an OAuth service.
+ */
+function getRetryRoute(service) {
+  const routes = {
+    youtube: '/ui/youtube/retry',
+    google_calendar: '/ui/google/retry',
+    fitbit: '/ui/fitbit/retry',
+    linkedin: '/ui/linkedin/retry',
+    reddit: '/ui/reddit/retry',
+    mastodon: '/ui/mastodon/retry'
+  };
+  return routes[service] || null;
 }
 
 function getServiceIcon(service) {
