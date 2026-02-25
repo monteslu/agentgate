@@ -8,6 +8,12 @@
   <div class="card">
     <h3>Credentials</h3>
     <p class="help">Stored credentials for this service instance.</p>
+    <% if (retryRoute) { %>
+      <form method="POST" action="<%= retryRoute %>" style="margin-bottom: 15px;">
+        <input type="hidden" name="accountName" value="<%- escapeHtml(account.name) %>" autocomplete="off">
+        <button type="submit" class="btn-primary">Re-authorize</button>
+      </form>
+    <% } %>
     <% if (credFields.length === 0) { %>
       <p class="help">No credentials stored.</p>
     <% } else { %>
