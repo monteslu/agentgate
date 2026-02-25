@@ -1,7 +1,7 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
-import { renderErrorPage } from './shared.js';
+import { renderErrorPage, getBaseUrl } from './shared.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   router.post('/reddit/setup', (req, res) => {
     const { accountName, clientId, clientSecret } = req.body;
     if (!accountName || !clientId || !clientSecret) {
@@ -9,7 +9,7 @@ export function registerRoutes(router, baseUrl) {
     }
     setAccountCredentials('reddit', accountName, { clientId, clientSecret });
 
-    const redirectUri = `${baseUrl}/ui/reddit/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/reddit/callback`;
     const scope = 'read identity';
     const state = `agentgate_reddit_${accountName}`;
 
@@ -40,7 +40,7 @@ export function registerRoutes(router, baseUrl) {
 
     try {
       const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64');
-      const redirectUri = `${baseUrl}/ui/reddit/callback`;
+      const redirectUri = `${getBaseUrl(req)}/ui/reddit/callback`;
 
       const response = await fetch('https://www.reddit.com/api/v1/access_token', {
         method: 'POST',
@@ -89,7 +89,7 @@ export function registerRoutes(router, baseUrl) {
       return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
     }
 
-    const redirectUri = `${baseUrl}/ui/reddit/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/reddit/callback`;
     const scope = 'read identity';
     const state = `agentgate_reddit_${accountName}`;
 

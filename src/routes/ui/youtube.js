@@ -1,7 +1,7 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
-import { renderErrorPage } from './shared.js';
+import { renderErrorPage, getBaseUrl } from './shared.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   router.post('/youtube/setup', (req, res) => {
     const { accountName, clientId, clientSecret } = req.body;
     if (!accountName || !clientId || !clientSecret) {
@@ -9,7 +9,7 @@ export function registerRoutes(router, baseUrl) {
     }
     setAccountCredentials('youtube', accountName, { clientId, clientSecret });
 
-    const redirectUri = `${baseUrl}/ui/youtube/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/youtube/callback`;
     const scope = 'https://www.googleapis.com/auth/youtube.readonly';
     const state = `agentgate_youtube_${accountName}`;
 
@@ -39,7 +39,7 @@ export function registerRoutes(router, baseUrl) {
     }
 
     try {
-      const redirectUri = `${baseUrl}/ui/youtube/callback`;
+      const redirectUri = `${getBaseUrl(req)}/ui/youtube/callback`;
 
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -89,7 +89,7 @@ export function registerRoutes(router, baseUrl) {
       return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
     }
 
-    const redirectUri = `${baseUrl}/ui/youtube/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/youtube/callback`;
     const scope = 'https://www.googleapis.com/auth/youtube.readonly';
     const state = `agentgate_youtube_${accountName}`;
 
