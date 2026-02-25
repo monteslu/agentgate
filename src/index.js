@@ -6,7 +6,7 @@ import { getCookieSecret } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
-import { apiKeyAuth, writeProxy, serviceAccessCheck } from './lib/middleware.js';
+import { apiKeyAuth, writeProxy, serviceAccessCheck, sidecarSecretCheck } from './lib/middleware.js';
 import { globalRateLimit } from './lib/rateLimiter.js';
 import githubRoutes from './routes/github.js';
 import blueskyRoutes from './routes/bluesky.js';
@@ -69,6 +69,9 @@ app.set('views', join(__dirname, '../views'));
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: Date.now() });
 });
+
+// Sidecar secret check — applied to ALL /api/* routes before any other middleware
+app.use('/api', sidecarSecretCheck);
 
 // API routes - require auth, read-only, and service access check
 // Pattern: /api/{service}/{accountName}/...

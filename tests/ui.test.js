@@ -101,6 +101,11 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteBroadcast: jest.fn(),
   getBroadcast: jest.fn(),
   
+  // Sidecar Secret
+  setSidecarSecret: jest.fn(),
+  getSidecarSecretHash: jest.fn(() => null),
+  clearSidecarSecret: jest.fn(),
+
   // Queue visibility
   getSharedQueueVisibility: jest.fn(() => false),
   setSharedQueueVisibility: jest.fn(),

@@ -977,6 +977,20 @@ export function hasAdminPassword() {
   return getSetting('admin_password') !== null;
 }
 
+// Sidecar Secret
+export async function setSidecarSecret(plaintext) {
+  const hash = await bcrypt.hash(plaintext, 10);
+  setSetting('sidecar_secret', hash);
+}
+
+export function getSidecarSecretHash() {
+  return getSetting('sidecar_secret');
+}
+
+export function clearSidecarSecret() {
+  return deleteSetting('sidecar_secret');
+}
+
 // Cookie secret (generated once, persisted)
 export function getCookieSecret() {
   let secret = getSetting('cookie_secret');

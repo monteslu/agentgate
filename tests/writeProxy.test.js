@@ -9,7 +9,8 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   markAutoApproved: jest.fn(),
   updateQueueStatus: jest.fn(),
   getQueueEntry: jest.fn(),
-  getAccountCredentials: jest.fn(() => ({ token: 'test-token' }))
+  getAccountCredentials: jest.fn(() => ({ token: 'test-token' })),
+  getSidecarSecretHash: jest.fn(() => null)
 }));
 
 jest.unstable_mockModule('../src/lib/queueExecutor.js', () => ({

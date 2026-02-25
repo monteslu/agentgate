@@ -5,7 +5,8 @@ import {
   setMessagingMode, getMessagingMode,
   getSharedQueueVisibility, setSharedQueueVisibility,
   getAgentWithdrawEnabled, setAgentWithdrawEnabled,
-  getPendingQueueCount, listPendingMessages
+  getPendingQueueCount, listPendingMessages,
+  setSidecarSecret, getSidecarSecretHash, clearSidecarSecret
 } from '../../lib/db.js';
 import { connectHsync, disconnectHsync, getHsyncUrl, isHsyncConnected } from '../../lib/hsyncManager.js';
 import { PORT } from './shared.js';
@@ -23,6 +24,7 @@ router.get('/settings', (req, res) => {
   const hsyncConnected = isHsyncConnected();
   const sharedQueueVisibility = getSharedQueueVisibility();
   const agentWithdrawEnabled = getAgentWithdrawEnabled();
+  const sidecarSecretConfigured = !!getSidecarSecretHash();
 
   renderPage(res, 'pages/settings', {
     title: 'Settings',
@@ -34,7 +36,8 @@ router.get('/settings', (req, res) => {
     hsyncUrl,
     hsyncConnected,
     sharedQueueVisibility,
-    agentWithdrawEnabled
+    agentWithdrawEnabled,
+    sidecarSecretConfigured
   });
 });
 
@@ -89,6 +92,21 @@ router.post('/queue/settings/agent-withdraw', (req, res) => {
     return res.json({ ok: true, enabled });
   }
   res.redirect('/ui');
+});
+
+// Sidecar Secret
+router.post('/sidecar-secret/set', async (req, res) => {
+  const { secret } = req.body;
+  if (!secret || !secret.trim()) {
+    return res.status(400).send('Secret is required');
+  }
+  await setSidecarSecret(secret.trim());
+  res.redirect('/ui/settings');
+});
+
+router.post('/sidecar-secret/clear', (req, res) => {
+  clearSidecarSecret();
+  res.redirect('/ui/settings');
 });
 
 export default router;

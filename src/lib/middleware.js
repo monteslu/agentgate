@@ -1,4 +1,5 @@
-import { validateApiKey, checkServiceAccess, checkBypassAuth, createQueueEntry, markAutoApproved, updateQueueStatus, getAccountCredentials } from './db.js';
+import bcrypt from 'bcrypt';
+import { validateApiKey, checkServiceAccess, checkBypassAuth, createQueueEntry, markAutoApproved, updateQueueStatus, getAccountCredentials, getSidecarSecretHash } from './db.js';
 import { getAccessToken, buildUrl, buildHeaders } from './queueExecutor.js';
 import { emitCountUpdate } from './socketManager.js';
 import { checkAuthBackoff, recordAuthFailure, clearAuthFailures } from './rateLimiter.js';
@@ -162,6 +163,44 @@ export function writeProxy(serviceName) {
       }
     }
   };
+}
+
+// Sidecar secret check middleware
+// If a sidecar secret is configured, requires X-Sidecar-Secret header on all API routes.
+// Always strips the header after validation to prevent upstream leakage.
+// Integrates with auth backoff to prevent brute-force attacks on the secret.
+export async function sidecarSecretCheck(req, res, next) {
+  const hash = getSidecarSecretHash();
+  if (!hash) {
+    // No secret configured — feature is optional, pass through
+    return next();
+  }
+
+  // Check backoff BEFORE doing bcrypt — saves CPU when IP is already blocked
+  const { blocked, retryAfter } = checkAuthBackoff(req.ip);
+  if (blocked) {
+    // Still strip the header even when blocked
+    delete req.headers['x-sidecar-secret'];
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many failed authentication attempts', retryAfter });
+  }
+
+  const secret = req.headers['x-sidecar-secret'];
+  // Always delete the header so it never leaks upstream
+  delete req.headers['x-sidecar-secret'];
+
+  if (!secret) {
+    recordAuthFailure(req.ip);
+    return res.status(401).json({ error: 'Missing or invalid sidecar secret' });
+  }
+
+  const valid = await bcrypt.compare(secret, hash);
+  if (!valid) {
+    recordAuthFailure(req.ip);
+    return res.status(401).json({ error: 'Missing or invalid sidecar secret' });
+  }
+
+  next();
 }
 
 // Service access control middleware factory
