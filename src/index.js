@@ -7,6 +7,7 @@ import { connectHsync } from './lib/hsyncManager.js';
 import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
 import { apiKeyAuth, writeProxy, serviceAccessCheck } from './lib/middleware.js';
+import { globalRateLimit } from './lib/rateLimiter.js';
 import githubRoutes from './routes/github.js';
 import blueskyRoutes from './routes/bluesky.js';
 import redditRoutes from './routes/reddit.js';
@@ -42,6 +43,9 @@ const PORT = process.env.PORT || 3050;
 // Mounted BEFORE body parsers so request bodies pass through untouched
 // No API key auth — the target gateway handles its own authentication
 app.use('/px/:proxyId', createProxyRouter());
+
+// Global rate limit — 200 req/min per IP
+app.use(globalRateLimit);
 
 app.use(express.json({
   limit: '10mb',

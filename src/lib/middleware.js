@@ -1,24 +1,37 @@
 import { validateApiKey, checkServiceAccess, checkBypassAuth, createQueueEntry, markAutoApproved, updateQueueStatus, getAccountCredentials } from './db.js';
 import { getAccessToken, buildUrl, buildHeaders } from './queueExecutor.js';
 import { emitCountUpdate } from './socketManager.js';
+import { checkAuthBackoff, recordAuthFailure, clearAuthFailures } from './rateLimiter.js';
 
 // API key auth middleware for /api routes
 export async function apiKeyAuth(req, res, next) {
+  // Check if IP is in backoff from previous failures
+  const { blocked, retryAfter } = checkAuthBackoff(req.ip);
+  if (blocked) {
+    res.set('Retry-After', String(retryAfter));
+    return res.status(429).json({ error: 'Too many failed authentication attempts', retryAfter });
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    recordAuthFailure(req.ip);
     return res.status(401).json({ error: 'Missing or invalid Authorization header' });
   }
 
   const key = authHeader.slice(7);
   const valid = await validateApiKey(key);
   if (!valid) {
+    recordAuthFailure(req.ip);
     return res.status(401).json({ error: 'Invalid API key' });
   }
 
   if (!valid.enabled) {
+    recordAuthFailure(req.ip);
     return res.status(403).json({ error: 'Agent is disabled' });
   }
 
+  // Successful auth — clear any backoff
+  clearAuthFailures(req.ip);
 
   req.apiKeyInfo = valid;
   next();
