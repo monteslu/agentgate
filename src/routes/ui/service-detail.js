@@ -60,6 +60,17 @@ router.get('/:id', (req, res) => {
   const displayName = serviceModule?.displayName || serviceInfo?.name || account.service;
   const icon = getServiceIcon(account.service);
 
+  // OAuth re-auth route (null for non-OAuth services)
+  const oauthRetryRoutes = {
+    youtube: '/ui/youtube/retry',
+    google_calendar: '/ui/google/retry',
+    fitbit: '/ui/fitbit/retry',
+    linkedin: '/ui/linkedin/retry',
+    reddit: '/ui/reddit/retry',
+    mastodon: '/ui/mastodon/retry'
+  };
+  const retryRoute = oauthRetryRoutes[account.service] || null;
+
   // Build credential fields
   const creds = account.credentials || {};
   const credFields = Object.keys(creds).map(key => {
@@ -79,6 +90,7 @@ router.get('/:id', (req, res) => {
     displayName,
     icon,
     credFields,
+    retryRoute,
     escapeHtml,
     renderAvatar
   });
