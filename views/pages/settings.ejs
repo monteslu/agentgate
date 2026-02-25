@@ -73,19 +73,45 @@
   </h3>
   <% if (sidecarSecretConfigured) { %>
     <p class="help">A sidecar secret is configured. All API requests must include the <code>X-Sidecar-Secret</code> header.</p>
+    <div id="sidecar-secret-display" style="display:none; margin: 12px 0;">
+      <p class="help" style="color: var(--warning-color, #f0ad4e); font-weight: bold;">⚠️ Copy this secret now — it will not be shown again.</p>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <code id="sidecar-secret-value" style="background: var(--bg-secondary, #1a1a2e); padding: 8px 12px; border-radius: 4px; word-break: break-all; flex: 1;"></code>
+        <button type="button" class="btn-primary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('sidecar-secret-value').textContent).then(() => this.textContent = 'Copied!').catch(() => {})">Copy</button>
+      </div>
+    </div>
     <div class="flex-center gap-12 flex-wrap">
+      <button type="button" class="btn-primary btn-sm" onclick="generateSidecarSecret()">Regenerate</button>
       <form method="POST" action="/ui/sidecar-secret/clear" style="display:inline">
         <button type="submit" class="btn-danger btn-sm">Clear Secret</button>
       </form>
     </div>
   <% } else { %>
-    <p class="help">Set a shared secret that sidecar proxies must include on API requests. Optional — leave unconfigured to allow all API requests.</p>
-    <form method="POST" action="/ui/sidecar-secret/set">
-      <label>Secret</label>
-      <input type="password" name="secret" placeholder="Enter sidecar secret" required autocomplete="off">
-      <button type="submit" class="btn-primary">Set Secret</button>
-    </form>
+    <p class="help">Enable a sidecar secret to require an <code>X-Sidecar-Secret</code> header on all API requests. A strong secret is auto-generated for you.</p>
+    <div id="sidecar-secret-display" style="display:none; margin: 12px 0;">
+      <p class="help" style="color: var(--warning-color, #f0ad4e); font-weight: bold;">⚠️ Copy this secret now — it will not be shown again.</p>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <code id="sidecar-secret-value" style="background: var(--bg-secondary, #1a1a2e); padding: 8px 12px; border-radius: 4px; word-break: break-all; flex: 1;"></code>
+        <button type="button" class="btn-primary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('sidecar-secret-value').textContent).then(() => this.textContent = 'Copied!').catch(() => {})">Copy</button>
+      </div>
+    </div>
+    <button type="button" class="btn-primary" onclick="generateSidecarSecret()">Enable Sidecar Secret</button>
   <% } %>
+  <script>
+    async function generateSidecarSecret() {
+      if (!confirm('Generate a new sidecar secret? Any existing secret will be replaced.')) return;
+      try {
+        const res = await fetch('/ui/sidecar-secret/generate', { method: 'POST' });
+        const data = await res.json();
+        const display = document.getElementById('sidecar-secret-display');
+        const value = document.getElementById('sidecar-secret-value');
+        value.textContent = data.secret;
+        display.style.display = 'block';
+      } catch (e) {
+        alert('Failed to generate secret: ' + e.message);
+      }
+    }
+  </script>
 </div>
 
 <!-- hsync Remote Access -->

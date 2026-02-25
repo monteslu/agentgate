@@ -977,18 +977,30 @@ export function hasAdminPassword() {
   return getSetting('admin_password') !== null;
 }
 
-// Sidecar Secret
+// Sidecar Secret (cached — invalidated on set/clear)
+let _cachedSidecarHash = undefined; // undefined = not yet loaded
+
 export async function setSidecarSecret(plaintext) {
   const hash = await bcrypt.hash(plaintext, 10);
   setSetting('sidecar_secret', hash);
+  _cachedSidecarHash = hash;
 }
 
 export function getSidecarSecretHash() {
-  return getSetting('sidecar_secret');
+  if (_cachedSidecarHash === undefined) {
+    _cachedSidecarHash = getSetting('sidecar_secret') || null;
+  }
+  return _cachedSidecarHash;
 }
 
 export function clearSidecarSecret() {
-  return deleteSetting('sidecar_secret');
+  deleteSetting('sidecar_secret');
+  _cachedSidecarHash = null;
+}
+
+// Exported for testing only
+export function _resetSidecarCache() {
+  _cachedSidecarHash = undefined;
 }
 
 // Cookie secret (generated once, persisted)
