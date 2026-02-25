@@ -12,8 +12,9 @@ export const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
  */
 export function getBaseUrl(req) {
   if (process.env.BASE_URL) return process.env.BASE_URL;
-  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
   const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+  const isLocal = host.startsWith('localhost') || host.startsWith('127.0.0.1');
+  const proto = req.headers['x-forwarded-proto'] || (isLocal ? 'http' : 'https');
   return `${proto}://${host}`;
 }
 
