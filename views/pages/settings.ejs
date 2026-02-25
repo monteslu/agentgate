@@ -62,6 +62,32 @@
   </div>
 </div>
 
+<!-- Sidecar Secret -->
+<div class="card">
+  <h3>Sidecar Secret <span class="help-hint" title="Require a shared secret from sidecar proxies on all API requests. When configured, API requests must include an X-Sidecar-Secret header. Admin UI routes are not affected.">?</span>
+    <% if (sidecarSecretConfigured) { %>
+      <span class="status configured">Configured</span>
+    <% } else { %>
+      <span class="status not-configured">Not configured</span>
+    <% } %>
+  </h3>
+  <% if (sidecarSecretConfigured) { %>
+    <p class="help">A sidecar secret is configured. All API requests must include the <code>X-Sidecar-Secret</code> header.</p>
+    <div class="flex-center gap-12 flex-wrap">
+      <form method="POST" action="/ui/sidecar-secret/clear" style="display:inline">
+        <button type="submit" class="btn-danger btn-sm">Clear Secret</button>
+      </form>
+    </div>
+  <% } else { %>
+    <p class="help">Set a shared secret that sidecar proxies must include on API requests. Optional — leave unconfigured to allow all API requests.</p>
+    <form method="POST" action="/ui/sidecar-secret/set">
+      <label>Secret</label>
+      <input type="password" name="secret" placeholder="Enter sidecar secret" required autocomplete="off">
+      <button type="submit" class="btn-primary">Set Secret</button>
+    </form>
+  <% } %>
+</div>
+
 <!-- hsync Remote Access -->
 <div class="card">
   <h3>hsync (Remote Access) <span class="help-hint" title="hsync creates a secure tunnel so remote agents can reach this gateway without opening firewall ports. Think of it like ngrok for your agent gateway.">?</span>
