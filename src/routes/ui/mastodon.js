@@ -1,7 +1,7 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
-import { renderErrorPage } from './shared.js';
+import { renderErrorPage, getBaseUrl } from './shared.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   const DEFAULT_SCOPES = 'read write:statuses';
 
   // Simple auth: paste an access token directly (no OAuth dance)
@@ -35,9 +35,9 @@ export function registerRoutes(router, baseUrl) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_name: 'agentgate',
-          redirect_uris: `${baseUrl}/ui/mastodon/callback`,
+          redirect_uris: `${getBaseUrl(req)}/ui/mastodon/callback`,
           scopes: scopeList,
-          website: baseUrl
+          website: getBaseUrl(req)
         })
       });
 
@@ -56,7 +56,7 @@ export function registerRoutes(router, baseUrl) {
 
       const authUrl = `https://${cleanInstance}/oauth/authorize?` +
         `client_id=${app.client_id}&response_type=code&` +
-        `redirect_uri=${encodeURIComponent(`${baseUrl}/ui/mastodon/callback`)}&` +
+        `redirect_uri=${encodeURIComponent(`${getBaseUrl(req)}/ui/mastodon/callback`)}&` +
         `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
 
       res.redirect(authUrl);
@@ -91,7 +91,7 @@ export function registerRoutes(router, baseUrl) {
         body: JSON.stringify({
           client_id: creds.clientId,
           client_secret: creds.clientSecret,
-          redirect_uri: `${baseUrl}/ui/mastodon/callback`,
+          redirect_uri: `${getBaseUrl(req)}/ui/mastodon/callback`,
           grant_type: 'authorization_code',
           code,
           scope: scopeList
@@ -134,7 +134,7 @@ export function registerRoutes(router, baseUrl) {
 
     const authUrl = `https://${creds.instance}/oauth/authorize?` +
       `client_id=${creds.clientId}&response_type=code&` +
-      `redirect_uri=${encodeURIComponent(`${baseUrl}/ui/mastodon/callback`)}&` +
+      `redirect_uri=${encodeURIComponent(`${getBaseUrl(req)}/ui/mastodon/callback`)}&` +
       `scope=${encodeURIComponent(scopeList)}&state=${encodeURIComponent(`agentgate_mastodon_${accountName}`)}`;
 
     res.redirect(authUrl);

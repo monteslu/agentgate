@@ -1,7 +1,7 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
-import { renderErrorPage } from './shared.js';
+import { renderErrorPage, getBaseUrl } from './shared.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   router.post('/fitbit/setup', (req, res) => {
     const { accountName, clientId, clientSecret } = req.body;
     if (!accountName || !clientId || !clientSecret) {
@@ -9,7 +9,7 @@ export function registerRoutes(router, baseUrl) {
     }
     setAccountCredentials('fitbit', accountName, { clientId, clientSecret });
 
-    const redirectUri = `${baseUrl}/ui/fitbit/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/fitbit/callback`;
     const scope = 'activity heartrate location nutrition oxygen_saturation profile respiratory_rate settings sleep social temperature weight';
     const state = `agentgate_fitbit_${accountName}`;
 
@@ -39,7 +39,7 @@ export function registerRoutes(router, baseUrl) {
     }
 
     try {
-      const redirectUri = `${baseUrl}/ui/fitbit/callback`;
+      const redirectUri = `${getBaseUrl(req)}/ui/fitbit/callback`;
       const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString('base64');
 
       const response = await fetch('https://api.fitbit.com/oauth2/token', {
@@ -91,7 +91,7 @@ export function registerRoutes(router, baseUrl) {
       return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
     }
 
-    const redirectUri = `${baseUrl}/ui/fitbit/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/fitbit/callback`;
     const scope = 'activity heartrate location nutrition oxygen_saturation profile respiratory_rate settings sleep social temperature weight';
     const state = `agentgate_fitbit_${accountName}`;
 

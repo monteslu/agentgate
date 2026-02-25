@@ -6,6 +6,17 @@ export const COOKIE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 1 week
 export const PORT = process.env.PORT || 3050;
 export const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
+/**
+ * Derive the base URL from an incoming request.
+ * Priority: BASE_URL env > X-Forwarded-* headers > req.protocol/host
+ */
+export function getBaseUrl(req) {
+  if (process.env.BASE_URL) return process.env.BASE_URL;
+  const proto = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+  const host = req.headers['x-forwarded-host'] || req.headers.host || `localhost:${PORT}`;
+  return `${proto}://${host}`;
+}
+
 // HTML escape helper
 export function escapeHtml(str) {
   if (typeof str !== 'string') str = JSON.stringify(str, null, 2);

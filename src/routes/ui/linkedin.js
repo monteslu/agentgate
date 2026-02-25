@@ -1,7 +1,7 @@
 import { setAccountCredentials, deleteAccount, getAccountCredentials } from '../../lib/db.js';
-import { renderErrorPage } from './shared.js';
+import { renderErrorPage, getBaseUrl } from './shared.js';
 
-export function registerRoutes(router, baseUrl) {
+export function registerRoutes(router, _baseUrl) {
   const DEFAULT_SCOPES = 'openid profile email w_member_social';
 
   router.post('/linkedin/setup', (req, res) => {
@@ -15,7 +15,7 @@ export function registerRoutes(router, baseUrl) {
     
     setAccountCredentials('linkedin', accountName, { clientId, clientSecret, scopes: scopeList });
 
-    const redirectUri = `${baseUrl}/ui/linkedin/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/linkedin/callback`;
     const state = `agentgate_linkedin_${accountName}`;
 
     const authUrl = 'https://www.linkedin.com/oauth/v2/authorization?' +
@@ -44,7 +44,7 @@ export function registerRoutes(router, baseUrl) {
     }
 
     try {
-      const redirectUri = `${baseUrl}/ui/linkedin/callback`;
+      const redirectUri = `${getBaseUrl(req)}/ui/linkedin/callback`;
 
       const response = await fetch('https://www.linkedin.com/oauth/v2/accessToken', {
         method: 'POST',
@@ -94,7 +94,7 @@ export function registerRoutes(router, baseUrl) {
       return res.status(400).send(renderErrorPage('Retry Error', 'Account credentials not found. Please set up the account again.'));
     }
 
-    const redirectUri = `${baseUrl}/ui/linkedin/callback`;
+    const redirectUri = `${getBaseUrl(req)}/ui/linkedin/callback`;
     const scopeList = creds.scopes || 'openid profile email w_member_social';
     const state = `agentgate_linkedin_${accountName}`;
 
