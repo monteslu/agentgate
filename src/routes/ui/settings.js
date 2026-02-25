@@ -94,14 +94,13 @@ router.post('/queue/settings/agent-withdraw', (req, res) => {
   res.redirect('/ui');
 });
 
-// Sidecar Secret
-router.post('/sidecar-secret/set', async (req, res) => {
-  const { secret } = req.body;
-  if (!secret || !secret.trim()) {
-    return res.status(400).send('Secret is required');
-  }
-  await setSidecarSecret(secret.trim());
-  res.redirect('/ui/settings');
+// Sidecar Secret — auto-generated, never user-supplied
+router.post('/sidecar-secret/generate', async (req, res) => {
+  const { randomBytes } = await import('crypto');
+  const secret = randomBytes(32).toString('hex'); // 64-char hex, 256 bits
+  await setSidecarSecret(secret);
+  // Return the plaintext once — after this it can never be retrieved
+  res.json({ secret });
 });
 
 router.post('/sidecar-secret/clear', (req, res) => {
