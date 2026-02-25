@@ -2,6 +2,7 @@
 import { Router } from 'express';
 import { setAdminPassword, verifyAdminPassword, hasAdminPassword } from '../../lib/db.js';
 import { AUTH_COOKIE, COOKIE_MAX_AGE } from './shared.js';
+import { checkAuthBackoff, recordAuthFailure, clearAuthFailures } from '../../lib/rateLimiter.js';
 
 const router = Router();
 
@@ -40,6 +41,12 @@ router.get('/login', (req, res) => {
 
 // Handle login
 router.post('/login', async (req, res) => {
+  // Check if IP is in backoff from previous failures
+  const { blocked, retryAfter } = checkAuthBackoff(req.ip);
+  if (blocked) {
+    return res.render('pages/login', { error: `Too many failed attempts. Try again in ${retryAfter} seconds.` });
+  }
+
   const { password } = req.body;
   if (!password) {
     return res.render('pages/login', { error: 'Password required' });
@@ -47,8 +54,12 @@ router.post('/login', async (req, res) => {
 
   const valid = await verifyAdminPassword(password);
   if (!valid) {
+    recordAuthFailure(req.ip);
     return res.render('pages/login', { error: 'Invalid password' });
   }
+
+  // Successful auth — clear any backoff
+  clearAuthFailures(req.ip);
 
   res.cookie(AUTH_COOKIE, 'authenticated', {
     signed: true,
