@@ -20,6 +20,7 @@ import fitbitRoutes from './routes/fitbit.js';
 import braveRoutes from './routes/brave.js';
 import googleSearchRoutes from './routes/google-search.js';
 import homeassistantRoutes from './routes/homeassistant.js';
+import plivoRoutes from './routes/plivo.js';
 import queueRoutes from './routes/queue.js';
 import agentsRoutes from './routes/agents.js';
 import mementoRoutes from './routes/memento.js';
@@ -87,6 +88,7 @@ app.use('/api/fitbit', apiKeyAuth, serviceAccessCheck('fitbit'), writeProxy('fit
 app.use('/api/brave', apiKeyAuth, serviceAccessCheck('brave'), writeProxy('brave'), braveRoutes);
 app.use('/api/google_search', apiKeyAuth, serviceAccessCheck('google_search'), writeProxy('google_search'), googleSearchRoutes);
 app.use('/api/homeassistant', apiKeyAuth, serviceAccessCheck('homeassistant'), writeProxy('homeassistant'), homeassistantRoutes);
+app.use('/api/plivo', apiKeyAuth, serviceAccessCheck('plivo'), writeProxy('plivo'), plivoRoutes);
 
 // Service access management - admin API (requires auth)
 app.use('/api/services', apiKeyAuth, servicesRoutes);

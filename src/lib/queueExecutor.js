@@ -14,7 +14,8 @@ const SERVICE_URLS = {
   linkedin: 'https://api.linkedin.com/v2',
   jira: null, // Dynamic: https://{domain}/rest/api/3
   fitbit: 'https://api.fitbit.com',
-  homeassistant: null // Dynamic: {host}/api
+  homeassistant: null, // Dynamic: {host}/api
+  plivo: null // Dynamic: https://api.plivo.com/v1/Account/{auth_id}
 };
 
 // Get access token for a service, refreshing if needed
@@ -54,6 +55,9 @@ export async function getAccessToken(service, accountName) {
 
   case 'homeassistant':
     return creds.token || null;
+
+  case 'plivo':
+    return creds;
 
   default:
     return null;
@@ -245,6 +249,9 @@ export function buildUrl(service, accountName, path) {
     const host = creds.host.replace(/\/+$/, '');
     return `${host}/api/${path.replace(/^\//, '')}`;
   }
+  if (service === 'plivo' && creds?.authId) {
+    return `https://api.plivo.com/v1/Account/${creds.authId}/${path.replace(/^\//, '')}`;
+  }
 
   const baseUrl = SERVICE_URLS[service];
   if (!baseUrl) return null;
@@ -260,7 +267,10 @@ export function buildHeaders(service, token, customHeaders = {}) {
     'Content-Type': 'application/json'
   };
 
-  if (service === 'jira' && token?.email && token?.apiToken) {
+  if (service === 'plivo' && token?.authId && token?.authToken) {
+    const basicAuth = Buffer.from(`${token.authId}:${token.authToken}`).toString('base64');
+    defaults['Authorization'] = `Basic ${basicAuth}`;
+  } else if (service === 'jira' && token?.email && token?.apiToken) {
     const basicAuth = Buffer.from(`${token.email}:${token.apiToken}`).toString('base64');
     defaults['Authorization'] = `Basic ${basicAuth}`;
   } else if (token && typeof token === 'string') {
