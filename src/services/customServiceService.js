@@ -1,5 +1,7 @@
 // Custom service business logic layer (#249)
 import { lookup as dnsLookup } from 'dns/promises';
+import https from 'https';
+import http from 'http';
 
 import {
   createCustomService as dbCreate,
@@ -18,6 +20,32 @@ import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
 
 // Validate service name: URL-safe, starts with letter
 const NAME_RE = /^[a-z][a-z0-9_-]*$/;
+
+/**
+ * Make an HTTP(S) request using a custom agent (for DNS-pinned HTTPS).
+ * Returns { status, statusText }.
+ */
+function pinnedRequest(url, options, agent) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const req = mod.request({
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      agent,
+      signal: options.signal
+    }, (res) => {
+      res.resume();
+      res.on('end', () => resolve({ status: res.statusCode, statusText: res.statusMessage }));
+      res.on('error', reject);
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
 
 /**
  * Validate that a base URL is a valid HTTP(S) URL.
@@ -75,14 +103,10 @@ function isPrivateIP(ip) {
  * For HTTP URLs: returns { address, hostname, pinnable: true } — callers can use the
  * resolved IP directly to prevent DNS rebinding (TOCTOU).
  *
- * For HTTPS URLs: returns { address, hostname, pinnable: false } — DNS pinning would break
- * TLS certificate validation (certs are issued for hostnames, not IPs), so callers should
- * use the original URL. The DNS check still blocks private IPs at check time.
- *
- * TODO(SSRF): HTTPS has a TOCTOU gap — DNS is resolved here for validation, then
- * re-resolved by fetch(). A malicious DNS server could return a public IP on the first
- * lookup and a private IP on the second (DNS rebinding). HTTP is safe because we pin
- * the resolved IP directly. See GitHub issue tracking this for HTTPS mitigation.
+ * For HTTPS URLs: returns { address, hostname, pinnable: false, agent } — an https.Agent
+ * with a custom `lookup` function that returns the pre-resolved IP. This pins DNS for the
+ * actual connection while preserving TLS hostname validation via SNI. Eliminates the
+ * TOCTOU gap without breaking certificate validation. Fixes #340.
  */
 export async function assertNotPrivateUrl(url) {
   const parsed = new URL(url);
@@ -99,7 +123,20 @@ export async function assertNotPrivateUrl(url) {
     if (isPrivateIP(result.address)) {
       throw new Error('Connections to private/internal addresses are not allowed');
     }
-    return { address: result.address, hostname, pinnable: !isHttps };
+    if (isHttps) {
+      // Create a single-use agent that pins DNS to the resolved IP.
+      // TLS SNI uses the original hostname (Node sets servername automatically),
+      // so certificate validation works correctly against the hostname, not the IP.
+      const family = result.family || 4;
+      const pinnedAddress = result.address;
+      const agent = new https.Agent({
+        lookup: (_hostname, _opts, cb) => cb(null, pinnedAddress, family),
+        maxSockets: 1,
+        keepAlive: false
+      });
+      return { address: result.address, hostname, pinnable: false, agent };
+    }
+    return { address: result.address, hostname, pinnable: true, agent: null };
   } catch (err) {
     if (err.message.includes('private/internal')) throw err;
     throw new Error(`DNS resolution failed for ${hostname}: ${err.message}`);
@@ -214,9 +251,9 @@ export async function testConnection(serviceName, accountName) {
   const url = service.base_url;
 
   // SSRF protection: resolve DNS and check for private IPs
-  const { address, hostname, pinnable } = await assertNotPrivateUrl(url);
+  const { address, hostname, pinnable, agent } = await assertNotPrivateUrl(url);
 
-  // For HTTP, use DNS-pinned URL to prevent rebinding; for HTTPS, use original URL
+  // For HTTP, use DNS-pinned URL; for HTTPS, use original URL with pinned agent (#340)
   const fetchUrl = pinnable ? buildPinnedUrl(url, address) : url;
   const headers = {};
   if (pinnable) {
@@ -231,12 +268,17 @@ export async function testConnection(serviceName, accountName) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
+    if (agent) {
+      const resp = await pinnedRequest(fetchUrl, { method: 'GET', headers, signal: controller.signal }, agent);
+      return { ok: resp.status >= 200 && resp.status < 300, status: resp.status, statusText: resp.statusText };
+    }
     const resp = await fetch(fetchUrl, { method: 'GET', headers, signal: controller.signal });
     return { ok: resp.ok, status: resp.status, statusText: resp.statusText };
   } catch (err) {
     return { ok: false, status: 0, statusText: err.message };
   } finally {
     clearTimeout(timeout);
+    if (agent) agent.destroy();
   }
 }
 
