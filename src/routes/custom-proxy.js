@@ -1,9 +1,55 @@
 // Dynamic proxy for custom services (#249)
 // Loads enabled custom services and proxies requests to upstream APIs
 import { Router } from 'express';
+import https from 'https';
+import http from 'http';
 import { readOnlyEnforce } from '../lib/middleware.js';
 import { injectAuth, assertNotPrivateUrl, buildPinnedUrl } from '../services/customServiceService.js';
 import { getCustomServiceAccount, getCustomService } from '../lib/db.js';
+
+/**
+ * Perform an HTTP(S) request using a custom agent (for DNS-pinned HTTPS).
+ * Returns a fetch-like Response object with .status, .headers.get(), .json(), .text().
+ */
+function fetchWithAgent(url, options, agent) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const reqOptions = {
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      method: options.method || 'GET',
+      headers: options.headers || {},
+      agent,
+      signal: options.signal
+    };
+
+    const req = mod.request(reqOptions, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve({
+          status: res.statusCode,
+          headers: {
+            get: (name) => res.headers[name.toLowerCase()] || null
+          },
+          json: () => JSON.parse(raw),
+          text: () => raw
+        });
+      });
+      res.on('error', reject);
+    });
+
+    req.on('error', reject);
+
+    if (options.body) {
+      req.write(options.body);
+    }
+    req.end();
+  });
+}
 
 const router = Router();
 
@@ -174,15 +220,17 @@ router.all('/:serviceName/:accountName/*', readOnlyEnforce, async (req, res) => 
 
   // SSRF protection: resolve DNS and check for private IPs
   // For HTTP: use DNS-pinned URL to prevent rebinding attacks
-  // For HTTPS: use original URL (pinning breaks TLS cert validation)
+  // For HTTPS: use pinned agent with custom lookup (fixes #340 TOCTOU gap)
   let fetchUrl;
+  let fetchAgent = null;
   try {
-    const { address, hostname, pinnable } = await assertNotPrivateUrl(upstreamUrl);
+    const { address, hostname, pinnable, agent } = await assertNotPrivateUrl(upstreamUrl);
     if (pinnable) {
       fetchUrl = buildPinnedUrl(upstreamUrl, address);
       headers['Host'] = hostname;
     } else {
       fetchUrl = upstreamUrl;
+      fetchAgent = agent; // https.Agent with pinned DNS lookup
     }
   } catch (err) {
     return res.status(403).json({ error: 'ssrf_blocked', message: err.message });
@@ -199,7 +247,14 @@ router.all('/:serviceName/:accountName/*', readOnlyEnforce, async (req, res) => 
     const timeout = setTimeout(() => controller.abort(), 30000);
     fetchOptions.signal = controller.signal;
 
-    const upstream = await fetch(fetchUrl, fetchOptions);
+    // Node's fetch doesn't support the agent option directly.
+    // We use a manual https.request when a pinned agent is needed.
+    let upstream;
+    if (fetchAgent) {
+      upstream = await fetchWithAgent(fetchUrl, fetchOptions, fetchAgent);
+    } else {
+      upstream = await fetch(fetchUrl, fetchOptions);
+    }
     clearTimeout(timeout);
 
     const contentType = upstream.headers.get('content-type') || '';
