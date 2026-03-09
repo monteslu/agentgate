@@ -1,6 +1,7 @@
 // Dynamic proxy for custom services (#249)
 // Loads enabled custom services and proxies requests to upstream APIs
 import { Router } from 'express';
+import { readOnlyEnforce } from '../lib/middleware.js';
 import { injectAuth, assertNotPrivateUrl, buildPinnedUrl } from '../services/customServiceService.js';
 import { getCustomServiceAccount, getCustomService } from '../lib/db.js';
 
@@ -96,7 +97,8 @@ function buildUpstreamUrl(baseUrl, endpointPath, pathParams, queryParams) {
 //    control via account-level enabled/disabled flags and endpoint whitelisting.
 //
 // Main handler: /api/custom/{serviceName}/{accountName}/...
-router.all('/:serviceName/:accountName/*', async (req, res) => {
+// readOnlyEnforce is applied here rather than in index.js to avoid import conflicts
+router.all('/:serviceName/:accountName/*', readOnlyEnforce, async (req, res) => {
   const { serviceName, accountName } = req.params;
   const restPath = '/' + req.params[0]; // everything after accountName
 
