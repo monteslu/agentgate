@@ -48,6 +48,7 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listUnnotifiedEntries: jest.fn(() => []),
   deleteQueueEntry: jest.fn(),
   clearQueueByStatus: jest.fn(),
+  clearAutoApprovedEntries: jest.fn(),
   clearCompletedQueue: jest.fn(),
   getPendingQueueCount: jest.fn(() => 0),
   getQueueCounts: jest.fn(() => ({ pending: 0, approved: 0, rejected: 0, completed: 0 })),
@@ -100,6 +101,11 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteBroadcast: jest.fn(),
   getBroadcast: jest.fn(),
   
+  // Sidecar Secret
+  setSidecarSecret: jest.fn(),
+  getSidecarSecretHash: jest.fn(() => null),
+  clearSidecarSecret: jest.fn(),
+
   // Queue visibility
   getSharedQueueVisibility: jest.fn(() => false),
   setSharedQueueVisibility: jest.fn(),
