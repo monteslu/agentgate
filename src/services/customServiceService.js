@@ -78,6 +78,11 @@ function isPrivateIP(ip) {
  * For HTTPS URLs: returns { address, hostname, pinnable: false } — DNS pinning would break
  * TLS certificate validation (certs are issued for hostnames, not IPs), so callers should
  * use the original URL. The DNS check still blocks private IPs at check time.
+ *
+ * TODO(SSRF): HTTPS has a TOCTOU gap — DNS is resolved here for validation, then
+ * re-resolved by fetch(). A malicious DNS server could return a public IP on the first
+ * lookup and a private IP on the second (DNS rebinding). HTTP is safe because we pin
+ * the resolved IP directly. See GitHub issue tracking this for HTTPS mitigation.
  */
 export async function assertNotPrivateUrl(url) {
   const parsed = new URL(url);
