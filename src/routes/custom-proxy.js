@@ -83,6 +83,18 @@ function buildUpstreamUrl(baseUrl, endpointPath, pathParams, queryParams) {
   return url.toString();
 }
 
+// Design decisions for custom proxy routes:
+//
+// 1. No writeProxy / approval queue: Custom services intentionally bypass the write
+//    approval queue used by built-in services. POST/PUT/DELETE go directly upstream.
+//    Rationale: custom services are explicitly configured by the admin, who controls
+//    which endpoints are exposed and to whom. The admin takes responsibility for the
+//    operations they define. readOnlyEnforce is still respected as a global safety net.
+//
+// 2. No serviceAccessCheck: Built-in service access checks are not applied here.
+//    Custom services are user-defined, not built-in — they have their own access
+//    control via account-level enabled/disabled flags and endpoint whitelisting.
+//
 // Main handler: /api/custom/{serviceName}/{accountName}/...
 router.all('/:serviceName/:accountName/*', async (req, res) => {
   const { serviceName, accountName } = req.params;
@@ -203,9 +215,12 @@ router.all('/:serviceName/:accountName/*', async (req, res) => {
       data: body
     });
   } catch (err) {
+    // Log full error server-side for debugging; return generic message to client
+    // to avoid leaking internal network details (hostnames, IPs, ports) from fetch failures
+    console.error(`[custom-proxy] upstream error for ${serviceName}/${matchedEndpoint.name}:`, err);
     res.status(502).json({
       error: 'upstream_error',
-      message: err.message,
+      message: 'The upstream service request failed',
       service: serviceName,
       endpoint: matchedEndpoint.name
     });
