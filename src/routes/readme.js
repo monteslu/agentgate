@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getAccountsByService, getMessagingMode, checkServiceAccess } from '../lib/db.js';
 import SERVICE_REGISTRY from '../lib/serviceRegistry.js';
+import { listCustomServices } from '../services/customServiceService.js';
 
 const router = Router();
 
@@ -46,6 +47,23 @@ router.get('/', (req, res) => {
         endpoints[key].writeGuidelines = info.writeGuidelines;
       }
     }
+  }
+
+  // Add custom services
+  try {
+    const customServices = listCustomServices();
+    for (const svc of customServices) {
+      if (!svc.enabled) continue;
+      services[svc.name] = {
+        description: svc.description || svc.display_name,
+        docs: svc.docs_url || undefined,
+        category: svc.category || 'custom',
+        accounts: ['(see custom service accounts)'],
+        examples: (svc.endpoints || []).map(ep => `${ep.method} /api/custom/${svc.name}/{accountName}${ep.path}`)
+      };
+    }
+  } catch {
+    // Custom services table may not exist yet
   }
 
   res.json({

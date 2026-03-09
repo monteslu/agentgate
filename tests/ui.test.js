@@ -170,7 +170,20 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   deleteMcpSessionsForAgent: jest.fn(() => ({ changes: 0 })),
   deleteStaleMcpSessions: jest.fn(() => ({ changes: 0 })),
   getMcpSessionCounts: jest.fn(() => ({ total: 0, byAgent: {} })),
-  getMcpSessionCount: jest.fn(() => 0)
+  getMcpSessionCount: jest.fn(() => 0),
+
+  // Custom services
+  createCustomService: jest.fn(),
+  getCustomService: jest.fn(),
+  listCustomServices: jest.fn(() => []),
+  updateCustomService: jest.fn(),
+  deleteCustomService: jest.fn(),
+  createCustomServiceAccount: jest.fn(),
+  getCustomServiceAccount: jest.fn(),
+  listCustomServiceAccounts: jest.fn(() => []),
+  updateCustomServiceAccount: jest.fn(),
+  deleteCustomServiceAccount: jest.fn(),
+  listEnabledCustomServices: jest.fn(() => [])
 }));
 
 // Mock hsyncManager

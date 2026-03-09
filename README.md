@@ -92,3 +92,4 @@ Configure your agent with the base URL and API key. Agents can use REST or MCP.
 ## License
 
 ISC
+

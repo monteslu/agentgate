@@ -14,6 +14,7 @@ import accessRouter from './access.js';
 import llmRouter from './llm.js';
 import serviceDetailRouter from './service-detail.js';
 import webhooksRouter from './webhooks.js';
+import customServicesRouter from './custom-services.js';
 
 // Create the main UI router
 const router = Router();
@@ -50,6 +51,9 @@ router.use('/services', serviceDetailRouter);
 
 // Webhook management: /webhooks, /webhooks/add, /webhooks/:id
 router.use('/', webhooksRouter);
+
+// Custom REST API services: /custom-services, /custom-services/api/*
+router.use('/custom-services', customServicesRouter);
 
 // Settings page: /settings
 // Also handles POST routes: /hsync/*, /messaging/*, /queue/settings/*

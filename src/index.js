@@ -33,6 +33,7 @@ import { setupHumanChannelProxy, setAdminTokenValidator } from './routes/channel
 import { setupAgentChannelProxy } from './routes/channel-agent.js';
 import { validateAdminChatToken } from './routes/ui/keys.js';
 import llmRoutes from './routes/llm.js';
+import customProxyRoutes from './routes/custom-proxy.js';
 import { createMCPPostHandler, createMCPGetHandler, createMCPDeleteHandler } from './routes/mcp.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -108,6 +109,9 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 
 // LLM proxy - require auth, no read-only enforcement (POST for completions)
 app.use('/api/llm', apiKeyAuth, llmRoutes);
+
+// Custom service proxy - require auth
+app.use('/api/custom', apiKeyAuth, customProxyRoutes);
 
 // MCP server - Streamable HTTP transport (requires auth)
 // POST handles initialization + messages, GET opens optional SSE stream, DELETE terminates session
