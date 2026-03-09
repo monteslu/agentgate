@@ -1004,6 +1004,32 @@ export function hasAdminPassword() {
   return getSetting('admin_password') !== null;
 }
 
+// Sidecar Secret (cached — invalidated on set/clear)
+let _cachedSidecarHash = undefined; // undefined = not yet loaded
+
+export async function setSidecarSecret(plaintext) {
+  const hash = await bcrypt.hash(plaintext, 10);
+  setSetting('sidecar_secret', hash);
+  _cachedSidecarHash = hash;
+}
+
+export function getSidecarSecretHash() {
+  if (_cachedSidecarHash === undefined) {
+    _cachedSidecarHash = getSetting('sidecar_secret') || null;
+  }
+  return _cachedSidecarHash;
+}
+
+export function clearSidecarSecret() {
+  deleteSetting('sidecar_secret');
+  _cachedSidecarHash = null;
+}
+
+// Exported for testing only
+export function _resetSidecarCache() {
+  _cachedSidecarHash = undefined;
+}
+
 // Cookie secret (generated once, persisted)
 export function getCookieSecret() {
   let secret = getSetting('cookie_secret');
@@ -1039,36 +1065,82 @@ export function getQueueEntry(id) {
   };
 }
 
-export function listQueueEntries(status) {
-  let rows;
-  if (status) {
-    rows = db.prepare('SELECT * FROM write_queue WHERE status = ? ORDER BY submitted_at DESC').all(status);
-  } else {
-    rows = db.prepare('SELECT * FROM write_queue ORDER BY submitted_at DESC').all();
-  }
-  return rows.map(row => ({
+const QUEUE_LIGHT_COLS = 'id, service, account_name, comment, status, rejection_reason, submitted_by, submitted_at, reviewed_at, completed_at, notified, notified_at, notify_error, auto_approved, reaction_emoji, requests';
+
+function mapQueueRow(row) {
+  return {
     ...row,
     requests: JSON.parse(row.requests),
     results: row.results ? JSON.parse(row.results) : null,
     notified: Boolean(row.notified),
     auto_approved: Boolean(row.auto_approved)
-  }));
+  };
 }
 
-export function listAutoApprovedEntries() {
-  const rows = db.prepare('SELECT * FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC').all();
-  return rows.map(row => ({
-    ...row,
-    requests: JSON.parse(row.requests),
-    results: row.results ? JSON.parse(row.results) : null,
+function mapQueueRowLight(row) {
+  const requests = JSON.parse(row.requests);
+  return {
+    id: row.id,
+    service: row.service,
+    account_name: row.account_name,
+    comment: row.comment,
+    status: row.status,
+    rejection_reason: row.rejection_reason,
+    submitted_by: row.submitted_by,
+    submitted_at: row.submitted_at,
+    reviewed_at: row.reviewed_at,
+    completed_at: row.completed_at,
     notified: Boolean(row.notified),
-    auto_approved: true
-  }));
+    notified_at: row.notified_at,
+    notify_error: row.notify_error,
+    auto_approved: Boolean(row.auto_approved),
+    reaction_emoji: row.reaction_emoji,
+    requestSummary: requests.map(r => ({ method: r.method, path: r.path })),
+    resultCount: row.result_count || 0
+  };
+}
+
+export function listQueueEntries(status, { limit, offset, light } = {}) {
+  const cols = light
+    ? QUEUE_LIGHT_COLS + ', (CASE WHEN results IS NOT NULL THEN json_array_length(results) ELSE 0 END) as result_count'
+    : '*';
+  let rows;
+  if (status) {
+    if (limit !== null && limit !== undefined) {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE status = ? ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(status, limit, offset || 0);
+    } else {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE status = ? ORDER BY submitted_at DESC`).all(status);
+    }
+  } else {
+    if (limit !== null && limit !== undefined) {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(limit, offset || 0);
+    } else {
+      rows = db.prepare(`SELECT ${cols} FROM write_queue ORDER BY submitted_at DESC`).all();
+    }
+  }
+  return rows.map(light ? mapQueueRowLight : mapQueueRow);
+}
+
+export function listAutoApprovedEntries({ limit, offset, light } = {}) {
+  const cols = light
+    ? QUEUE_LIGHT_COLS + ', (CASE WHEN results IS NOT NULL THEN json_array_length(results) ELSE 0 END) as result_count'
+    : '*';
+  let rows;
+  if (limit !== null && limit !== undefined) {
+    rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC LIMIT ? OFFSET ?`).all(limit, offset || 0);
+  } else {
+    rows = db.prepare(`SELECT ${cols} FROM write_queue WHERE auto_approved = 1 ORDER BY submitted_at DESC`).all();
+  }
+  return rows.map(light ? mapQueueRowLight : mapQueueRow);
 }
 
 export function getAutoApprovedCount() {
   const row = db.prepare('SELECT COUNT(*) as count FROM write_queue WHERE auto_approved = 1').get();
   return row.count;
+}
+
+export function clearAutoApprovedEntries() {
+  return db.prepare('DELETE FROM write_queue WHERE auto_approved = 1').run();
 }
 
 export function updateQueueNotification(id, success, error = null) {
@@ -1274,9 +1346,16 @@ export function rejectAgentMessage(id, reason) {
 }
 
 // Admin: list all messages (for UI)
-export function listAgentMessages(status = null) {
+export function listAgentMessages(status = null, { limit, offset } = {}) {
+  const hasLimit = limit !== null && limit !== undefined;
   if (status) {
+    if (hasLimit) {
+      return db.prepare('SELECT * FROM agent_messages WHERE status = ? ORDER BY created_at DESC LIMIT ? OFFSET ?').all(status, limit, offset || 0);
+    }
     return db.prepare('SELECT * FROM agent_messages WHERE status = ? ORDER BY created_at DESC').all(status);
+  }
+  if (hasLimit) {
+    return db.prepare('SELECT * FROM agent_messages ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset || 0);
   }
   return db.prepare('SELECT * FROM agent_messages ORDER BY created_at DESC').all();
 }
