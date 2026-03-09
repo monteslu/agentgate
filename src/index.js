@@ -6,7 +6,7 @@ import { getCookieSecret } from './lib/db.js';
 import { connectHsync } from './lib/hsyncManager.js';
 import { startCloudflared } from './lib/cloudflareManager.js';
 import { initSocket } from './lib/socketManager.js';
-import { apiKeyAuth, writeProxy, serviceAccessCheck, sidecarSecretCheck, readOnlyEnforce } from './lib/middleware.js';
+import { apiKeyAuth, readOnlyEnforce, serviceAccessCheck } from './lib/middleware.js';
 import { globalRateLimit } from './lib/rateLimiter.js';
 import githubRoutes from './routes/github.js';
 import blueskyRoutes from './routes/bluesky.js';
@@ -111,7 +111,7 @@ app.use('/api/agents/memento', apiKeyAuth, (req, res, next) => {
 app.use('/api/llm', apiKeyAuth, llmRoutes);
 
 // Custom service proxy - require auth and read-only enforcement
-app.use('/api/custom', apiKeyAuth, readOnlyEnforce, customProxyRoutes);
+app.use('/api/custom', apiKeyAuth, customProxyRoutes);
 
 // MCP server - Streamable HTTP transport (requires auth)
 // POST handles initialization + messages, GET opens optional SSE stream, DELETE terminates session
