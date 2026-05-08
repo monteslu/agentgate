@@ -23,8 +23,11 @@ Remote Agent ──AgentGate API──→ AgentGate Server
 
 ## Connection
 
-- Plugin connects to `ws[s]://{agentgate-host}/api/channel/{channel-id}`
+- Plugin connects to `ws[s]://{agentgate-host}/api/channel/`
+- Older clients may connect to `ws[s]://{agentgate-host}/api/channel/{channel-id}`
 - Auth: `Authorization: Bearer {agent-api-key}` header on upgrade request
+- For `/api/channel/`, AgentGate derives the channel id from the bearer token
+- For `/api/channel/{channel-id}`, AgentGate verifies that the token is authorized for that exact channel
 - Server sends `connected` envelope on successful auth
 - Reconnect with exponential backoff on disconnect
 - Keepalive pings every 30s

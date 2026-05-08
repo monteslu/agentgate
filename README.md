@@ -49,7 +49,7 @@ All writes require human approval before execution. Agents submit requests with 
 Install the agentgate skill pack via [ClawHub](https://clawhub.ai) for [OpenClaw](https://openclaw.ai) or [ClawdBot](https://clawdbot.com). Multiple focused skill files are generated per service category so agents only load what's relevant to the task at hand. [Details →](docs/skills.md)
 
 ### MCP Server
-Works with Claude Code and other MCP clients. Add the server with one command:
+Works with Claude Code, Hermes, and other MCP clients. Add the server with one command:
 
 ```bash
 claude mcp add --transport http agentgate https://your-server.com/mcp \
@@ -57,6 +57,9 @@ claude mcp add --transport http agentgate https://your-server.com/mcp \
 ```
 
 Your agent gets tools for services, queue, messaging, and mementos without seeing your credentials. [Details →](docs/mcp.md)
+
+### Hermes Channel Plugin
+For real-time human chat and push delivery of system events to a [Hermes Agent](https://hermes-agent.nousresearch.com/), install the native Python plugin: `pip install hermes-agentgate`. Pairs with the MCP server above. [Details →](https://github.com/monteslu/hermes-agentgate)
 
 ### Agent Messaging
 Agents can message each other for multi-agent coordination. Configure messaging mode: off, supervised (you approve messages), or open (instant delivery). [Details →](docs/inter-agent-messaging.md)

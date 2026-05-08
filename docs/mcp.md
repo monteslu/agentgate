@@ -27,6 +27,23 @@ Add to `~/.claude.json`:
 }
 ```
 
+## Hermes Setup
+
+Hermes Agent has first-class MCP client support. Add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  agentgate:
+    transport: http        # or sse
+    url: https://your-server.com/mcp
+    headers:
+      Authorization: "Bearer rms_your_key_here"
+```
+
+Hermes auto-discovers tools on startup and supports `tools/list_changed` for hot reload — adding new agentgate services propagates without restarting Hermes.
+
+For real-time human chat and channel-style messaging (not just MCP tool access), pair this with the [hermes-agentgate](https://github.com/monteslu/hermes-agentgate) native platform plugin — see [agent-setup.md](agent-setup.md#hermes).
+
 ## Other MCP Clients
 
 Most MCP clients support SSE transport:

@@ -76,6 +76,44 @@ claude mcp add --transport http agentgate https://your-server.com/mcp \
 
 The agent gets tools for services, queue, messaging, and mementos automatically. See [MCP setup](mcp.md) for details.
 
+## Hermes
+
+Hermes can use agentgate two ways. They compose — same API key, different surfaces.
+
+### Option A: MCP (general agentgate access)
+
+Hermes has built-in MCP client support. Add to `~/.hermes/config.yaml`:
+
+```yaml
+mcp_servers:
+  agentgate:
+    transport: http        # or sse
+    url: https://your-server.com/mcp
+    headers:
+      Authorization: "Bearer rms_your_key_here"
+```
+
+The `services`, `queue`, `mementos`, and `messages` tools auto-appear in Hermes. The agent never sees real service credentials. Hot-reloads on server changes via `tools/list_changed`.
+
+### Option B: hermes-agentgate channel plugin (real-time chat + system events)
+
+For real-time chat between humans and your Hermes agent through the agentgate `/channel/` UI, plus push delivery of queue notifications and broadcasts, install the native Python plugin:
+
+```bash
+pip install hermes-agentgate
+```
+
+Configure via env or `~/.hermes/config.yaml`:
+
+```bash
+export AGENT_GATE_URL="https://your-server.com"
+export AGENT_GATE_TOKEN="rms_your_key_here"
+```
+
+Restart Hermes. AgentGate appears as a messaging platform alongside Telegram/Discord/Slack/Signal. See [hermes-agentgate](https://github.com/monteslu/hermes-agentgate) for the full setup and protocol details.
+
+The two layers compose: MCP gives the agent structured tools (deterministic, schema-validated, lower-hallucination than skill files). The channel plugin gives it real-time human chat and push-delivery of queue events.
+
 ## Other Agents (REST)
 
 Any agent that can make HTTP requests can use agentgate's REST API.
