@@ -2,6 +2,8 @@
 import { Router } from 'express';
 import { getLlmProvider, getAgentLlmConfig, listAgentModels } from '../lib/db.js';
 import { translateRequest, translateResponse, translateStream } from '../lib/anthropicTranslator.js';
+import { translateRequest as geminiTranslateRequest, translateResponse as geminiTranslateResponse, translateStream as geminiTranslateStream, buildGeminiUrl } from '../lib/geminiTranslator.js';
+import { translateRequest as ollamaTranslateRequest, translateResponse as ollamaTranslateResponse } from '../lib/ollamaTranslator.js';
 
 const router = Router();
 
@@ -12,7 +14,8 @@ const LLM_TIMEOUT_MS = parseInt(process.env.AGENTGATE_LLM_TIMEOUT_MS, 10) || 300
 const PROVIDER_DEFAULTS = {
   openai: 'https://api.openai.com',
   anthropic: 'https://api.anthropic.com',
-  google: 'https://generativelanguage.googleapis.com'
+  google: 'https://generativelanguage.googleapis.com',
+  ollama: 'http://localhost:11434'
 };
 
 /**
@@ -30,6 +33,14 @@ function buildUpstreamHeaders(provider, originalHeaders) {
   case 'anthropic':
     headers['x-api-key'] = provider.api_key;
     headers['anthropic-version'] = originalHeaders['anthropic-version'] || '2023-06-01';
+    break;
+  case 'google':
+    headers['x-goog-api-key'] = provider.api_key;
+    break;
+  case 'ollama':
+    if (provider.api_key) {
+      headers['Authorization'] = `Bearer ${provider.api_key}`;
+    }
     break;
   case 'openai':
   default:
@@ -75,9 +86,9 @@ router.post('/v1/chat/completions', async (req, res) => {
 
     // Build upstream request
     const isAnthropic = provider.provider_type === 'anthropic';
+    const isGemini = provider.provider_type === 'google';
+    const isOllama = provider.provider_type === 'ollama';
     const baseUrl = provider.base_url || PROVIDER_DEFAULTS[provider.provider_type] || provider.base_url;
-    const endpoint = isAnthropic ? '/v1/messages' : '/v1/chat/completions';
-    const upstreamUrl = `${baseUrl.replace(/\/+$/, '')}${endpoint}`;
     const upstreamHeaders = buildUpstreamHeaders(provider, req.headers);
 
     // Override model if agent has a specific model assigned
@@ -86,12 +97,23 @@ router.post('/v1/chat/completions', async (req, res) => {
       body.model = config.model_id;
     }
 
-    // Translate request for Anthropic providers
-    if (isAnthropic) {
-      body = translateRequest(body);
-    }
-
     const isStreaming = body.stream === true;
+    const modelForUrl = body.model;
+
+    // Build URL and translate body based on provider
+    let upstreamUrl;
+    if (isAnthropic) {
+      upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/messages`;
+      body = translateRequest(body);
+    } else if (isGemini) {
+      upstreamUrl = buildGeminiUrl(baseUrl, modelForUrl, isStreaming);
+      body = geminiTranslateRequest(body);
+    } else if (isOllama) {
+      upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+      body = ollamaTranslateRequest(body);
+    } else {
+      upstreamUrl = `${baseUrl.replace(/\/+$/, '')}/v1/chat/completions`;
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
@@ -122,8 +144,12 @@ router.post('/v1/chat/completions', async (req, res) => {
           // Translate Anthropic SSE → OpenAI SSE
           await translateStream(upstreamRes, res);
           res.end();
+        } else if (isGemini) {
+          // Translate Gemini SSE → OpenAI SSE
+          await geminiTranslateStream(upstreamRes, res, modelForUrl);
+          res.end();
         } else {
-          // Pipe OpenAI-compatible stream directly
+          // Pipe OpenAI-compatible stream directly (OpenAI + Ollama)
           const reader = upstreamRes.body.getReader();
           const decoder = new TextDecoder();
 
@@ -155,6 +181,25 @@ router.post('/v1/chat/completions', async (req, res) => {
             res.json(openaiJson);
           } catch {
             // If parsing fails, forward as-is
+            res.send(responseBody);
+          }
+        } else if (isGemini) {
+          // Translate Gemini JSON → OpenAI format
+          try {
+            const geminiJson = JSON.parse(responseBody);
+            const openaiJson = geminiTranslateResponse(geminiJson, modelForUrl);
+            res.json(openaiJson);
+          } catch {
+            // If parsing fails, forward as-is
+            res.send(responseBody);
+          }
+        } else if (isOllama) {
+          // Translate Ollama response if needed
+          try {
+            const ollamaJson = JSON.parse(responseBody);
+            const openaiJson = ollamaTranslateResponse(ollamaJson, body.model);
+            res.json(openaiJson);
+          } catch {
             res.send(responseBody);
           }
         } else {
