@@ -837,7 +837,7 @@ export function markChannelConnected(id) {
 
 export function listChannels() {
   return db.prepare(
-    'SELECT id, name, channel_enabled, channel_id, channel_last_connected FROM api_keys WHERE channel_id IS NOT NULL'
+    'SELECT id, name, channel_enabled, channel_id, channel_last_connected FROM api_keys WHERE channel_enabled = 1 AND channel_id IS NOT NULL'
   ).all();
 }
 
@@ -2527,4 +2527,3 @@ export function getChatMessageCount(channelId) {
   const row = stmt.get(channelId);
   return row ? row.count : 0;
 }
-

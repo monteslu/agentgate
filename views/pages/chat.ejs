@@ -1,0 +1,319 @@
+<div class="chat-page">
+  <div class="chat-header">
+    <div>
+      <h2 class="m-0">Agent Chat</h2>
+      <p class="help m-0">Talk to channel-enabled agents through AgentGate.</p>
+    </div>
+    <% if (selected) { %>
+      <a href="/ui/keys/<%= selected.id %>" class="btn btn-secondary btn-sm">Agent Details</a>
+    <% } %>
+  </div>
+
+  <% if (channels.length === 0) { %>
+    <div class="card empty-state">
+      <p>No channel-enabled agents yet.</p>
+      <p class="help">Enable a channel from an agent detail page to chat here.</p>
+      <a href="/ui/keys" class="btn btn-primary">View Agents</a>
+    </div>
+  <% } else { %>
+    <div class="chat-shell">
+      <aside class="chat-sidebar" aria-label="Channel-enabled agents">
+        <% channels.forEach(function(agent) { %>
+          <a
+            href="/ui/chat?agent=<%= encodeURIComponent(agent.id) %>"
+            class="chat-agent <%= selected && String(selected.id) === String(agent.id) ? 'active' : '' %>"
+            data-agent-id="<%= agent.id %>"
+            data-channel-id="<%= agent.channel_id %>"
+            data-agent-name="<%= escapeHtml(agent.name) %>"
+            data-connected="<%= agent.connected ? 'true' : 'false' %>"
+          >
+            <%- renderAvatar(agent.name, { size: 34 }) %>
+            <span class="chat-agent-main">
+              <span class="chat-agent-name"><%= agent.name %></span>
+              <span class="chat-agent-meta">
+                <span class="presence-dot <%= agent.connected ? 'online' : '' %>"></span>
+                <%= agent.connected ? 'Online' : 'Offline' %>
+                <% if (agent.channel_last_connected) { %>
+                  · last <%- formatDate(agent.channel_last_connected) %>
+                <% } %>
+              </span>
+            </span>
+          </a>
+        <% }); %>
+      </aside>
+
+      <section class="chat-panel" data-selected-agent="<%= selected ? selected.id : '' %>">
+        <div class="chat-panel-header">
+          <div class="chat-title">
+            <% if (selected) { %>
+              <%- renderAvatar(selected.name, { size: 38 }) %>
+              <div>
+                <strong id="chat-agent-name"><%= selected.name %></strong>
+                <div id="chat-status" class="chat-status">Not connected</div>
+              </div>
+            <% } %>
+          </div>
+          <button type="button" id="reconnect-btn" class="btn btn-secondary btn-sm">Reconnect</button>
+        </div>
+
+        <div id="chat-log" class="chat-log" aria-live="polite">
+          <div class="chat-empty">Connecting...</div>
+        </div>
+
+        <div id="typing-indicator" class="typing-indicator" hidden>Agent is typing...</div>
+
+        <form id="chat-form" class="chat-composer">
+          <textarea id="chat-input" rows="2" maxlength="4096" placeholder="Message <%= selected ? escapeHtml(selected.name) : 'agent' %>..." disabled></textarea>
+          <button type="submit" id="send-btn" class="btn btn-primary" disabled>Send</button>
+        </form>
+      </section>
+    </div>
+  <% } %>
+</div>
+
+<% if (selected) { %>
+<script>
+  const initialAgent = {
+    id: <%- JSON.stringify(String(selected.id)).replace(/</g, '\\u003c') %>,
+    name: <%- JSON.stringify(selected.name).replace(/</g, '\\u003c') %>,
+    channelId: <%- JSON.stringify(selected.channel_id).replace(/</g, '\\u003c') %>,
+    connected: <%= selected.connected ? 'true' : 'false' %>
+  };
+
+  const MAX_MESSAGE_LENGTH = 4096;
+  let ws = null;
+  let currentAgent = initialAgent;
+  let streaming = new Map();
+  let waitingMessage = null;
+
+  const logEl = document.getElementById('chat-log');
+  const formEl = document.getElementById('chat-form');
+  const inputEl = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('send-btn');
+  const statusEl = document.getElementById('chat-status');
+  const reconnectBtn = document.getElementById('reconnect-btn');
+  const typingEl = document.getElementById('typing-indicator');
+
+  function escapeHtmlClient(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function renderMarkdownSafe(text) {
+    if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
+      return DOMPurify.sanitize(marked.parse(String(text || '')), {
+        ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'code', 'pre', 'a', 'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'hr'],
+        ALLOWED_ATTR: ['href', 'target', 'rel', 'class']
+      });
+    }
+    return escapeHtmlClient(text).replace(/\n/g, '<br>');
+  }
+
+  function setStatus(text, state) {
+    statusEl.textContent = text;
+    statusEl.dataset.state = state || '';
+  }
+
+  function setComposer(enabled) {
+    inputEl.disabled = !enabled;
+    sendBtn.disabled = !enabled;
+  }
+
+  function clearLog(message) {
+    logEl.innerHTML = '<div class="chat-empty">' + escapeHtmlClient(message) + '</div>';
+  }
+
+  function ensureLogReady() {
+    const empty = logEl.querySelector('.chat-empty');
+    if (empty) empty.remove();
+  }
+
+  function addMessage(role, text, timestamp, options) {
+    ensureLogReady();
+    options = options || {};
+    const item = document.createElement('div');
+    item.className = 'chat-message ' + role;
+    if (options.id) item.id = options.id;
+    const label = role === 'human' ? 'You' : (role === 'system' ? 'System' : currentAgent.name);
+    const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+    item.innerHTML =
+      '<div class="chat-message-meta"><span>' + escapeHtmlClient(label) + '</span><time>' + escapeHtmlClient(time) + '</time></div>' +
+      '<div class="chat-message-body">' + renderMarkdownSafe(text) + '</div>';
+    logEl.appendChild(item);
+    logEl.scrollTop = logEl.scrollHeight;
+    return item;
+  }
+
+  function addOrUpdateStreaming(id, text, timestamp) {
+    let item = streaming.get(id);
+    if (!item) {
+      item = addMessage('agent', '', timestamp, { id: 'stream-' + id });
+      item.classList.add('streaming');
+      streaming.set(id, item);
+    }
+    item.querySelector('.chat-message-body').innerHTML = renderMarkdownSafe(text);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  async function fetchToken(agentId) {
+    const res = await fetch('/ui/chat/' + encodeURIComponent(agentId) + '/token', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' }
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Could not create chat token');
+    return data;
+  }
+
+  async function connect() {
+    if (ws) ws.close();
+    setComposer(false);
+    typingEl.hidden = true;
+    waitingMessage = null;
+    streaming.clear();
+    clearLog('Connecting...');
+    setStatus('Creating session...', 'pending');
+
+    try {
+      const session = await fetchToken(currentAgent.id);
+      currentAgent.channelId = session.channelId;
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(protocol + '//' + location.host + '/channel/' + encodeURIComponent(session.channelId));
+
+      ws.onopen = function() {
+        setStatus('Authenticating...', 'pending');
+        ws.send(JSON.stringify({ type: 'auth', adminToken: session.token }));
+      };
+
+      ws.onmessage = function(event) {
+        let msg;
+        try {
+          msg = JSON.parse(event.data);
+        } catch (err) {
+          addMessage('system', 'Invalid message from server');
+          return;
+        }
+
+        if (msg.type === 'auth') {
+          if (msg.success) {
+            setStatus('Connected', 'connected');
+            setComposer(true);
+            clearLog('Loading history...');
+            ws.send(JSON.stringify({ type: 'history', limit: 50 }));
+          } else {
+            setStatus('Authentication failed', 'error');
+            clearLog(msg.error || 'Authentication failed');
+          }
+          return;
+        }
+
+        if (msg.type === 'history') {
+          logEl.innerHTML = '';
+          const messages = Array.isArray(msg.messages) ? msg.messages : [];
+          if (messages.length === 0) {
+            clearLog('No messages yet.');
+          } else {
+            messages.forEach(function(entry) {
+              addMessage(entry.from === 'human' ? 'human' : 'agent', entry.text || '', entry.timestamp);
+            });
+          }
+          return;
+        }
+
+        if (msg.type === 'message' || msg.type === 'response') {
+          typingEl.hidden = true;
+          if (waitingMessage) {
+            waitingMessage.remove();
+            waitingMessage = null;
+          }
+          addMessage(msg.from === 'human' ? 'human' : 'agent', msg.text || msg.content || msg.message || '', msg.timestamp);
+          return;
+        }
+
+        if (msg.type === 'typing') {
+          typingEl.hidden = false;
+          return;
+        }
+
+        if (msg.type === 'chunk') {
+          typingEl.hidden = true;
+          if (waitingMessage) {
+            waitingMessage.remove();
+            waitingMessage = null;
+          }
+          const id = msg.id || 'current';
+          const currentText = (streaming.get(id)?.dataset.text || '') + (msg.text || msg.content || '');
+          addOrUpdateStreaming(id, currentText, msg.timestamp);
+          streaming.get(id).dataset.text = currentText;
+          return;
+        }
+
+        if (msg.type === 'done') {
+          const id = msg.id || 'current';
+          const item = streaming.get(id);
+          if (item) {
+            item.classList.remove('streaming');
+            if (msg.text || msg.content) {
+              item.querySelector('.chat-message-body').innerHTML = renderMarkdownSafe(msg.text || msg.content);
+            }
+            streaming.delete(id);
+          }
+          return;
+        }
+
+        if (msg.type === 'ack') {
+          addMessage('system', 'Event ' + msg.status + (msg.error ? ': ' + msg.error : ''));
+          return;
+        }
+
+        if (msg.type === 'error') {
+          typingEl.hidden = true;
+          addMessage('system', msg.error || msg.message || 'Unknown error');
+        }
+      };
+
+      ws.onclose = function() {
+        setStatus('Disconnected', 'error');
+        setComposer(false);
+        typingEl.hidden = true;
+      };
+
+      ws.onerror = function() {
+        setStatus('Connection error', 'error');
+      };
+    } catch (err) {
+      setStatus('Error', 'error');
+      clearLog(err.message);
+    }
+  }
+
+  formEl.addEventListener('submit', function(event) {
+    event.preventDefault();
+    const text = inputEl.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    if (text.length > MAX_MESSAGE_LENGTH) {
+      addMessage('system', 'Message too long.');
+      return;
+    }
+    ws.send(JSON.stringify({ type: 'message', text }));
+    addMessage('human', text);
+    inputEl.value = '';
+    typingEl.hidden = true;
+    if (waitingMessage) waitingMessage.remove();
+    waitingMessage = addMessage('system', 'Waiting for agent...');
+  });
+
+  inputEl.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      formEl.requestSubmit();
+    }
+  });
+
+  reconnectBtn.addEventListener('click', connect);
+  connect();
+</script>
+<% } %>

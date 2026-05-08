@@ -142,4 +142,13 @@ export function hasChannelConnections(channelId) {
   return bridge.humans.size > 0 || bridge.agent !== null;
 }
 
-export default { getChannelBridge, hasChannelConnections };
+/**
+ * Check if a channel currently has an agent connection.
+ */
+export function hasChannelAgent(channelId) {
+  const bridge = bridges.get(channelId);
+  if (!bridge) return false;
+  return bridge.agent !== null;
+}
+
+export default { getChannelBridge, hasChannelConnections, hasChannelAgent };

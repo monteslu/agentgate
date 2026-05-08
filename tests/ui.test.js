@@ -158,8 +158,10 @@ jest.unstable_mockModule('../src/lib/db.js', () => ({
   listWebhookSecrets: jest.fn(() => []),
 
   // Channel functions
+  listChannels: jest.fn(() => []),
   updateChannel: jest.fn(async () => ({ channelId: 'test-channel-id', keyHash: 'hash' })),
   disableChannel: jest.fn(),
+  getChatHistory: jest.fn(() => []),
 
   // MCP Session functions
   upsertMcpSession: jest.fn(),
@@ -543,6 +545,71 @@ describe('UI Routes Integration', () => {
       });
     });
   });
-});
 
+  describe('Chat', () => {
+    beforeEach(async () => {
+      await login();
+    });
+
+    it('shows empty chat page when no channel-enabled agents exist', async () => {
+      db.listChannels.mockReturnValue([]);
+
+      const res = await authenticatedRequest('get', '/ui/chat');
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('Agent Chat');
+      expect(res.text).toContain('No channel-enabled agents yet');
+    });
+
+    it('lists channel-enabled agents on chat page', async () => {
+      db.listChannels.mockReturnValue([
+        {
+          id: 'agent-1',
+          name: 'Pippin',
+          channel_enabled: 1,
+          channel_id: 'ch_1',
+          channel_last_connected: '2026-05-08 12:00:00'
+        }
+      ]);
+
+      const res = await authenticatedRequest('get', '/ui/chat');
+
+      expect(res.status).toBe(200);
+      expect(res.text).toContain('Pippin');
+      expect(res.text).toContain('data-channel-id="ch_1"');
+    });
+
+    it('mints one-time admin chat token for channel-enabled agent', async () => {
+      db.getApiKeyById.mockReturnValue({
+        id: 'agent-1',
+        name: 'Pippin',
+        channel_enabled: 1,
+        channel_id: 'ch_1'
+      });
+
+      const res = await authenticatedRequest('post', '/ui/chat/agent-1/token')
+        .set('Accept', 'application/json');
+
+      expect(res.status).toBe(200);
+      expect(res.body.token).toBeTruthy();
+      expect(res.body.channelId).toBe('ch_1');
+      expect(res.body.agent.name).toBe('Pippin');
+    });
+
+    it('rejects chat token request for agent without channel', async () => {
+      db.getApiKeyById.mockReturnValue({
+        id: 'agent-1',
+        name: 'Pippin',
+        channel_enabled: 0,
+        channel_id: null
+      });
+
+      const res = await authenticatedRequest('post', '/ui/chat/agent-1/token')
+        .set('Accept', 'application/json');
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Channel not enabled');
+    });
+  });
+});
 

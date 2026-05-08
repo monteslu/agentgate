@@ -559,7 +559,7 @@ router.post('/:id/sessions/kill-all', async (req, res) => {
 const adminChatTokens = new Map();
 const ADMIN_TOKEN_TTL = 5 * 60 * 1000; // 5 minutes
 
-function generateAdminChatToken(channelId) {
+export function generateAdminChatToken(channelId) {
   const token = crypto.randomBytes(32).toString('base64url');
   const expires = Date.now() + ADMIN_TOKEN_TTL;
   adminChatTokens.set(token, { channelId, expires });
@@ -733,7 +733,7 @@ function getChatScript() {
             controller.onMessage('system', '⚠️ Message too long (max ' + Math.round(MAX_MESSAGE_LENGTH/1024) + 'KB)');
             return false;
           }
-          ws.send(JSON.stringify({ type: 'send', content: text }));
+          ws.send(JSON.stringify({ type: 'message', text: text }));
           return true;
         },
 
