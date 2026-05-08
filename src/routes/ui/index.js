@@ -8,6 +8,7 @@ import keysRouter from './keys.js';
 import queueRouter from './queue.js';
 import messagesRouter from './messages.js';
 import mementosRouter from './mementos.js';
+import chatRouter from './chat.js';
 import settingsRouter from './settings.js';
 import homeRouter from './home.js';
 import accessRouter from './access.js';
@@ -35,6 +36,9 @@ router.use('/queue', queueRouter);
 
 // Agent messages: /messages, /messages/:id/approve, /messages/:id/reject, etc.
 router.use('/messages', messagesRouter);
+
+// Channel chat: /chat, /chat/:id/token
+router.use('/chat', chatRouter);
 
 // Agent mementos: /mementos, /mementos/:id
 router.use('/mementos', mementosRouter);
