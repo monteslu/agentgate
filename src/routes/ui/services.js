@@ -22,6 +22,7 @@ import * as fitbit from './fitbit.js';
 import * as brave from './brave.js';
 import * as googleSearch from './google-search.js';
 import * as homeassistant from './homeassistant.js';
+import * as twilio from './twilio.js';
 
 // Export all implemented services in display order
 export const services = [
@@ -36,7 +37,8 @@ export const services = [
   linkedin,
   brave,
   googleSearch,
-  homeassistant
+  homeassistant,
+  twilio
 ];
 
 // Full service catalog with categories — includes both implemented and coming-soon services
@@ -82,6 +84,12 @@ export const catalog = [
     category: 'IoT & Smart Home',
     services: [
       { id: 'homeassistant', name: 'Home Assistant', icon: '🏠', implemented: true }
+    ]
+  },
+  {
+    category: 'Messaging',
+    services: [
+      { id: 'twilio', name: 'Twilio', icon: '📱', implemented: true }
     ]
   }
 ];
@@ -207,7 +215,8 @@ function getServiceIcon(service) {
     fitbit: '/public/icons/fitbit.svg',
     brave: '/public/icons/brave.svg',
     google_search: '/public/icons/google-search.svg',
-    homeassistant: '/public/icons/homeassistant.svg'
+    homeassistant: '/public/icons/homeassistant.svg',
+    twilio: '/public/icons/twilio.svg'
   };
   return icons[service] || '/public/favicon.svg';
 }
