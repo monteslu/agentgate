@@ -1,7 +1,7 @@
 /**
  * Channel Bridge - coordinates communication between human and agent connections.
  * 
- * Humans connect to /channel/<id>, agents connect to /api/channel/<id>.
+ * Humans connect to /channel/<id>, agents connect to /api/channel or /api/channel/<id>.
  * This module manages the message passing between them.
  */
 

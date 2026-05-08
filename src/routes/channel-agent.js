@@ -1,11 +1,14 @@
 /**
  * Agent Channel WebSocket endpoint.
  * 
- * Endpoint: WS /api/channel/<channel-id>
+ * Endpoint: WS /api/channel or /api/channel/<channel-id>
  * Auth: Bearer token (same as other /api/* routes)
  * 
  * This is where the OpenClaw channel plugin connects.
  * Humans connect via /channel/<id>.
+ *
+ * When the path omits the channel id, the id is derived from the bearer token.
+ * The explicit /api/channel/<id> form remains supported for older clients.
  * 
  * See docs/channel-ws-protocol.md for the full protocol specification.
  */
@@ -303,23 +306,35 @@ function setupAgentConnection(channel, socket, agentName) {
  */
 export function setupAgentChannelProxy(server) {
   server.on('upgrade', async (req, socket, _head) => {
-    // Only handle /api/channel/<id>
-    const match = req.url.match(/^\/api\/channel\/([^/?]+)/);
+    // Handle /api/channel and /api/channel/<id>. The no-id form derives the
+    // channel from the bearer token, matching the agentgate-channel plugin.
+    const match = req.url.match(/^\/api\/channel(?:\/([^/?]+))?(?:[/?]|$)/);
     if (!match) return;
 
-    const channelId = match[1];
+    let channelId = match[1] || null;
     
     // Verify Bearer token (async - uses bcrypt)
     const apiKey = await verifyBearerToken(req);
     if (!apiKey) {
-      channelLog(channelId, 'agent_rejected', 'invalid or missing Bearer token');
+      channelLog(channelId || 'unknown', 'agent_rejected', 'invalid or missing Bearer token');
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
 
-    // Verify the agent is authorized for THIS specific channel
-    if (!apiKey.channel_enabled || apiKey.channel_id !== channelId) {
+    if (!apiKey.channel_enabled || !apiKey.channel_id) {
+      channelLog(channelId || 'unknown', 'agent_rejected', `agent ${apiKey.name} has no channel enabled`);
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+
+    if (!channelId) {
+      channelId = apiKey.channel_id;
+    }
+
+    // Verify the agent is authorized for THIS specific channel.
+    if (apiKey.channel_id !== channelId) {
       channelLog(channelId, 'agent_rejected', `agent ${apiKey.name} not authorized for channel ${channelId}`);
       socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
       socket.destroy();

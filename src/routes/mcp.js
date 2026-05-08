@@ -69,7 +69,7 @@ function debouncedTouchSession(sessionId, session) {
 }
 
 // Periodic cleanup of stale sessions
-setInterval(() => {
+const sessionCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [sessionId, session] of activeSessions) {
     if (now - session.lastSeen > SESSION_TTL_MS) {
@@ -82,6 +82,7 @@ setInterval(() => {
   // Also clean stale DB records (e.g., from crashed processes)
   deleteStaleMcpSessions(SESSION_TTL_MS);
 }, 60 * 1000); // Check every minute
+sessionCleanupTimer.unref?.();
 
 /**
  * Get info about all active sessions (for admin UI).

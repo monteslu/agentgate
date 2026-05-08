@@ -4,7 +4,7 @@
  * Endpoint: WS /channel/<channel-id>
  * Auth: Channel key in first message { type: "auth", key: "..." }
  * 
- * This is the human-facing chat interface. Agent connects via /api/channel/<id>.
+ * This is the human-facing chat interface. Agent connects via /api/channel or /api/channel/<id>.
  * 
  * Protocol:
  *   Client: { type: "auth", key: "<channel-key>" }
@@ -254,7 +254,7 @@ function setupHumanConnection(channel, socket, connId) {
  */
 export function setupHumanChannelProxy(server) {
   server.on('upgrade', async (req, socket, _head) => {
-    // Only handle /channel/<id>, not /api/channel/<id>
+    // Only handle /channel/<id>, not /api/channel or /api/channel/<id>
     if (req.url.startsWith('/api/')) return;
     
     const match = req.url.match(/^\/channel\/([^/?]+)/);
