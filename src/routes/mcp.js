@@ -932,6 +932,35 @@ async function handleServiceWrite(agentName, args) {
   }
 }
 
+export const routeMeta = {
+  name: 'MCP Transport',
+  description: 'Model Context Protocol (Streamable HTTP) transport for tool-based agent access',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/api/mcp',
+      description: 'MCP POST handler — initialization and JSON-RPC messages',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/mcp',
+      description: 'MCP GET handler — open SSE stream for server-initiated notifications',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'DELETE',
+      path: '/api/mcp',
+      description: 'MCP DELETE handler — terminate a session',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 // Services action handler (meta/discovery only)
 async function handleServicesAction(agentName, args) {
   const { action } = args;

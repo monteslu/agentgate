@@ -365,4 +365,19 @@ router.post('/github', async (req, res) => {
   });
 });
 
+export const routeMeta = {
+  name: 'Webhooks',
+  description: 'Receive and process incoming service webhooks (e.g., GitHub)',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/webhooks/github',
+      description: 'Receive GitHub webhook events and broadcast to assigned agents',
+      params: {},
+      auth: 'none'
+    }
+  ]
+};
+
 export default router;

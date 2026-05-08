@@ -84,4 +84,34 @@ router.get('/:service/:account/access/agents/:agentName/bypass', (req, res) => {
   });
 });
 
+
+export const routeMeta = {
+  name: 'Services',
+  description: 'Service discovery and access control management',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'GET',
+      path: '/api/services',
+      description: 'List services accessible to the authenticated agent',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/services/:service/:account/access',
+      description: 'Get your access info for a specific service/account',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/services/:service/:account/access/agents/:agentName/bypass',
+      description: 'Check bypass_auth status (own status only)',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;

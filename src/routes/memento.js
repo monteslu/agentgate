@@ -103,4 +103,63 @@ router.get('/:ids', (req, res) => {
   return res.json({ via: 'agentgate', mementos });
 });
 
+export const routeMeta = {
+  name: 'Mementos',
+  description: 'Persistent memory storage — store and retrieve notes across sessions using keywords',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/api/agents/memento',
+      description: 'Store a new memento',
+      params: {
+        body: {
+          content: { type: 'string', required: true, description: 'Memory content (max 12KB)' },
+          keywords: { type: 'array', required: true, description: 'Array of keyword strings (max 10)' },
+          model: { type: 'string', required: false, description: 'Model name at time of storage' },
+          role: { type: 'string', required: false, description: 'Agent role (user, assistant, system)' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/memento/keywords',
+      description: 'List all keywords used by the agent',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/memento/search',
+      description: 'Search mementos by keyword (returns metadata only)',
+      params: {
+        query: {
+          keywords: { type: 'string', required: true, description: 'Comma-separated keywords' },
+          limit: { type: 'number', required: false, description: 'Max results (default 10, max 100)' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/memento/recent',
+      description: 'Get most recent mementos',
+      params: {
+        query: {
+          limit: { type: 'number', required: false, description: 'Max results (default 5, max 20)' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/agents/memento/:ids',
+      description: 'Fetch full memento content by IDs (comma-separated, max 20)',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;

@@ -178,4 +178,74 @@ router.get('/:service/:accountName/:id/warnings', (req, res) => {
   }
 });
 
+export const routeMeta = {
+  name: 'Write Queue',
+  description: 'Submit, monitor, withdraw, and warn on queued write requests',
+  category: 'internal',
+  endpoints: [
+    {
+      method: 'POST',
+      path: '/api/queue/:service/:accountName/submit',
+      description: 'Submit a batch of write requests for approval',
+      params: {
+        body: {
+          requests: { type: 'array', required: true, description: 'Array of { method, path, body?, headers?, binaryBase64? }' },
+          comment: { type: 'string', required: true, description: 'Explain what you are doing and why' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/queue/list',
+      description: 'List all queue entries submitted by the authenticated agent',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/queue/:service/:accountName/list',
+      description: 'List queue entries filtered by service and account',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/queue/:service/:accountName/status/:id',
+      description: 'Check status of a queued request',
+      params: {},
+      auth: 'agent'
+    },
+    {
+      method: 'DELETE',
+      path: '/api/queue/:service/:accountName/status/:id',
+      description: 'Withdraw a pending queue entry (own submissions only)',
+      params: {
+        body: {
+          reason: { type: 'string', required: false, description: 'Reason for withdrawal' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'POST',
+      path: '/api/queue/:service/:accountName/:id/warn',
+      description: 'Add a warning to a queue item (peer review)',
+      params: {
+        body: {
+          message: { type: 'string', required: true, description: 'Warning message' }
+        }
+      },
+      auth: 'agent'
+    },
+    {
+      method: 'GET',
+      path: '/api/queue/:service/:accountName/:id/warnings',
+      description: 'Get warnings for a queue item',
+      params: {},
+      auth: 'agent'
+    }
+  ]
+};
+
 export default router;
